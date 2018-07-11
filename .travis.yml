@@ -1,0 +1,12 @@
+sudo: false
+language: scala
+scala:
+  - 2.12.6
+jdk:
+  - openjdk8
+  - oraclejdk8
+  - oraclejdk9
+  - oraclejdk10
+  - openjdk10
+  - openjdk11
+  - oraclejdk-ea

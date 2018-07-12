@@ -52,6 +52,9 @@ resolvers +=
 resolvers +=
   "eXist-db Snapshots" at "http://repo.evolvedbinary.com/repository/exist-db-snapshots/"
 
+resolvers +=
+  "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
+
 // Fancy up the Assembly JAR
 packageOptions in (Compile, packageBin) +=  {
   import java.text.SimpleDateFormat

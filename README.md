@@ -60,21 +60,18 @@ The results of executing the XQTS will be formatted as JUnit test output.
 
 ## Application Architecture
 The application is constructed using [Akka](https://akka.io), and as such makes use of Actors to perform many tasks in parallel; This hopefully speeds up the process of running the XQTS which includes many test cases.
-
 When the Application first executes, it will check for a local copy of the XQTS in a sub-directory named `work`, if it cannot find a local copy of the XQTS then it will download it from the W3C.
 
 
-### Actor Hierarchy
+### Actor Hierarchy
+Actors naturally have a supervision hierarchy, where if an Actor fails it's supervisor may be notified; The supervisor is responsible for responding to, and recovering from, failures of its supervisees. 
 
-**//TODO(AR):** turn the below into a diagram
+![Actor Supervisor Hierarchy](https://github.com/exist-db/exist-xqts-runner/raw/master/doc/actor-supervisor-hierarchy.png "Actor Supervisor Hierarchy")
 
-* `/XQTSRunnerSystem`
-* `/XQTSRunnerSystem/XQTSRunner`
-* `/XQTSRunnerSystem/XQTSRunner/TestCaseRunnerRouter`
-* `/XQTSRunnerSystem/XQTSRunner/XQTS3CatalogParserActor`
-* `/XQTSRunnerSystem/XQTSRunner/XQTS3CatalogParserActor/XQTS3TestSetParserRouter`
 
 ### Actor Message Flows
+Actors in the system communicate by sending messages between each other. The message flow of an Akka Actor system can sometimes be tricky to follow by reading the code. The diagram below attempts to inform the developer about the message flows in the system.
+
 
 **//TODO(AR):** turn the below into a diagram
 

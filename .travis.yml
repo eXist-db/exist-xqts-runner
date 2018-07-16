@@ -9,7 +9,6 @@ jdk:
   - oraclejdk10
   - openjdk10
   - openjdk11
-  - oraclejdk-ea
 cache:
   directories:
   - $HOME/.ivy2

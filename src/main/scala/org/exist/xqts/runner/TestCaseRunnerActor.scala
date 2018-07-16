@@ -111,9 +111,11 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
           }
 
         case None =>
-          // error!
+          // error - invalid test case
+          //TODO(AR) detect this in catalog parser and inform the manager there!
+          //TODO(AR) replace these two messages with InvalidTestCase() - and let the manager deal with it
           manager ! RunningTestCase(testSetRef, testCase.name)
-          manager ! RanTestCase(testSetRef, ErrorResult(testSetRef.name, testCase.name, -1, -1, new IllegalStateException("No test defined for test-case")))
+          manager ! RanTestCase(testSetRef, ErrorResult(testSetRef.name, testCase.name, -1, -1, new IllegalStateException("Invalid Test Case: No test defined for test-case")))
       }
 
 
@@ -164,6 +166,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         val testSetRef = pendingTestCase.runTestCase.testSetRef
         val testCase = pendingTestCase.runTestCase.testCase
 
+        //TODO(AR) replace these two messages with InvalidTestCase() - and let the manager deal with it
         manager ! RunningTestCase(testSetRef, testCase.name)
         manager ! RanTestCase(testSetRef, ErrorResult(testSetRef.name, testCase.name, -1, -1, error))
       }

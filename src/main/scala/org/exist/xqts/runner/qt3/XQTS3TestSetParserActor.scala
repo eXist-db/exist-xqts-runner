@@ -554,6 +554,8 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
                 if (missingDeps.isEmpty) {
                   testCaseRunnerActor ! RunTestCase(testSetRef.copy(name = currentTestSet.map(_.name).getOrElse("<UNKNOWN>")), testCase, manager)
                 } else {
+                  // assumption failed
+                  //TODO(AR) replace these two messages with AssumptionFailed() - and let the manager deal with it
                   manager ! RunningTestCase(testSetRef, testCase.name)
                   manager ! RanTestCase(testSetRef, AssumptionFailedResult(testSetRef.name, testCase.name, 0, 0, s"Test's dependencies were not satisfiable. Missing: [${missingDeps.mkString(", ")}]"))
                 }

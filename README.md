@@ -72,13 +72,4 @@ Actors naturally have a supervision hierarchy, where if an Actor fails it's supe
 ### Actor Message Flows
 Actors in the system communicate by sending messages between each other. The message flow of an Akka Actor system can sometimes be tricky to follow by reading the code. The diagram below attempts to inform the developer about the message flows in the system.
 
-
-**//TODO(AR):** turn the below into a diagram
-
-1. XQTSRunner (App) -> [RunXQTS] -> XQTSRunnerActor
-
-2. XQTSRunnerActor -> [Parse] -> XQTS3CatalogParserActor
-
-3. XQTS3CatalogParserActor (For each testset) -> [ParseTestSet] -> XQTS3TestSetParserActor (Router=10)
-
-4. XQTS3TestSetParserActor (For each testcase) -> [RunTestCase] -> TestCaseRunnerActor (Router=15)
+![Actor Message Flow](https://github.com/exist-db/exist-xqts-runner/raw/master/doc/actor-message-flow.png "Actor Message Flow")

@@ -14,8 +14,7 @@ homepage := Some(url("https://github.com/exist-db/exist-xqts-runner"))
 
 
 libraryDependencies ++= {
-  //val existV = "5.0.0-RC1"
-  val existV = "20180712"
+  val existV = "5.0.0"
 
   Seq(
     "com.typesafe.akka" %% "akka-actor" % "2.5.26",
@@ -28,11 +27,9 @@ libraryDependencies ++= {
     "org.clapper" %% "grizzled-slf4j" % "1.3.4",
     "org.apache.ant" % "ant-junit" % "1.10.7",   // used for formatting junit style report
 
-    "org.exist-db" % "exist-testkit" % existV,
-    "net.sf.saxon" % "Saxon-HE" % "9.8.0-12",
-    "junit" % "junit" % "4.12",           // NOTE: required by exist-testkit!
+    "net.sf.saxon" % "Saxon-HE" % "9.9.1-5",
     "org.exist-db" % "exist-core" % existV,
-    "org.xmlunit" %	"xmlunit-core" % "2.6.0",
+    "org.xmlunit" %	"xmlunit-core" % "2.6.3",
 
     "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.12.1" % "runtime"
   )

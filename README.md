@@ -19,7 +19,7 @@ In the following steps, we assume that all of the above tools are available on y
 The version of eXist-db that the XQTS driver is compiled for is set in `build.sbt`. If you wish to compile against a newer or custom version of eXist-db, you can modify this to the version of an eXist-db Maven/Ivy artifact which you have available to your system, e.g.:
 
 ```scala
-val existV = "20180712"
+val existV = "5.0.0"
 ``` 
 
 Once the pre-requisites are met, to build from source you can execute the following commands from your console/terminal:

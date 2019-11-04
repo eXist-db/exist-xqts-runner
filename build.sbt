@@ -4,7 +4,7 @@ organization := "org.exist-db"
 
 version := "1.0.0"
 
-scalaVersion := "2.12.6"
+scalaVersion := "2.12.10"
 
 licenses := Seq("LGPL-3.0" -> url("http://opensource.org/licenses/lgpl-3.0"))
 
@@ -18,15 +18,15 @@ libraryDependencies ++= {
   val existV = "20180712"
 
   Seq(
-    "com.typesafe.akka" %% "akka-actor" % "2.5.13",
-    "org.scalaz" %% "scalaz-core" % "7.2.25",
-    "com.github.scopt" %% "scopt" % "3.7.0",
-    "org.typelevel" %% "cats-effect" % "1.0.0-RC2",  //"0.10",
+    "com.typesafe.akka" %% "akka-actor" % "2.5.26",
+    "org.scalaz" %% "scalaz-core" % "7.2.28",
+    "com.github.scopt" %% "scopt" % "3.7.1",
+    "org.typelevel" %% "cats-effect" % "1.4.0",
     //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
-    "org.parboiled" %% "parboiled" % "2.1.4",
-    "org.clapper" %% "grizzled-slf4j" % "1.3.2",
-    "org.apache.ant" % "ant-junit" % "1.10.4",   // used for formatting junit style report
+    "org.parboiled" %% "parboiled" % "2.1.8",
+    "org.clapper" %% "grizzled-slf4j" % "1.3.4",
+    "org.apache.ant" % "ant-junit" % "1.10.7",   // used for formatting junit style report
 
     "org.exist-db" % "exist-testkit" % existV,
     "net.sf.saxon" % "Saxon-HE" % "9.8.0-12",
@@ -34,7 +34,7 @@ libraryDependencies ++= {
     "org.exist-db" % "exist-core" % existV,
     "org.xmlunit" %	"xmlunit-core" % "2.6.0",
 
-    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.11.0" % "runtime"
+    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.12.1" % "runtime"
   )
 }
 
@@ -47,10 +47,10 @@ resolvers +=
   Resolver.mavenLocal
 
 resolvers +=
-  "eXist-db Releases" at "http://repo.evolvedbinary.com/repository/exist-db/"
+  "eXist-db Releases" at "https://repo.evolvedbinary.com/repository/exist-db/"
 
 resolvers +=
-  "eXist-db Snapshots" at "http://repo.evolvedbinary.com/repository/exist-db-snapshots/"
+  "eXist-db Snapshots" at "https://repo.evolvedbinary.com/repository/exist-db-snapshots/"
 
 resolvers +=
   "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
@@ -87,8 +87,8 @@ packageOptions in (Compile, packageBin) +=  {
 
 // assembly merge strategy for duplicate files from dependencies
 assemblyMergeStrategy in assembly := {
-  case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql")         => MergeStrategy.first
-  case "module-info.class"                                => MergeStrategy.discard
+  case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql")       => MergeStrategy.first
+  case x if x.equals("module-info.class") || x.endsWith("/module-info.class")    => MergeStrategy.discard
   case x =>
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)
@@ -115,7 +115,7 @@ publishMavenStyle := true
 credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
 
 publishTo := {
-  val nexus = "http://repo.evolvedbinary.com/"
+  val nexus = "https://repo.evolvedbinary.com/"
   if (isSnapshot.value)
     Some("snapshots" at nexus + "repository/exist-db-snapshots/")
   else

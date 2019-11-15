@@ -60,7 +60,7 @@ Given the standalone application, you can execute it by running either:
 ## XQTS Results
 The results of executing the XQTS will be formatted as JUnit test output.
 
-* The JUnit report data will be written to the `target/junit/xml` folder.
+* The JUnit report data will be written to the `target/junit/data` folder.
 * An HTML aggregate report summary will be written to `target/junit/html/index.html`.
 
 

@@ -4,7 +4,7 @@ organization := "org.exist-db"
 
 version := "1.0.0"
 
-scalaVersion := "2.12.10"
+scalaVersion := "2.13.1"
 
 licenses := Seq("LGPL-3.0" -> url("http://opensource.org/licenses/lgpl-3.0"))
 

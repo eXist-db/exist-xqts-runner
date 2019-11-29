@@ -1,7 +1,7 @@
 # W3C XQTS driver for eXist-db
 
 [![Build Status](https://travis-ci.com/eXist-db/exist-xqts-runner.png?branch=master)](https://travis-ci.com/eXist-db/exist-xqts-runner)
-[![Scala 2.12](https://img.shields.io/badge/scala-2.12-red.svg)](http://scala-lang.org)
+[![Scala 2.13](https://img.shields.io/badge/scala-2.13-red.svg)](http://scala-lang.org)
 [![License](https://img.shields.io/badge/license-LGPL%203.0-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0.html)
 
 This application executes a W3C XQTS against an embedded eXist-db server.
@@ -28,7 +28,7 @@ Once the pre-requisites are met, to build from source you can execute the follow
 2. `cd exist-xqts-runner`
 3. `sbt compile`
 
-The compiled application is now available in the sub-directory `target/scala-2.12`.
+The compiled application is now available in the sub-directory `target/scala-2.13`.
 
 
 ### Running from Compiled Source
@@ -44,9 +44,9 @@ Obviously you should study the output from `--help`, and make sure to set the co
 
 
 ### Packaging the Application from Compiled Source
-* If you require a standard Jar file for some purpose you can run `sbt package`, which will generate `target/scala-2.12/exist-xqts-runner_2.12-1.0.0.jar`.
+* If you require a standard Jar file for some purpose you can run `sbt package`, which will generate `target/scala-2.13/exist-xqts-runner_2.13-1.0.0.jar`.
 
-* If you wish to create a standalone application (also known as an Uber Jar, Assembly, etc.) you can run `sbt assembly`, which will generate `target/scala-2.12/exist-xqts-runner-assembly-1.0.0.jar`. 
+* If you wish to create a standalone application (also known as an Uber Jar, Assembly, etc.) you can run `sbt assembly`, which will generate `target/scala-2.13/exist-xqts-runner-assembly-1.0.0.jar`. 
 
 
 ### Running the Packaged Application

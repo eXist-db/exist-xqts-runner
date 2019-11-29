@@ -41,6 +41,7 @@ import org.exist.xqts.runner.XQTSParserActor.XsdVersion
 import org.exist.xqts.runner.XQTSParserActor.XsdVersion._
 import org.exist.xqts.runner.qt3.XQTS3CatalogParserActor
 
+import scala.language.postfixOps
 import scala.util.Try
 
 /**
@@ -405,7 +406,7 @@ private class XQTSRunner {
           }
 
           // unzip the file
-          Unzip.unzip(xqtsZip, xqtsLocalPath)
+          org.exist.xqts.runner.Unzip.unzip(xqtsZip, xqtsLocalPath)
 
           xqtsLocalPath.right
         } catch {

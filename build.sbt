@@ -17,10 +17,10 @@ libraryDependencies ++= {
   val existV = "5.0.0"
 
   Seq(
-    "com.typesafe.akka" %% "akka-actor" % "2.5.26",
-    "org.scalaz" %% "scalaz-core" % "7.2.28",
+    "com.typesafe.akka" %% "akka-actor" % "2.6.0",
+    "org.scalaz" %% "scalaz-core" % "7.2.29",
     "com.github.scopt" %% "scopt" % "3.7.1",
-    "org.typelevel" %% "cats-effect" % "1.4.0",
+    "org.typelevel" %% "cats-effect" % "2.0.0",
     //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
     "org.parboiled" %% "parboiled" % "2.1.8",

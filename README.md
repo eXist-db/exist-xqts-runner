@@ -1,6 +1,6 @@
 # W3C XQTS driver for eXist-db
 
-[![Build Status](https://travis-ci.org/eXist-db/exist-xqts-runner.png?branch=master)](https://travis-ci.org/eXist-db/exist-xqts-runner)
+[![Build Status](https://travis-ci.com/eXist-db/exist-xqts-runner.png?branch=master)](https://travis-ci.com/eXist-db/exist-xqts-runner)
 [![Scala 2.12](https://img.shields.io/badge/scala-2.12-red.svg)](http://scala-lang.org)
 [![License](https://img.shields.io/badge/license-LGPL%203.0-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0.html)
 

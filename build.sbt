@@ -14,7 +14,7 @@ homepage := Some(url("https://github.com/exist-db/exist-xqts-runner"))
 
 
 libraryDependencies ++= {
-  val existV = "5.0.0"
+  val existV = "5.1.0"
 
   Seq(
     "com.typesafe.akka" %% "akka-actor" % "2.6.0",
@@ -37,7 +37,10 @@ libraryDependencies ++= {
 
 // we prefer Saxon over Xalan
 excludeDependencies ++= Seq(
-  ExclusionRule("xalan", "xalan")
+  ExclusionRule("xalan", "xalan"),
+
+  ExclusionRule("org.hamcrest", "hamcrest-core"),
+  ExclusionRule("org.hamcrest", "hamcrest-library")
 )
 
 resolvers +=

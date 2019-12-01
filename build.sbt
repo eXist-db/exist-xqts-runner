@@ -14,7 +14,7 @@ homepage := Some(url("https://github.com/exist-db/exist-xqts-runner"))
 
 
 libraryDependencies ++= {
-  val existV = "5.1.0"
+  val existV = "5.2.0-SNAPSHOT"
 
   Seq(
     "com.typesafe.akka" %% "akka-actor" % "2.6.0",
@@ -31,7 +31,7 @@ libraryDependencies ++= {
     "org.exist-db" % "exist-core" % existV,
     "org.xmlunit" %	"xmlunit-core" % "2.6.3",
 
-    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.12.1" % "runtime"
+    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.13.0" % "runtime"
   )
 }
 

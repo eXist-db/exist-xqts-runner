@@ -93,6 +93,7 @@ package object qt3 {
   val ATTR_MEDIA_TYPE = "media-type"
   val ATTR_ENCODING = "encoding"
   val ATTR_DECIMAL_SEPARATOR = "decimal-separator"
+  val ATTR_EXPONENT_SEPARATOR = "decimal-separator"
   val ATTR_GROUPING_SEPARATOR = "grouping-separator"
   val ATTR_ZERO_DIGIT = "zero-digit"
   val ATTR_DIGIT = "digit"

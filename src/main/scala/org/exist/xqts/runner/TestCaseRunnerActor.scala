@@ -246,7 +246,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
             getDynamicContextAvailableCollections(connection)(testCase, resolvedEnvironment).flatMap(availableCollections =>
               getDynamicContextAvailableTextResources(connection)(testCase, resolvedEnvironment).flatMap(availableTextResources =>
                 getVariableDeclarations(connection)(testCase).flatMap(variableDeclarations =>
-                  connection.executeQuery(queryString, false, baseUri, contextSequence, availableDocuments, availableCollections, availableTextResources, variableDeclarations)
+                  connection.executeQuery(queryString, false, baseUri, contextSequence, availableDocuments, availableCollections, availableTextResources, testCase.environment.map(_.namespaces).getOrElse(List.empty), variableDeclarations, testCase.environment.map(_.decimalFormats).getOrElse(List.empty), testCase.dependencies.filter(_.`type` == DependencyType.Feature).headOption.nonEmpty)
                 )
               )
             )
@@ -1297,7 +1297,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the result or executing the query, or an exception.
     */
   private def executeQueryWith$Result(connection: ExistConnection, query: String, cacheCompiled: Boolean, contextSequence: Option[Sequence], $result: Sequence) = {
-    connection.executeQuery(query, cacheCompiled, None, contextSequence, Seq.empty, Seq.empty, Seq.empty, Seq(RESULT_VARIABLE_NAME -> $result))
+    connection.executeQuery(query, cacheCompiled, None, contextSequence, Seq.empty, Seq.empty, Seq.empty, Seq.empty, Seq(RESULT_VARIABLE_NAME -> $result))
   }
 
   /**

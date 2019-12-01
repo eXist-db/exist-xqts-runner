@@ -53,12 +53,12 @@ object XQTSParserActor {
     val strict, lax, skip = Value
   }
 
-  case class Environment(name: String, schemas: List[Schema] = List.empty, sources: List[Source] = List.empty, resources: List[Resource] = List.empty, params: List[Param] = List.empty, contextItem: Option[String] = None, decimalFormat: Option[DecimalFormat] = None, namespaces: List[Namespace] = List.empty, collections: List[Collection] = List.empty, staticBaseUri: Option[String] = None, collation: Option[Collation] = None)
+  case class Environment(name: String, schemas: List[Schema] = List.empty, sources: List[Source] = List.empty, resources: List[Resource] = List.empty, params: List[Param] = List.empty, contextItem: Option[String] = None, decimalFormats: List[DecimalFormat] = List.empty, namespaces: List[Namespace] = List.empty, collections: List[Collection] = List.empty, staticBaseUri: Option[String] = None, collation: Option[Collation] = None)
   case class Schema(uri: Option[URI], file: Option[Path], xsdVersion: Float = 1.0f, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
   case class Source(role: Option[String], file: Path, uri: Option[String], validation: Option[Validation.Validation] = None, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
   case class Resource(file: Path, uri: String, mediaType: Option[String] = None, encoding: Option[String], description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
   case class Param(name: String, select: Option[String] = None, as: Option[String] = None, source: Option[String] = None, declared: Boolean = false)
-  case class DecimalFormat(name: Option[QName] = None, decimalSeparator: Option[Char] = None, groupingSeparator: Option[Char] = None, zeroDigit: Option[Char] = None, digit: Option[Char] = None, minusSign: Option[Char] = None, percent: Option[Char] = None, perMille: Option[Char] = None, patternSeparator: Option[Char] = None, infinity: Option[String] = None, notANumber: Option[String] = None)
+  case class DecimalFormat(name: Option[QName] = None, decimalSeparator: Option[Int] = None, exponentSeparator: Option[Int] = None, groupingSeparator: Option[Int] = None, zeroDigit: Option[Int] = None, digit: Option[Int] = None, minusSign: Option[Int] = None, percent: Option[Int] = None, perMille: Option[Int] = None, patternSeparator: Option[Int] = None, infinity: Option[String] = None, notANumber: Option[String] = None)
   case class Namespace(prefix: String, uri: URI)
   case class Collection(uri: URI, sources: List[Source] = List.empty)
   case class Collation(uri: URI, default: Boolean = false)

@@ -26,7 +26,7 @@ import org.exist.source.{Source, StringSource}
 import org.exist.storage.DBBroker
 import org.exist.test.ExistEmbeddedServer
 import org.exist.util.serializer.XQuerySerializer
-import org.exist.xquery.{CompiledXQuery, XQueryContext}
+import org.exist.xquery.{CompiledXQuery, Function, XPathException, XQueryContext}
 
 import scala.util.{Failure, Success, Try}
 import scalaz.{-\/, \/, \/-}
@@ -35,13 +35,14 @@ import scalaz.syntax.std.either._
 import ExistServer._
 import cats.effect.{IO, Resource}
 import com.evolvedbinary.j8fu.function.{QuadFunctionE, TriFunctionE}
+import javax.xml.namespace.QName
 import javax.xml.parsers.SAXParserFactory
 import javax.xml.transform.OutputKeys
 import org.exist.Namespaces
 import org.exist.dom.memtree.{DocumentImpl, SAXAdapter}
 import org.exist.storage.txn.Txn
 import org.exist.util.io.FastByteArrayInputStream
-import org.exist.xquery.XPathException
+import org.exist.xqts.runner.XQTSParserActor.{DecimalFormat, Namespace}
 import org.exist.xquery.value._
 import org.xml.sax.InputSource
 
@@ -135,10 +136,11 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
     * @param availableCollections Any dynamically available Collections that should be available to the XQuery.
     * @param availableTextResources Any dynamically available Text Resources that should be available to the XQuery.
     * @param externalVariables Any external variables that should be bound for the XQuery.
+    * @param decimalFormats Any changes to the `unnamed` decimal format.
     *
     * @return the result or executing the query, or an exception.
     */
-  def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty) : ExistServerException \/ Result = {
+  def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, xpath1Compatibility : Boolean = false) : ExistServerException \/ Result = {
 
     /**
       * Sets up the XQuery Context.
@@ -146,6 +148,10 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
       * @param context The XQuery Context to configure
       */
     def setupContext(context: XQueryContext) {
+
+      // Turn on/off XPath 1.0 backwards compatibility.
+      context.setBackwardsCompatibility(xpath1Compatibility)
+
       // set dynamically available documents
       type DocumentSupplier = TriFunctionE[DBBroker, Txn, String, com.evolvedbinary.j8fu.Either[DocumentImpl, org.exist.dom.persistent.DocumentImpl], XPathException]
       for ((uri, doc) <- availableDocuments) {
@@ -172,9 +178,36 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
       // set the static base uri
       staticBaseUri.map(baseUri => context.setBaseURI(new AnyURIValue(baseUri)))
 
+      // setup any static namespace
+      for (namespace <- namespaces) {
+        context.declareInScopeNamespace(namespace.prefix, namespace.uri.toString)
+      }
+
       // bind external variables
       for ((name, value) <- externalVariables) {
         context.declareVariable(name, value)
+      }
+
+      // modify/create the decimal formats
+      for (df <- decimalFormats ) {
+        val unnamedDecimalFormat = context.getStaticDecimalFormat(null)
+        val modifiedDecimalFormat = new org.exist.xquery.DecimalFormat(
+          df.decimalSeparator.getOrElse(unnamedDecimalFormat.decimalSeparator),
+          df.exponentSeparator.getOrElse(unnamedDecimalFormat.exponentSeparator),
+          df.groupingSeparator.getOrElse(unnamedDecimalFormat.groupingSeparator),
+          df.percent.getOrElse(unnamedDecimalFormat.percent),
+          df.perMille.getOrElse(unnamedDecimalFormat.perMille),
+          df.zeroDigit.getOrElse(unnamedDecimalFormat.zeroDigit),
+          df.digit.getOrElse(unnamedDecimalFormat.digit),
+          df.patternSeparator.getOrElse(unnamedDecimalFormat.patternSeparator),
+          df.infinity.getOrElse(unnamedDecimalFormat.infinity),
+          df.notANumber.getOrElse(unnamedDecimalFormat.NaN),
+          df.minusSign.getOrElse(unnamedDecimalFormat.minusSign)
+        )
+
+        val decimalFormatName = df.name.getOrElse(new QName(Function.BUILTIN_FUNCTION_NS, "__UNNAMED__"))
+
+        context.setStaticDecimalFormat(org.exist.dom.QName.fromJavaQName(decimalFormatName), modifiedDecimalFormat)
       }
     }
 

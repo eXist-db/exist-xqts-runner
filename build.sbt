@@ -63,7 +63,7 @@ packageOptions in (Compile, packageBin) +=  {
   import scala.sys.process._
 
   val gitCommit = "git rev-parse HEAD".!!.trim
-  val gitTag = "git name-rev --tags --name-only $(git rev-parse HEAD)".!!.trim
+  val gitTag = s"git name-rev --tags --name-only $gitCommit".!!.trim
 
   val additional = Map(
     "Build-Timestamp" -> new SimpleDateFormat("yyyyMMddHHmmss").format(Calendar.getInstance.getTime),

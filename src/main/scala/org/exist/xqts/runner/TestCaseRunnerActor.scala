@@ -73,14 +73,16 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         case Some(-\/(queryStr)) =>
           testCase.environment match {
             case Some(environment) if(environment.schemas.nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
-              environment.schemas.map(schema => commonResourceCacheActor ! GetResource(schema.file))
-              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), environment.schemas)
+              environment.schemas.filter(_.file.nonEmpty).map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
+              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), environment.schemas.filter(_.file.nonEmpty).map(schema => () => schema.file.get))
+              //TODO(AR) above we skip schemas here which don't have a `file` attribute, but ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+
               environment.sources.map(source => commonResourceCacheActor ! GetResource(source.file))
-              awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources)
+              awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources.map(source => () => source.file))
               environment.resources.map(resource => commonResourceCacheActor ! GetResource(resource.file))
-              awaitingResources = merge(awaitingResources)((testSetRef.name, testCase.name), environment.resources)
+              awaitingResources = merge(awaitingResources)((testSetRef.name, testCase.name), environment.resources.map(resource => () => resource.file))
               environment.collections.map(_.sources.map(source => commonResourceCacheActor ! GetResource(source.file)))
-              awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.collections.flatMap(_.sources))
+              awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.collections.flatMap(_.sources).map(source => () => source.file))
 
               pendingTestCases = addIfNotPresent(pendingTestCases)(rtc)
 
@@ -95,14 +97,16 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
           testCase.environment match {
             case Some(environment) if(environment.schemas.nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
-              environment.schemas.map(schema => commonResourceCacheActor ! GetResource(schema.file))
-              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), environment.schemas)
+              environment.schemas.filter(_.file.nonEmpty).map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
+              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), environment.schemas.filter(_.file.nonEmpty).map(schema => () => schema.file.get))
+              //TODO(AR) above we skip schemas here which don't have a `file` attribute, but ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+
               environment.sources.map(source => commonResourceCacheActor ! GetResource(source.file))
-              awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources)
+              awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources.map(source => () => source.file))
               environment.resources.map(resource => commonResourceCacheActor ! GetResource(resource.file))
-              awaitingResources = merge(awaitingResources)((testSetRef.name, testCase.name), environment.resources)
+              awaitingResources = merge(awaitingResources)((testSetRef.name, testCase.name), environment.resources.map(resource => () => resource.file))
               environment.collections.map(_.sources.map(source => commonResourceCacheActor ! GetResource(source.file)))
-              awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.collections.flatMap(_.sources))
+              awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.collections.flatMap(_.sources).map(source => () => source.file))
 
               pendingTestCases = addIfNotPresent(pendingTestCases)(rtc)
             case _ =>
@@ -1380,9 +1384,9 @@ object TestCaseRunnerActor {
   case class ResolvedEnvironment(resolvedSchemas: Seq[ResolvedSchema] = Seq.empty, resolvedSources: Seq[ResolvedSource] = Seq.empty, resolvedResources: Seq[ResolvedResource] = Seq.empty, resolvedQuery: Option[String] = None)
   case class PendingTestCase(runTestCase: RunTestCase, resolvedEnvironment: ResolvedEnvironment)
 
-  private def merge(existing: Map[Path, Seq[TestCaseId]])(id: TestCaseId, additions: List[{ def file: Path}]) : Map[Path, Seq[TestCaseId]] = {
+  private def merge(existing: Map[Path, Seq[TestCaseId]])(id: TestCaseId, additions: List[() => Path]) : Map[Path, Seq[TestCaseId]] = {
     additions.foldLeft(existing){(accum, x) =>
-      accum + (x.file -> (accum.get(x.file).getOrElse(Seq.empty) :+ id))
+      accum + (x() -> (accum.get(x()).getOrElse(Seq.empty) :+ id))
     }
   }
 

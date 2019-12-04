@@ -103,8 +103,10 @@ object XQTSRunner {
     XP10,
     XP20,
     XP30,
+    XP31,
     XQ10,
     XQ30,
+    XQ31,
     XT30
   )
 
@@ -144,9 +146,9 @@ object XQTSRunner {
     val parser = new scopt.OptionParser[CmdConfig]("xqtsrunner") {
       head("xqtsrunner", "1.0")
 
-      opt[XQTSVersion]('x', "xqtsversion")
+      opt[XQTSVersion]('x', "xqts-version")
         .text("The version of XQTS to run")
-        .validate(x => if (x == XQTS_3_1) success else failure("only version 3.1 is currently supported"))
+        .validate(x => if (x == XQTS_3_1 || x == XQTS_HEAD) success else failure("only version 3.1, or HEAD is currently supported"))
         .action((x, c) => c.copy(xqtsVersion = x))
 
       opt[Path]('l', "local-dir")
@@ -327,9 +329,9 @@ private class XQTSRunner {
   @throws[IllegalArgumentException]
   private def getParserActorClass(xqtsVersion: XQTSVersion) : Class[_<: XQTSParserActor] = {
     xqtsVersion match {
-      case XQTS_3_1 =>
+      case XQTS_3_1 | XQTS_HEAD =>
         classOf[XQTS3CatalogParserActor]
-      case _ => throw new IllegalArgumentException(s"We only support XQTS version 3.1, but version: ${XQTSVersion.label(xqtsVersion)} was requested")
+      case _ => throw new IllegalArgumentException(s"We only support XQTS version 3.1 or HEAD, but version: ${XQTSVersion.label(xqtsVersion)} was requested")
     }
   }
 
@@ -415,35 +417,40 @@ private class XQTSRunner {
         }
     }
 
-    xqtsVersion match {
-      case XQTS_3_1 =>
-        Try(Files.createDirectories(getLocalWorkDir(settings.xqts3HasDir))) match {
-          case scala.util.Failure(t) =>
-            return t.left
-          case scala.util.Success(localDir) =>
-            val localXqtsDir = settings.xqts3HasDir.map(hasDir => localDir.resolve(hasDir)).getOrElse(localDir.resolve(XQTSVersion.label(xqtsVersion)))
-            if (hasLocalCopy(localXqtsDir, settings.xqts3checkFile)) {
-              logger.info(s"Found XQTS at: $localXqtsDir")
-              localXqtsDir.right
-            } else {
-              logger.info(s"Could not find XQTS at: $localXqtsDir, checking for downloaded copy...")
-              hasDownload(settings.xqts3url, settings.xqts3url, localDir) match {
-                case \/-(Some(existingPath)) =>
-                  logger.info(s"Found downloaded XQTS at: $existingPath")
-                  expandToLocalCopy(existingPath, localDir)
-                    .map(_ => localXqtsDir)
-                case \/-(None) =>
-                  logger.info(s"No downloaded copy found, downloading XSTS from: ${settings.xqts3url} to $localDir...")
-                  download(settings.xqts3url, settings.xqts3sha256, localDir)
-                    .flatMap(expandToLocalCopy(_, localDir))
-                    .map(_ => localXqtsDir)
-                case t: -\/[Throwable] => t
-              }
+    def processXqtsVersion(xqtsVersionConfig: settings.XqtsVersionConfig): Throwable \/ Path = {
+      Try(Files.createDirectories(getLocalWorkDir(xqtsVersionConfig.hasDir))) match {
+        case scala.util.Failure(t) =>
+          t.left
+        case scala.util.Success(localDir) =>
+          val localXqtsDir = xqtsVersionConfig.hasDir.map(hasDir => localDir.resolve(hasDir)).getOrElse(localDir.resolve(XQTSVersion.label(xqtsVersion)))
+          if (hasLocalCopy(localXqtsDir, xqtsVersionConfig.checkFile)) {
+            logger.info(s"Found XQTS at: $localXqtsDir")
+            localXqtsDir.right
+          } else {
+            logger.info(s"Could not find XQTS at: $localXqtsDir, checking for downloaded copy...")
+            hasDownload(xqtsVersionConfig.url, xqtsVersionConfig.sha256, localDir) match {
+              case \/-(Some(existingPath)) =>
+                logger.info(s"Found downloaded XQTS at: $existingPath")
+                expandToLocalCopy(existingPath, localDir)
+                  .map(_ => localXqtsDir)
+              case \/-(None) =>
+                logger.info(s"No downloaded copy found, downloading XSTS from: ${xqtsVersionConfig.url} to $localDir...")
+                download(xqtsVersionConfig.url, xqtsVersionConfig.sha256, localDir)
+                  .flatMap(expandToLocalCopy(_, localDir))
+                  .map(_ => localXqtsDir)
+              case t: -\/[Throwable] => t
             }
-        }
+          }
+      }
+    }
 
-      case n =>
-        new IllegalArgumentException(s"We only support XQTS version 3.1, but version: ${XQTSVersion.label(n)} was requested").left
+    // check for supported version
+    settings.xqtsVersions.get(XQTSVersion.toVersionName(xqtsVersion)) match {
+      case Some(xqtsVersionConfig) =>
+        processXqtsVersion(xqtsVersionConfig)
+      case None =>
+        val supported = settings.xqtsVersions.keys.reduceLeft(_ + ", " + _)
+        new IllegalArgumentException(s"We only support XQTS versions $supported, but version: ${XQTSVersion.label(xqtsVersion)} was requested").left
     }
   }
 }

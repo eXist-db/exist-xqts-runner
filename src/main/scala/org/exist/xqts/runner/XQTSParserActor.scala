@@ -54,7 +54,7 @@ object XQTSParserActor {
   }
 
   case class Environment(name: String, schemas: List[Schema] = List.empty, sources: List[Source] = List.empty, resources: List[Resource] = List.empty, params: List[Param] = List.empty, contextItem: Option[String] = None, decimalFormat: Option[DecimalFormat] = None, namespaces: List[Namespace] = List.empty, collections: List[Collection] = List.empty, staticBaseUri: Option[String] = None, collation: Option[Collation] = None)
-  case class Schema(uri: Option[URI], file: Path, xsdVersion: Float = 1.0f, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
+  case class Schema(uri: Option[URI], file: Option[Path], xsdVersion: Float = 1.0f, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
   case class Source(role: Option[String], file: Path, uri: Option[String], validation: Option[Validation.Validation] = None, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
   case class Resource(file: Path, uri: String, mediaType: Option[String] = None, encoding: Option[String], description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
   case class Param(name: String, select: Option[String] = None, as: Option[String] = None, source: Option[String] = None, declared: Boolean = false)
@@ -136,6 +136,7 @@ object XQTSParserActor {
     val Limits = Val("limits")
     val Spec = Val("spec")
     val SchemaAware = Val("schemaAware")
+    val UnicodeVersion = Val("unicode-version")
     val UnicodeNormalizationForm = Val("unicode-normalization-form")
     val XmlVersion = Val("xml-version")
     val XsdVersion = Val("xsd-version")
@@ -146,7 +147,7 @@ object XQTSParserActor {
     */
   object Spec extends Enumeration {
     type Spec = Value
-    val XP10, XP20, XP30, XQ10, XQ30, XT30 = Value
+    val XP10, XP20, XP30, XP31, XQ10, XQ30, XQ31, XT30 = Value
 
     /**
       * Returns all specs which implement at
@@ -159,16 +160,20 @@ object XQTSParserActor {
     def atLeast(spec: Spec) : Set[Spec] = {
       spec match {
         case XP10 =>
-          Set(XP10, XP20, XP30)
+          Set(XP10, XP20, XP30, XP31)
         case XP20 =>
-          Set(XP20, XP30)
+          Set(XP20, XP30, XP31)
         case XP30 =>
-          Set (XP30)
+          Set (XP30, XP31)
+        case XP31 =>
+          Set (XP31)
 
         case XQ10 =>
-          Set(XQ10, XQ30)
+          Set(XQ10, XQ30, XQ31)
         case XQ30 =>
-          Set(XQ30)
+          Set(XQ30, XQ31)
+        case XQ31 =>
+          Set(XQ31)
 
         case XT30 =>
           Set(XT30)

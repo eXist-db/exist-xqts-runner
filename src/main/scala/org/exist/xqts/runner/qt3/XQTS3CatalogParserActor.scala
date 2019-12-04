@@ -136,9 +136,9 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
           currentNs = None
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_SCHEMA && currentEnv.nonEmpty) =>
-          val file = asyncReader.getAttributeValue(ATTR_FILE)
+          val file = Option(asyncReader.getAttributeValue(ATTR_FILE))
           val uri = Option(asyncReader.getAttributeValue(ATTR_URI)).map(new URI(_))
-          currentSchema = Some(Schema(uri, xqtsPath.resolve(file)))
+          currentSchema = Some(Schema(uri, file.map(xqtsPath.resolve(_))))
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_DESCRIPTION && (currentSchema.nonEmpty || currentSource.nonEmpty)) =>
           captureText = true

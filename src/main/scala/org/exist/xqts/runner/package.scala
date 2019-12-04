@@ -29,6 +29,7 @@ package object runner {
   object XQTS_1_0 extends XQTSVersion
   object XQTS_3_0 extends XQTSVersion
   object XQTS_3_1 extends XQTSVersion
+  object XQTS_HEAD extends XQTSVersion
 
   object XQTSVersion {
 
@@ -44,7 +45,8 @@ package object runner {
       s match {
         case "1.0" | "1" => XQTS_1_0
         case "3.0" | "3" => XQTS_3_0
-        case "3.1" => XQTS_3_1
+        case "3.1" | "31" => XQTS_3_1
+        case "head" | "HEAD" => XQTS_HEAD
         case _ => throw new IllegalArgumentException(s"No such XQTS version: $s")
       }
     }
@@ -61,6 +63,8 @@ package object runner {
       i match {
         case 1 => XQTS_1_0
         case 3 => XQTS_3_0
+        case 31 => XQTS_3_1
+        case -1 => XQTS_HEAD
         case _ => throw new IllegalArgumentException(s"No such XQTS version: $i")
       }
     }
@@ -78,6 +82,7 @@ package object runner {
         case 1 | 1.0f => XQTS_1_0
         case 3 | 3.0f => XQTS_3_0
         case 3.1f => XQTS_3_1
+        case -1 => XQTS_HEAD
         case _ => throw new IllegalArgumentException(s"No such XQTS version: $f")
       }
     }
@@ -97,6 +102,28 @@ package object runner {
           "XQTS_3_0"
         case XQTS_3_1 =>
           "XQTS_3_1"
+        case XQTS_HEAD =>
+          "XQTS_HEAD"
+      }
+    }
+
+    /**
+      * Gets the XQTS version name string.
+      *
+      * @param xqtsVersion the XQTS version.
+      *
+      * @return the XQTS version name string.
+      */
+    def toVersionName(xqtsVersion: XQTSVersion) : String = {
+      xqtsVersion match {
+        case XQTS_1_0 =>
+          "1.0"
+        case XQTS_3_0 =>
+          "3.0"
+        case XQTS_3_1 =>
+          "3.1"
+        case XQTS_HEAD =>
+          "HEAD"
       }
     }
   }

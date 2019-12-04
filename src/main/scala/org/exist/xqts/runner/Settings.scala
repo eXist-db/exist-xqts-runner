@@ -19,6 +19,7 @@ package org.exist.xqts.runner
 
 import akka.actor.{ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
 import com.typesafe.config.Config
+import scala.jdk.CollectionConverters._;
 
 /**
   * Configuration file settings, read from {@code application.conf}.
@@ -26,10 +27,17 @@ import com.typesafe.config.Config
   * @author Adam Retter <adam@evolvedbinary.com>
   */
 class SettingsImpl(config: Config) extends Extension {
-  val xqts3url = config.getString("xqtsrunner.xqts.version3.url")
-  val xqts3sha256 = config.getString("xqtsrunner.xqts.version3.sha256")
-  val xqts3HasDir: Option[String] = Option(config.getString("xqtsrunner.xqts.version3.has-dir"))
-  val xqts3checkFile = config.getString("xqtsrunner.xqts.version3.check-file")
+
+  val xqtsVersions : Map[String, XqtsVersionConfig] = {
+    (for (versionConfig <- config.getConfigList("xqtsrunner.xqts.versions").asScala.toSeq)
+      yield (versionConfig.getString("version") -> XqtsVersionConfig(
+        versionConfig.getString("version"),
+        versionConfig.getString("url"),
+        versionConfig.getString("sha256"),
+        Option(versionConfig.getString("has-dir")),
+        versionConfig.getString("check-file")
+      ))).toMap
+  }
 
   val xqtsLocalDir = config.getString("xqtsrunner.xqts.local-dir")
 
@@ -37,6 +45,8 @@ class SettingsImpl(config: Config) extends Extension {
   val outputDir = config.getString("xqtsrunner.output-dir")
 
   val commonResourceCacheMaxSize = config.getLong("xqtsrunner.common-resource-cache.max-size")
+
+  case class XqtsVersionConfig(version: String, url: String, sha256: String, hasDir: Option[String], checkFile: String)
 }
 
 object Settings extends ExtensionId[SettingsImpl] with ExtensionIdProvider {

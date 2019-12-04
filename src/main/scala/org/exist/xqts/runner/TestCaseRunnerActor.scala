@@ -1446,7 +1446,7 @@ private object IgnorableWrapper {
   */
 private class IgnorableWrapperComparisonFormatter extends DefaultComparisonFormatter {
 
-  private lazy val MTC_IGNORABLE_WRAPPER_XPATH_PREFIX = IGNORABLE_WRAPPER_XPATH_PREFIX.matcher("")
+  private val MTC_IGNORABLE_WRAPPER_XPATH_PREFIX = IGNORABLE_WRAPPER_XPATH_PREFIX.matcher("")
 
   private def abbridgeXPath(xpath: String) : String = {
     MTC_IGNORABLE_WRAPPER_XPATH_PREFIX.reset(xpath).replaceFirst("") match {

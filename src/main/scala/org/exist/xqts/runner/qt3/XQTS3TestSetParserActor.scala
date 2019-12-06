@@ -564,7 +564,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               }
               currentTestCase = None
             case None =>
-              throw new XQTSParseException(s"Encountered end of element: $ELEM_TEST_CASE, but no tes case was captured")
+              //throw new XQTSParseException(s"Encountered end of element: $ELEM_TEST_CASE, but no test case was captured")
           }
 
         case CHARACTERS if (captureText) =>

@@ -72,6 +72,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
   private var currentText: Option[String] = None
   private var currentCreated: Option[Created] = None
   private var currentTestSet: Option[TestSet] = None
+  private var parsingTestCases: Boolean = false
   private var currentModified: Option[Modified] = None
   private var currentLink: Option[Link] = None
   private var currentDependency: Option[Dependency] = None
@@ -191,7 +192,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
             currentSource = currentSource.map(source => source.copy(description = currentText))
           } else if (currentResource.nonEmpty) {
             currentResource = currentResource.map(resource => resource.copy(description = currentText))
-          } else if (currentTestSet.nonEmpty && currentTestSet.flatMap(_.description).isEmpty) {
+          } else if (currentTestSet.nonEmpty && !parsingTestCases && currentTestSet.flatMap(_.description).isEmpty) {
             currentTestSet = currentTestSet.map(testSet => testSet.copy(description = currentText))
           }
           currentText = None
@@ -216,7 +217,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_DEPENDENCY) =>
           if(currentTestCase.nonEmpty) {
             currentTestCase = currentDependency.map(dependency => currentTestCase.map(testCase => testCase.copy(dependencies = dependency +: testCase.dependencies))).getOrElse(currentTestCase)
-          } else if(currentTestSet.nonEmpty) {
+          } else if(currentTestSet.nonEmpty && !parsingTestCases) {
             currentTestSet = currentDependency.map(dependency => currentTestSet.map(testSet => testSet.copy(dependencies = dependency +: testSet.dependencies))).getOrElse(currentTestSet)
           }
           currentDependency = None
@@ -360,9 +361,11 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentTestSet = Some(TestSet(name, covers))
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_TEST_SET) =>
-          // there is nothing we need to do here, although in future we could add further logging here
+          parsingTestCases = false
+          // there is nothing more we need to do here, although in future we could add further logging here
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_TEST_CASE) =>
+          parsingTestCases = true
           val name = asyncReader.getAttributeValue(ATTR_NAME)
           val covers = asyncReader.getAttributeValue(ATTR_COVERS)
           if ((testCases.isEmpty || testCases.contains(name)) && !excludeTestCases.contains(name)) {

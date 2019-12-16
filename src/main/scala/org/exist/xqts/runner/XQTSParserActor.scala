@@ -74,8 +74,9 @@ object XQTSParserActor {
 
   case class TestSet(name: TestSetName, covers: String, description: Option[String] = None, links: Seq[Link] = List.empty, dependencies: Seq[Dependency] = Seq.empty, testCases: Seq[TestCase] = Seq.empty)
   case class Link(`type`: String, document: String, section: Option[String] = None)
+  case class Module(uri: URI, file: Path)
   case class Dependency(`type`: DependencyType, value: String, satisfied: Boolean)
-  case class TestCase(file: Path, name: TestCaseName, covers: String, description: Option[String] = None, created: Option[Created] = None, modifications: Seq[Modified] = Seq.empty, environment: Option[Environment] = None, dependencies: Seq[Dependency] = Seq.empty, test: Option[String \/ Path] = None, result: Option[Result] = None)
+  case class TestCase(file: Path, name: TestCaseName, covers: String, description: Option[String] = None, created: Option[Created] = None, modifications: Seq[Modified] = Seq.empty, environment: Option[Environment] = None, modules: Seq[Module] = Seq.empty, dependencies: Seq[Dependency] = Seq.empty, test: Option[String \/ Path] = None, result: Option[Result] = None)
   sealed trait Result
 
   /*

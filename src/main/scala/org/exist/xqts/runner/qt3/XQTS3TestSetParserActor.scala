@@ -209,6 +209,12 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentTestSet = currentLink.map(link => currentTestSet.map(testSet => testSet.copy(links = link +: testSet.links))).getOrElse(currentTestSet)
           currentLink = None
 
+        case START_ELEMENT if (asyncReader.getLocalName == ELEM_MODULE && currentTestCase.nonEmpty) =>
+          val uri = new URI(asyncReader.getAttributeValue(ATTR_URI))
+          val file = asyncReader.getAttributeValue(ATTR_FILE)
+          val module = Module(uri, testSetDir.resolve(file))
+          currentTestCase = currentTestCase.map(testCase => testCase.copy(modules = module +: testCase.modules))
+
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_DEPENDENCY) =>
           val `type` = asyncReader.getAttributeValue(ATTR_TYPE)
           val value = asyncReader.getAttributeValue(ATTR_VALUE)

@@ -47,6 +47,7 @@ package object qt3 {
   val ELEM_TEST_SET = "test-set"
   val ELEM_LINK = "link"
   val ELEM_TEST_CASE = "test-case"
+  val ELEM_MODULE = "module"
   val ELEM_DEPENDENCY = "dependency"
   val ELEM_TEST = "test"
   val ELEM_RESULT = "result"

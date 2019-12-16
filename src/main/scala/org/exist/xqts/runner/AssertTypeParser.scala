@@ -62,13 +62,23 @@ object AssertTypeParser {
   case class ExplicitTypeNode(name: TypeNameNode, typeParameters: Option[ParametersNode], cardinality: Option[CardinalityNode]) extends TypeNode {
     @throws[XPathException]
     override def asExistTypeDescription = {
-      val existType = typeParameters.map(_ => name.asXdmTypeName + "()").getOrElse(name.asXdmTypeName) match {
-          case "node()" =>
-            // NOTE: for some reason eXist-db does not support looking up Node type by name?!?
-            ExistType.NODE
-          case typeName =>
-            ExistType.getType(typeName)
-        }
+      val existType = ExistType.getType(
+        typeParameters.flatMap { parametersNode =>
+          if (parametersNode.parameters.size == 1 && parametersNode.parameters.head == WildcardTypeNode) {
+            Some(name.asXdmTypeName + "(*)")
+          } else {
+            Some(name.asXdmTypeName + "()")
+          }
+        }.getOrElse(name.asXdmTypeName)
+      )
+
+//      match {
+//          case "node()" =>
+//            // NOTE: for some reason eXist-db does not support looking up Node type by name?!?
+//            ExistType.NODE
+//          case typeName =>
+//            ExistType.getType(typeName)
+//        }
 
       ExplicitExistTypeDescription(
         existType,

@@ -281,7 +281,7 @@ private class XQTSRunner {
         ExistServer.start() match {
           case \/-(server) =>
             this.existServer = Some(server)
-            logger.info("eXist-db OK.")
+            logger.info(s"eXist-db ${ExistServer.getVersion()} (${ExistServer.getCommitAbbrev()}) OK.")
 
             // 4) register the shutdown process
             //TODO(AR) should likely switch to Coordinated Shutdown, see: https://doc.akka.io/docs/akka/2.5/actors.html#coordinated-shutdown

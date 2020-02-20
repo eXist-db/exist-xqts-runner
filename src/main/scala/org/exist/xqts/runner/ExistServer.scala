@@ -78,6 +78,13 @@ object ExistServer {
         e.left
     }
   }
+
+  def getVersion() : String = org.exist.Version.getVersion()
+
+  def getCommitAbbrev() : String = {
+    val commit = Option(org.exist.Version.getGitCommit()).filter(_.nonEmpty)
+    commit.map(_.substring(0, 7)).getOrElse("UNKNOWN")
+  }
 }
 
 /**

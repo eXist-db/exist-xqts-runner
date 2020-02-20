@@ -59,12 +59,21 @@ object AssertTypeParser {
     def asExistTypeDescription : ExistTypeDescription
   }
 
-  case class ExplicitTypeNode(name: TypeNameNode, typeParameters: Option[ParametersNode], cardinality: Option[CardinalityNode]) extends TypeNode {
+
+  trait ExplicitTypeNode extends TypeNode {
+    def name: TypeNameNode;
+    def typeParameters: Option[ParametersNode];
+    def cardinality: Option[CardinalityNode];
+
     @throws[XPathException]
     override def asExistTypeDescription = {
+      def isFunctionType(name: TypeNameNode) : Boolean = {
+        name.localName.equals("function") || name.localName.equals("map") || name.localName.equals("array")
+      }
+
       val existType = ExistType.getType(
         typeParameters.flatMap { parametersNode =>
-          if (parametersNode.parameters.size == 1 && parametersNode.parameters.head == WildcardTypeNode) {
+          if (isFunctionType(name) || (parametersNode.parameters.size == 1 && parametersNode.parameters.head == WildcardTypeNode)) {
             Some(name.asXdmTypeName + "(*)")
           } else {
             Some(name.asXdmTypeName + "()")
@@ -72,13 +81,13 @@ object AssertTypeParser {
         }.getOrElse(name.asXdmTypeName)
       )
 
-//      match {
-//          case "node()" =>
-//            // NOTE: for some reason eXist-db does not support looking up Node type by name?!?
-//            ExistType.NODE
-//          case typeName =>
-//            ExistType.getType(typeName)
-//        }
+      //      match {
+      //          case "node()" =>
+      //            // NOTE: for some reason eXist-db does not support looking up Node type by name?!?
+      //            ExistType.NODE
+      //          case typeName =>
+      //            ExistType.getType(typeName)
+      //        }
 
       ExplicitExistTypeDescription(
         existType,
@@ -91,6 +100,12 @@ object AssertTypeParser {
       )
     }
   }
+
+  case class ExplicitFunctionTypeNode(typeParameters: Option[ParametersNode], returnType: Option[TypeNode], cardinality: Option[CardinalityNode]) extends ExplicitTypeNode {
+    def name = TypeNameNode(None, "function")
+  }
+
+  case class ExplicitNonFunctionTypeNode(name: TypeNameNode, typeParameters: Option[ParametersNode], cardinality: Option[CardinalityNode]) extends ExplicitTypeNode
 
   case object WildcardTypeNode extends TypeNode {
     override def asExistTypeDescription = WildcardExistTypeDescription
@@ -162,8 +177,21 @@ class AssertTypeParser(val input: ParserInput) extends Parser {
   }
 
   private def ExplicitType: Rule1[ExplicitTypeNode] = rule {
-    TypeName ~ optional(Parameters) ~ optional(Cardinality) ~> ExplicitTypeNode
+    ExplicitFunctionType | ExplicitNonFunctionType
   }
+
+  private def ExplicitFunctionType : Rule1[ExplicitFunctionTypeNode] = rule {
+    optional("xs:") ~ "function" ~ optional(Parameters) ~ optional(FunctionReturnType) ~ optional(Cardinality) ~> ExplicitFunctionTypeNode
+  }
+
+  private def FunctionReturnType : Rule1[TypeNode] = rule {
+    ws() ~ "as" ~ ws() ~ Type
+  }
+
+  private def ExplicitNonFunctionType: Rule1[ExplicitNonFunctionTypeNode] = rule {
+    TypeName ~ optional(Parameters) ~ optional(Cardinality) ~> ExplicitNonFunctionTypeNode
+  }
+
 
   private def TypeName : Rule1[TypeNameNode] = rule {
     optional(Prefix) ~ LocalPart ~> ((prefix: Option[String], localPart: String) => TypeNameNode(prefix, localPart))

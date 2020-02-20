@@ -133,9 +133,11 @@ object AssertTypeParser {
     * @return the parse result.
     */
   def parse(text: String) : Try[TypeNode] = {
-    new AssertTypeParser(text)
+    val normalized = text.trim
+    val parseResult = new AssertTypeParser(normalized)
       .InputLine
       .run()
+    parseResult
   }
 }
 

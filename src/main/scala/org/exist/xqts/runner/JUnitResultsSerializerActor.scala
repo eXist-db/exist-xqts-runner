@@ -65,6 +65,7 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
       sender ! SerializedTestSetResults(testSetResults.testSetRef)
 
     case FinalizeSerialization =>
+      val start = System.currentTimeMillis()
       logger.info(s"Aggregating results report...")
       dataDir
         .flatMap(dd => htmlDir.map(hd => (dd, hd)))
@@ -74,7 +75,7 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
         .unsafeRunSync()
       match {
         case None =>
-          logger.info(s"Aggregated results report OK.")
+          logger.info(s"Aggregated results report OK (${System.currentTimeMillis() - start} ms).")
 
         case Some(t) =>
           logger.error(s"Could not aggregate results report. ${t.getMessage}", t)

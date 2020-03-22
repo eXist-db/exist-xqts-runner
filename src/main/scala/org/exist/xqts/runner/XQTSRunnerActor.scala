@@ -47,10 +47,10 @@ import scala.collection.immutable.Map
   * @param serializerActorClass the class to use for serializing the results of the XQTS.
   * @param outputDir the directory to serialize XQTS results to.
   */
-class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parserActorClass: Class[XQTSParserActor], serializerActorClass: Class[XQTSResultsSerializerActor], outputDir: Path) extends Actor {
+class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parserActorClass: Class[XQTSParserActor], serializerActorClass: Class[XQTSResultsSerializerActor], styleDir: Option[Path], outputDir: Path) extends Actor {
 
   private val logger = Logger(classOf[XQTSRunnerActor])
-  private val resultsSerializerRouter = context.actorOf(FromConfig.props(Props(serializerActorClass, outputDir)), name = "JUnitResultsSerializerRouter")
+  private val resultsSerializerRouter = context.actorOf(FromConfig.props(Props(serializerActorClass, styleDir, outputDir)), name = "JUnitResultsSerializerRouter")
 
   private var unparsedTestSets: Set[TestSetRef] = Set.empty
   private var unserializedTestSets: Set[TestSetRef] = Set.empty

@@ -269,6 +269,32 @@ private class XQTSRunner {
     val system = ActorSystem("XQTSRunnerSystem", config)
     val settings = Settings(system)
 
+
+    // TODO(AR) ant-junit:1.10.7 has buggy stylesheets for XML->HTML, remove this when a new version is available
+    val styleDir = Some(Paths.get(settings.xqtsLocalDir).resolve("xsl"))
+    if (!Files.exists(styleDir.get)) {
+      Files.createDirectories(styleDir.get)
+    }
+    val framesPath = styleDir.get.resolve("junit-frames-saxon.xsl")
+    if (!Files.exists(framesPath)) {
+      val isFrames = getClass().getResourceAsStream("/xsl/junit-frames-saxon.xsl")
+      try {
+        Files.copy(isFrames, framesPath)
+      } finally {
+        isFrames.close()
+      }
+    }
+    val noFramesPath = styleDir.get.resolve("junit-noframes-saxon.xsl")
+    if (!Files.exists(noFramesPath)) {
+      val isNoFrames = getClass().getResourceAsStream("/xsl/junit-noframes-saxon.xsl")
+      try {
+        Files.copy(isNoFrames, noFramesPath)
+      } finally {
+        isNoFrames.close()
+      }
+    }
+
+
     // 2) Ensure that we have a copy of the XQTS we need
     ensureXqtsPresent(cmdConfig.xqtsVersion, settings, cmdConfig.localDir) match {
       case -\/(throwable) =>
@@ -293,7 +319,7 @@ private class XQTSRunner {
             // 5) start the XQTSRunner actor
             val parserActorClass = getParserActorClass(cmdConfig.xqtsVersion)
             val serializerActorClass = getSerializerActorClass()
-            val xqtsRunner = system.actorOf(Props(classOf[XQTSRunnerActor], settings.xmlParserBufferSize, server, parserActorClass, serializerActorClass, cmdConfig.localDir.getOrElse(Paths.get(settings.outputDir))), name = "XQTSRunner")
+            val xqtsRunner = system.actorOf(Props(classOf[XQTSRunnerActor], settings.xmlParserBufferSize, server, parserActorClass, serializerActorClass, styleDir, cmdConfig.localDir.getOrElse(Paths.get(settings.outputDir))), name = "XQTSRunner")
             xqtsRunner ! RunXQTS(cmdConfig.xqtsVersion, localXqtsDir, getEnabled(DEFAULT_FEATURES)(cmdConfig.enableFeatures, cmdConfig.disableFeatures).toSet, getEnabled(DEFAULT_SPECS)(cmdConfig.enableSpecs, cmdConfig.disableSpecs).toSet, getEnabled(DEFAULT_XML_VERSIONS)(cmdConfig.enableXmlVersions, cmdConfig.disableXmlVersions).toSet, getEnabled(DEFAULT_XSD_VERSIONS)(cmdConfig.enableXsdVersions, cmdConfig.disableXsdVersions).toSet, settings.commonResourceCacheMaxSize, cmdConfig.testSetPattern.map(_.right).getOrElse(cmdConfig.testSets.toSet.left), cmdConfig.testCases.toSet, cmdConfig.excludeTestSets.toSet, cmdConfig.excludeTestCases.toSet)
 
           case -\/(throwable) =>

@@ -39,7 +39,7 @@ import org.exist.xqts.runner.XQTSParserActor.TestSetName
   *
   * @author Adam Retter <adam@evolvedbinary.com>
   */
-class JUnitResultsSerializerActor(outputDir: Path) extends XQTSResultsSerializerActor {
+class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) extends XQTSResultsSerializerActor {
 
   private val logger = Logger(classOf[JUnitResultsSerializerActor])
 
@@ -172,9 +172,10 @@ class JUnitResultsSerializerActor(outputDir: Path) extends XQTSResultsSerializer
     aggregateTransformer.setTodir(htmlDir.toFile)   // for the HTML reports
     aggregateTransformer.createFactory().setName(classOf[TransformerFactoryImpl].getName)
 
+    styleDir.map(dir => aggregateTransformer.setStyledir(dir.toAbsolutePath.toFile))
+
     aggregator.execute()
   }
-
 
   private object XQTSJUnitTest {
     def apply(testResult : TestResult) = new XQTSJUnitTest(testResult)

@@ -40,6 +40,7 @@ import org.exist.xqts.runner.AssertTypeParser.TypeNode.{ExistTypeDescription, Ex
 import org.exist.xqts.runner.CommonResourceCacheActor.{CachedResource, GetResource, ResourceGetError}
 import org.exist.xqts.runner.XQTSRunnerActor.{RanTestCase, RunningTestCase}
 import org.exist.xquery.Cardinality
+import org.xmlunit.XMLUnitException
 import org.xmlunit.builder.{DiffBuilder, Input}
 import org.xmlunit.diff.{Comparison, ComparisonType, DefaultComparisonFormatter}
 
@@ -1144,15 +1145,41 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                 val totalExecutionTime = executionTime + expectedQueryExecutionTime + actualQueryExecutionTime
 
                 try {
-                  val differences = (
-                    for (i <- 0 until expectedQueryResult.getItemCount)
-                      yield findDifferences(expectedQueryResult.itemAt(i).asInstanceOf[StringValue].getStringValue, actualQueryResult.itemAt(0).asInstanceOf[StringValue].getStringValue())
-                    ).flatten
+                  val strActualResult = actualQueryResult.itemAt(0).asInstanceOf[StringValue].getStringValue();
 
-                  if (differences.isEmpty) {
-                    PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
-                  } else {
-                    FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-xml: differences='${differences.mkString(". ")}")
+                  val itemIdxs =  (0 until expectedQueryResult.getItemCount)
+                  val differences : \/[XMLUnitException, Seq[String]] = itemIdxs.foldLeft(\/.right[XMLUnitException, Seq[String]](Seq.empty[String]))((accum, itemIdx) => {
+                    accum match {
+                        // if we have an error don't process anything else, just perpetuate the error
+                      case error @ -\/(_) =>
+                        error
+
+                      case current @ \/-(results) =>
+                        val strExpectedResult = expectedQueryResult.itemAt(itemIdx).asInstanceOf[StringValue].getStringValue
+                        val differences = findDifferences(strExpectedResult, strActualResult)
+                        differences match {
+                          // if we have an error don't process anything else, just perpetuate the error
+                          case diffError @ -\/(_) =>
+                            diffError
+
+                          case \/-(Some(result)) =>
+                            \/-(results :+ result)
+
+                          case \/-(None) =>
+                            current
+                        }
+                    }
+                  })
+
+                  differences match {
+                    case -\/(diffError) =>
+                      ErrorResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, diffError)
+
+                    case \/-(results) if results.isEmpty =>
+                      PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
+
+                    case \/-(results) =>
+                      FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-xml: differences='${results.mkString(". ")}")
                   }
                 } catch {
                   // TODO(AR) temp try/catch for NPE due to a problem with XmlDiff and eXist-db's DOM(s)?
@@ -1218,20 +1245,25 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return Some string describing the differences, or None of there are no differences.
     */
-  private def findDifferences(expected : String, actual: String) : Option[String] = {
-    val expectedSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expected</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
-    val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
-    val diff = DiffBuilder.compare(actualSource)
-      .withTest(expectedSource)
-      .checkForIdentical()
-      .withComparisonFormatter(ignorableWrapperComparisonFormatter)
-      .checkForSimilar()
-      .build()
+  private def findDifferences(expected : String, actual: String) : XMLUnitException \/ Option[String] = {
+    try {
+      val expectedSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expected</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
+      val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
+      val diff = DiffBuilder.compare(actualSource)
+        .withTest(expectedSource)
+        .checkForIdentical()
+        .withComparisonFormatter(ignorableWrapperComparisonFormatter)
+        .checkForSimilar()
+        .build()
 
-    if (diff.hasDifferences) {
-      Some(diff.toString)
-    } else {
-      None
+      if (diff.hasDifferences) {
+        \/-(Some(diff.toString))
+      } else {
+        \/-(None)
+      }
+    } catch {
+      case e: XMLUnitException =>
+        -\/(e)
     }
   }
 

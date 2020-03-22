@@ -20,7 +20,7 @@ package org.exist.xqts.runner
 import java.nio.file.Path
 import java.util.regex.Pattern
 
-import akka.actor.{Actor, Props}
+import akka.actor.{Actor, Props, Timers}
 import XQTSRunnerActor._
 import akka.routing.FromConfig
 import grizzled.slf4j.Logger
@@ -47,10 +47,12 @@ import scala.collection.immutable.Map
   * @param serializerActorClass the class to use for serializing the results of the XQTS.
   * @param outputDir the directory to serialize XQTS results to.
   */
-class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parserActorClass: Class[XQTSParserActor], serializerActorClass: Class[XQTSResultsSerializerActor], styleDir: Option[Path], outputDir: Path) extends Actor {
+class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parserActorClass: Class[XQTSParserActor], serializerActorClass: Class[XQTSResultsSerializerActor], styleDir: Option[Path], outputDir: Path) extends Actor with Timers {
 
   private val logger = Logger(classOf[XQTSRunnerActor])
   private val resultsSerializerRouter = context.actorOf(FromConfig.props(Props(serializerActorClass, styleDir, outputDir)), name = "JUnitResultsSerializerRouter")
+
+  private var started = System.currentTimeMillis()
 
   private var unparsedTestSets: Set[TestSetRef] = Set.empty
   private var unserializedTestSets: Set[TestSetRef] = Set.empty
@@ -60,6 +62,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   override def receive: Receive = {
 
     case RunXQTS(xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, maxCacheBytes, testSets, testCases, excludeTestSets, excludeTestCases) =>
+      started = System.currentTimeMillis()
       logger.info(s"Running XQTS: ${XQTSVersion.label(xqtsVersion)}")
       val readFileRouter = context.actorOf(FromConfig.props(Props(classOf[ReadFileActor])), name="ReadFileRouter")
       val commonResourceCacheActor = context.actorOf(Props(classOf[CommonResourceCacheActor], readFileRouter, maxCacheBytes))
@@ -108,6 +111,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
 
     case FinishedSerialization =>
       // all tests have run, and serialization is finished
+      logger.info(s"Completed XQTS in (${System.currentTimeMillis() - started} ms)")
       context.stop(self)
       context.system.terminate()
   }

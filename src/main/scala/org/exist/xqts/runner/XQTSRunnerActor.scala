@@ -59,18 +59,56 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   private var testCases : Map[TestSetRef, Set[String]] = Map.empty
   private var completedTestCases : Map[TestSetRef, Map[String, TestResult]] = Map.empty
 
+  private case object TimerStatsKey
+  private case object TimerPrintStats
+  private case class Stats(unparsedTestSets: Int, testCases: (Int, Int), completedTestCases: (Int, Int), unserializedTestSets: Int) {
+    def asMessage: String = s"XQTSRunnerActor Progress:\nunparsedTestSets=${unparsedTestSets}\ntestCases[sets/cases]=${testCases._1}/${testCases._2}\ncompletedTestCases[sets/cases]=${completedTestCases._1}/${completedTestCases._2}\nunserializedTestSets=${unserializedTestSets}"
+  }
+  private var previousStats: Stats = Stats(0, (0,0), (0,0), 0)
+  private var unchangedStatsTicks = 0;
+
   override def receive: Receive = {
 
     case RunXQTS(xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, maxCacheBytes, testSets, testCases, excludeTestSets, excludeTestCases) =>
       started = System.currentTimeMillis()
       logger.info(s"Running XQTS: ${XQTSVersion.label(xqtsVersion)}")
+
+      if (logger.isDebugEnabled) {
+        // prints stats about the state of this actor (i.e. test set progress)
+        import scala.concurrent.duration._
+        timers.startTimerAtFixedRate(TimerStatsKey, TimerPrintStats, 5.seconds)
+      }
+
       val readFileRouter = context.actorOf(FromConfig.props(Props(classOf[ReadFileActor])), name="ReadFileRouter")
       val commonResourceCacheActor = context.actorOf(Props(classOf[CommonResourceCacheActor], readFileRouter, maxCacheBytes))
+
       val testCaseRunnerRouter = context.actorOf(FromConfig.props(Props(classOf[TestCaseRunnerActor], existServer, commonResourceCacheActor)), name = "TestCaseRunnerRouter")
+
       val testSetParserRouter = context.actorOf(FromConfig.props(Props(classOf[XQTS3TestSetParserActor], xmlParserBufferSize, testCaseRunnerRouter)), "XQTS3TestSetParserRouter")
       val parserActor = context.actorOf(Props(parserActorClass, xmlParserBufferSize, testSetParserRouter), parserActorClass.getSimpleName)
 
       parserActor ! Parse(xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, testSets, testCases, excludeTestSets, excludeTestCases)
+
+
+    case TimerPrintStats =>
+      val stats = Stats(this.unparsedTestSets.size, (this.testCases.size, this.testCases.values.foldLeft(0)(_ + _.size)), (this.completedTestCases.size, this.completedTestCases.values.foldLeft(0)(_ + _.size)), this.unserializedTestSets.size)
+      logger.debug(stats.asMessage)
+      if (stats.equals(previousStats)) {
+        unchangedStatsTicks = unchangedStatsTicks + 1
+      }
+
+      // if stats have not changed for 5 ticks, dump some info about incomplete test sets
+      if (unchangedStatsTicks > 5) {
+        val incompleteTestSets = testCases
+          .map { case (testSetRef, testCaseNames) => (testSetRef, testCaseNames.removedAll(completedTestCases.get(testSetRef).map(_.keySet).getOrElse(Set.empty)))}
+          .filter {case (testSetRef, testCaseNames) => testCaseNames.nonEmpty}
+
+        logger.debug(s"incompleteTestSets=${incompleteTestSets.map { case (testSetRef, testCaseNames) => (testSetRef.name, testCaseNames)}}")
+
+        // reset
+        unchangedStatsTicks = 0;
+      }
+      previousStats = stats
 
     case ParseComplete(xqtsVersion, xqtsPath) =>
       // there is nothing we need to do here
@@ -112,6 +150,9 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     case FinishedSerialization =>
       // all tests have run, and serialization is finished
       logger.info(s"Completed XQTS in (${System.currentTimeMillis() - started} ms)")
+      if (logger.isDebugEnabled) {
+        timers.cancel(TimerStatsKey)
+      }
       context.stop(self)
       context.system.terminate()
   }

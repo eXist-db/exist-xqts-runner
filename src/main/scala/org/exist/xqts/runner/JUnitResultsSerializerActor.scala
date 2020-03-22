@@ -35,7 +35,7 @@ import org.exist.xqts.runner.XQTSParserActor.TestSetName
 
 /**
   * Actor which serialized test results to the JUnit XML report format.
-  * It can also agrregate a number of XML reports into a HTML report.
+  * It can also aggregate a number of XML reports into a HTML report.
   *
   * @author Adam Retter <adam@evolvedbinary.com>
   */

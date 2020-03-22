@@ -29,6 +29,7 @@ import com.fasterxml.aalto.{AsyncByteBufferFeeder, AsyncXMLStreamReader}
 import grizzled.slf4j.Logger
 import javax.xml.namespace.{NamespaceContext, QName}
 import javax.xml.stream.XMLStreamConstants.{CDATA, CHARACTERS, END_DOCUMENT, END_ELEMENT, START_ELEMENT}
+import net.sf.saxon.value.AnyURIValue
 import org.exist.xqts.runner.{Stack, XQTSParseException}
 import org.exist.xqts.runner.TestCaseRunnerActor.{AssumptionFailedResult, RunTestCase}
 import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
@@ -178,7 +179,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_SCHEMA && currentEnv.nonEmpty) =>
           val file = Option(asyncReader.getAttributeValue(ATTR_FILE))
-          val uri = asyncReader.getAttributeValueOpt(ATTR_URI).map(new URI(_))
+          val uri = asyncReader.getAttributeValueOpt(ATTR_URI).map(new AnyURIValue(_))
           currentSchema = Some(Schema(uri, file.map(testSetDir.resolve(_))))
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_DESCRIPTION) =>
@@ -210,7 +211,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentLink = None
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_MODULE && currentTestCase.nonEmpty) =>
-          val uri = new URI(asyncReader.getAttributeValue(ATTR_URI))
+          val uri = new AnyURIValue(asyncReader.getAttributeValue(ATTR_URI))
           val file = asyncReader.getAttributeValue(ATTR_FILE)
           val module = Module(uri, testSetDir.resolve(file))
           currentTestCase = currentTestCase.map(testCase => testCase.copy(modules = module +: testCase.modules))
@@ -332,7 +333,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentEnv = currentEnv.map(env => env.copy(decimalFormats = decimalFormat +: env.decimalFormats))
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_COLLECTION && currentEnv.nonEmpty) =>
-          val uri = new URI(asyncReader.getAttributeValue(ATTR_URI))
+          val uri = new AnyURIValue(asyncReader.getAttributeValue(ATTR_URI))
           currentCollection = Some(Collection(uri))
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_COLLECTION && currentEnv.nonEmpty) =>

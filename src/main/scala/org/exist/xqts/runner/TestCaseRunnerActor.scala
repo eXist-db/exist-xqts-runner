@@ -68,15 +68,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
   override def receive: Receive = {
 
-    case rtc @ RunTestCase(testSetRef, testCase, manager) =>
-
+    case rtc@RunTestCase(testSetRef, testCase, manager) =>
       testCase.test match {
         case Some(-\/(queryStr)) =>
           testCase.environment match {
-            case Some(environment) if(environment.schemas.nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
-              environment.schemas.filter(_.file.nonEmpty).map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
-              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), environment.schemas.filter(_.file.nonEmpty).map(schema => () => schema.file.get))
-              //TODO(AR) above we skip schemas here which don't have a `file` attribute, but ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+            //TODO(AR) on the line below, and the line below that, we use `.filter(_.file.nonEmpty)` to skip schemas here which don't have a `file` attribute... this is temporary! Ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+            case Some(environment) if (environment.schemas.filter(_.file.nonEmpty).nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
+              val requiredSchemas = environment.schemas.filter(_.file.nonEmpty)
+              requiredSchemas.map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
+              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), requiredSchemas.map(schema => () => schema.file.get))
 
               environment.sources.map(source => commonResourceCacheActor ! GetResource(source.file))
               awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources.map(source => () => source.file))
@@ -97,10 +97,11 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
           awaitingQueryStr = merge1(awaitingQueryStr)((testSetRef.name, testCase.name), queryPath)
 
           testCase.environment match {
-            case Some(environment) if(environment.schemas.nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
-              environment.schemas.filter(_.file.nonEmpty).map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
-              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), environment.schemas.filter(_.file.nonEmpty).map(schema => () => schema.file.get))
-              //TODO(AR) above we skip schemas here which don't have a `file` attribute, but ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+            //TODO(AR) on the line below, and the line below that, we use `.filter(_.file.nonEmpty)` to skip schemas here which don't have a `file` attribute... this is temporary! Ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+            case Some(environment) if (environment.schemas.filter(_.file.nonEmpty).nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
+              val requiredSchemas = environment.schemas.filter(_.file.nonEmpty)
+              requiredSchemas.map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
+              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), requiredSchemas.map(schema => () => schema.file.get))
 
               environment.sources.map(source => commonResourceCacheActor ! GetResource(source.file))
               awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources.map(source => () => source.file))

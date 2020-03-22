@@ -17,21 +17,21 @@ libraryDependencies ++= {
   val existV = "5.3.0-SNAPSHOT"
 
   Seq(
-    "com.typesafe.akka" %% "akka-actor" % "2.6.0",
-    "org.scalaz" %% "scalaz-core" % "7.2.29",
+    "com.typesafe.akka" %% "akka-actor" % "2.6.4",
+    "org.scalaz" %% "scalaz-core" % "7.2.30",
     "com.github.scopt" %% "scopt" % "3.7.1",
-    "org.typelevel" %% "cats-effect" % "2.0.0",
+    "org.typelevel" %% "cats-effect" % "2.1.2",
     //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
-    "org.parboiled" %% "parboiled" % "2.1.8",
+    "org.parboiled" %% "parboiled" % "2.2.0",
     "org.clapper" %% "grizzled-slf4j" % "1.3.4",
     "org.apache.ant" % "ant-junit" % "1.10.7",   // used for formatting junit style report
 
-    "net.sf.saxon" % "Saxon-HE" % "9.9.1-5",
+    "net.sf.saxon" % "Saxon-HE" % "9.9.1-7",
     "org.exist-db" % "exist-core" % existV,
-    "org.xmlunit" %	"xmlunit-core" % "2.6.3",
+    "org.xmlunit" %	"xmlunit-core" % "2.6.4",
 
-    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.13.0" % "runtime"
+    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.13.1" % "runtime"
   )
 }
 

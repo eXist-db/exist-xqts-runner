@@ -275,6 +275,8 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
     def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime) : ExistServerException \/ Result = {
       if (t.isInstanceOf[XPathException]) {
         Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime).right
+      } else if (t.isInstanceOf[ExistServerException]) {
+        t.asInstanceOf[ExistServerException].left  // pass-through
       } else {
         ExistServerException(t, compilationTime, executionTime).left
       }
@@ -293,17 +295,31 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
     })
 
     // execute step
-    val executeQueryIO : IO[ExistServerException \/ Result] = compiledQueryIO.use {
+    val executeQueryIO: IO[ExistServerException \/ Result] = compiledQueryIO.use {
       case (compiled, context, compilationTime) =>
-          IO { System.currentTimeMillis() }
-            .flatMap { startTime =>
-              IO {
-                xquery.execute(broker, compiled, contextSequence.getOrElse(null))
-              }
-                .flatMap(sequence => IO { Result(sequence, compilationTime, System.currentTimeMillis() - startTime).right })
-                .handleErrorWith(throwable => IO { fromExecutionException(throwable, compilationTime,  System.currentTimeMillis() - startTime) })
+        IO {
+          System.currentTimeMillis()
         }
-    }.handleErrorWith(throwable => IO { fromExecutionException(throwable, 0, 0) })  // 0 because an error here was caused by compilation, so  was no execution
+          .flatMap { startTime =>
+            IO {
+              try {
+                xquery.execute(broker, compiled, contextSequence.getOrElse(null))
+              } catch {
+                // NOTE: bugs in eXist-db's XQuery implementation can produce StackOverflowError - handle as normal Server Error
+                case e: StackOverflowError =>
+                  throw ExistServerException(e, compilationTime, System.currentTimeMillis() - startTime)
+              }
+            }
+              .flatMap(sequence => IO {
+                Result(sequence, compilationTime, System.currentTimeMillis() - startTime).right
+              })
+              .handleErrorWith(throwable => IO {
+                fromExecutionException(throwable, compilationTime, System.currentTimeMillis() - startTime)
+              })
+          }
+    }.handleErrorWith(throwable => IO {
+      fromExecutionException(throwable, 0, 0)
+    }) // 0 because an error here was caused by compilation, so  was no execution
 
     // run compilation and execution
     val queryResult = executeQueryIO.unsafeRunSync()

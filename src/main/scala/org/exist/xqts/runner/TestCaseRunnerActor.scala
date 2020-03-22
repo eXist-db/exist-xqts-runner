@@ -204,13 +204,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       try {
         runTestCase(connection, testSetName, testCase, resolvedEnvironment)
       } catch {
-
         case e: java.lang.OutOfMemoryError =>
-          println(s"OutOfMemoryError: $testSetName ${testCase.name}")
-          throw e
-
-        case e: java.lang.StackOverflowError =>
-          println(s"StackOverflowError: $testSetName ${testCase.name}")
+          System.err.println(s"OutOfMemoryError: $testSetName ${testCase.name}")
           throw e
       }
     })
@@ -229,6 +224,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the result of executing the XQTS test-case.
     */
+    @throws(classOf[OutOfMemoryError])
   private def runTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : TestResult = {
     testCase.test match {
       case Some(test) =>

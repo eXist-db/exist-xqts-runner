@@ -27,7 +27,9 @@ import cats.effect.IO
 import com.fasterxml.aalto.AsyncXMLStreamReader.EVENT_INCOMPLETE
 import com.fasterxml.aalto.{AsyncByteBufferFeeder, AsyncXMLStreamReader}
 import grizzled.slf4j.Logger
+import javax.xml.namespace.{NamespaceContext, QName}
 import javax.xml.stream.XMLStreamConstants.{CDATA, CHARACTERS, END_DOCUMENT, END_ELEMENT, START_ELEMENT}
+import net.sf.saxon.value.AnyURIValue
 import org.exist.xqts.runner.{Stack, XQTSParseException}
 import org.exist.xqts.runner.TestCaseRunnerActor.{AssumptionFailedResult, RunTestCase}
 import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
@@ -177,7 +179,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_SCHEMA && currentEnv.nonEmpty) =>
           val file = Option(asyncReader.getAttributeValue(ATTR_FILE))
-          val uri = asyncReader.getAttributeValueOpt(ATTR_URI).map(new URI(_))
+          val uri = asyncReader.getAttributeValueOpt(ATTR_URI).map(new AnyURIValue(_))
           currentSchema = Some(Schema(uri, file.map(testSetDir.resolve(_))))
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_DESCRIPTION) =>
@@ -207,6 +209,12 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_LINK && currentTestSet.nonEmpty) =>
           currentTestSet = currentLink.map(link => currentTestSet.map(testSet => testSet.copy(links = link +: testSet.links))).getOrElse(currentTestSet)
           currentLink = None
+
+        case START_ELEMENT if (asyncReader.getLocalName == ELEM_MODULE && currentTestCase.nonEmpty) =>
+          val uri = new AnyURIValue(asyncReader.getAttributeValue(ATTR_URI))
+          val file = asyncReader.getAttributeValue(ATTR_FILE)
+          val module = Module(uri, testSetDir.resolve(file))
+          currentTestCase = currentTestCase.map(testCase => testCase.copy(modules = module +: testCase.modules))
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_DEPENDENCY) =>
           val `type` = asyncReader.getAttributeValue(ATTR_TYPE)
@@ -309,21 +317,23 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentEnv = currentEnv.map(_.copy(contextItem = select))
 
         case START_ELEMENT if(asyncReader.getLocalName == ELEM_DECIMAL_FORMAT && currentEnv.nonEmpty) =>
-          val name = asyncReader.getAttributeValueOptNE(ATTR_NAME).map(javax.xml.namespace.QName.valueOf)
-          val decimalSeparator = asyncReader.getAttributeValueOptNE(ATTR_DECIMAL_SEPARATOR).map(_.charAt(0))
-          val groupingSeparator = asyncReader.getAttributeValueOptNE(ATTR_GROUPING_SEPARATOR).map(_.charAt(0))
-          val zeroDigit = asyncReader.getAttributeValueOptNE(ATTR_ZERO_DIGIT).map(_.charAt(0))
-          val digit = asyncReader.getAttributeValueOptNE(ATTR_DIGIT).map(_.charAt(0))
-          val minusSign = asyncReader.getAttributeValueOptNE(ATTR_MINUS_SIGN).map(_.charAt(0))
-          val percent = asyncReader.getAttributeValueOptNE(ATTR_PERCENT).map(_.charAt(0))
-          val perMille = asyncReader.getAttributeValueOptNE(ATTR_PER_MILLE).map(_.charAt(0))
-          val patternSeparator = asyncReader.getAttributeValueOptNE(ATTR_PATTERN_SEPARATOR).map(_.charAt(0))
+          val name = asyncReader.getAttributeValueOptNE(ATTR_NAME).map(toQName(_, asyncReader.getNamespaceContext))
+          val decimalSeparator = asyncReader.getAttributeValueOptNE(ATTR_DECIMAL_SEPARATOR).map(_.codePointAt(0))
+          val exponentSeparator = asyncReader.getAttributeValueOptNE(ATTR_EXPONENT_SEPARATOR).map(_.codePointAt(0))
+          val groupingSeparator = asyncReader.getAttributeValueOptNE(ATTR_GROUPING_SEPARATOR).map(_.codePointAt(0))
+          val zeroDigit = asyncReader.getAttributeValueOptNE(ATTR_ZERO_DIGIT).map(_.codePointAt(0))
+          val digit = asyncReader.getAttributeValueOptNE(ATTR_DIGIT).map(_.codePointAt(0))
+          val minusSign = asyncReader.getAttributeValueOptNE(ATTR_MINUS_SIGN).map(_.codePointAt(0))
+          val percent = asyncReader.getAttributeValueOptNE(ATTR_PERCENT).map(_.codePointAt(0))
+          val perMille = asyncReader.getAttributeValueOptNE(ATTR_PER_MILLE).map(_.codePointAt(0))
+          val patternSeparator = asyncReader.getAttributeValueOptNE(ATTR_PATTERN_SEPARATOR).map(_.codePointAt(0))
           val infinity = asyncReader.getAttributeValueOptNE(ATTR_INFINITY)
           val nan = asyncReader.getAttributeValueOptNE(ATTR_NAN)
-          currentEnv = currentEnv.map(_.copy(decimalFormat = Some(DecimalFormat(name, decimalSeparator, groupingSeparator, zeroDigit, digit, minusSign, percent, perMille, patternSeparator, infinity, nan))))
+          val decimalFormat = DecimalFormat(name, decimalSeparator, exponentSeparator, groupingSeparator, zeroDigit, digit, minusSign, percent, perMille, patternSeparator, infinity, nan)
+          currentEnv = currentEnv.map(env => env.copy(decimalFormats = decimalFormat +: env.decimalFormats))
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_COLLECTION && currentEnv.nonEmpty) =>
-          val uri = new URI(asyncReader.getAttributeValue(ATTR_URI))
+          val uri = new AnyURIValue(asyncReader.getAttributeValue(ATTR_URI))
           currentCollection = Some(Collection(uri))
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_COLLECTION && currentEnv.nonEmpty) =>
@@ -592,6 +602,25 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
       }
 
       parseAll(asyncReader.next(), asyncReader, testSetDir, channel, buf)
+    }
+
+    def toQName(s: String, namespaceContext: NamespaceContext): QName = {
+      val idx = s.indexOf(':')
+      if (idx > -1) {
+        val prefix = s.substring(0, idx)
+        val localPart = s.substring(idx + 1)
+
+        Option(namespaceContext.getNamespaceURI(prefix))
+            .orElse(currentEnv
+              .map(_.namespaces).getOrElse(List.empty)
+              .filter(_.prefix.equals(prefix))
+              .map(_.uri.toString)
+              .headOption)
+            .map(ns => new QName(ns, localPart, prefix))
+            .getOrElse(QName.valueOf(s))
+      } else {
+        QName.valueOf(s)
+      }
     }
 
     def addAssertion(currentAssertions: Stack[Result])(assertion: Result) : Stack[Result] = {

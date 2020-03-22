@@ -35,11 +35,11 @@ import org.exist.xqts.runner.XQTSParserActor.TestSetName
 
 /**
   * Actor which serialized test results to the JUnit XML report format.
-  * It can also agrregate a number of XML reports into a HTML report.
+  * It can also aggregate a number of XML reports into a HTML report.
   *
   * @author Adam Retter <adam@evolvedbinary.com>
   */
-class JUnitResultsSerializerActor(outputDir: Path) extends XQTSResultsSerializerActor {
+class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) extends XQTSResultsSerializerActor {
 
   private val logger = Logger(classOf[JUnitResultsSerializerActor])
 
@@ -65,6 +65,7 @@ class JUnitResultsSerializerActor(outputDir: Path) extends XQTSResultsSerializer
       sender ! SerializedTestSetResults(testSetResults.testSetRef)
 
     case FinalizeSerialization =>
+      val start = System.currentTimeMillis()
       logger.info(s"Aggregating results report...")
       dataDir
         .flatMap(dd => htmlDir.map(hd => (dd, hd)))
@@ -74,7 +75,7 @@ class JUnitResultsSerializerActor(outputDir: Path) extends XQTSResultsSerializer
         .unsafeRunSync()
       match {
         case None =>
-          logger.info(s"Aggregated results report OK.")
+          logger.info(s"Aggregated results report OK (${System.currentTimeMillis() - start} ms).")
 
         case Some(t) =>
           logger.error(s"Could not aggregate results report. ${t.getMessage}", t)
@@ -172,9 +173,10 @@ class JUnitResultsSerializerActor(outputDir: Path) extends XQTSResultsSerializer
     aggregateTransformer.setTodir(htmlDir.toFile)   // for the HTML reports
     aggregateTransformer.createFactory().setName(classOf[TransformerFactoryImpl].getName)
 
+    styleDir.map(dir => aggregateTransformer.setStyledir(dir.toAbsolutePath.toFile))
+
     aggregator.execute()
   }
-
 
   private object XQTSJUnitTest {
     def apply(testResult : TestResult) = new XQTSJUnitTest(testResult)

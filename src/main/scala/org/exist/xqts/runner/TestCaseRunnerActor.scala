@@ -40,6 +40,7 @@ import org.exist.xqts.runner.AssertTypeParser.TypeNode.{ExistTypeDescription, Ex
 import org.exist.xqts.runner.CommonResourceCacheActor.{CachedResource, GetResource, ResourceGetError}
 import org.exist.xqts.runner.XQTSRunnerActor.{RanTestCase, RunningTestCase}
 import org.exist.xquery.Cardinality
+import org.xmlunit.XMLUnitException
 import org.xmlunit.builder.{DiffBuilder, Input}
 import org.xmlunit.diff.{Comparison, ComparisonType, DefaultComparisonFormatter}
 
@@ -67,15 +68,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
   override def receive: Receive = {
 
-    case rtc @ RunTestCase(testSetRef, testCase, manager) =>
-
+    case rtc@RunTestCase(testSetRef, testCase, manager) =>
       testCase.test match {
         case Some(-\/(queryStr)) =>
           testCase.environment match {
-            case Some(environment) if(environment.schemas.nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
-              environment.schemas.filter(_.file.nonEmpty).map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
-              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), environment.schemas.filter(_.file.nonEmpty).map(schema => () => schema.file.get))
-              //TODO(AR) above we skip schemas here which don't have a `file` attribute, but ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+            //TODO(AR) on the line below, and the line below that, we use `.filter(_.file.nonEmpty)` to skip schemas here which don't have a `file` attribute... this is temporary! Ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+            case Some(environment) if (environment.schemas.filter(_.file.nonEmpty).nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
+              val requiredSchemas = environment.schemas.filter(_.file.nonEmpty)
+              requiredSchemas.map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
+              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), requiredSchemas.map(schema => () => schema.file.get))
 
               environment.sources.map(source => commonResourceCacheActor ! GetResource(source.file))
               awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources.map(source => () => source.file))
@@ -96,10 +97,11 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
           awaitingQueryStr = merge1(awaitingQueryStr)((testSetRef.name, testCase.name), queryPath)
 
           testCase.environment match {
-            case Some(environment) if(environment.schemas.nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
-              environment.schemas.filter(_.file.nonEmpty).map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
-              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), environment.schemas.filter(_.file.nonEmpty).map(schema => () => schema.file.get))
-              //TODO(AR) above we skip schemas here which don't have a `file` attribute, but ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+            //TODO(AR) on the line below, and the line below that, we use `.filter(_.file.nonEmpty)` to skip schemas here which don't have a `file` attribute... this is temporary! Ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
+            case Some(environment) if (environment.schemas.filter(_.file.nonEmpty).nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
+              val requiredSchemas = environment.schemas.filter(_.file.nonEmpty)
+              requiredSchemas.map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
+              awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), requiredSchemas.map(schema => () => schema.file.get))
 
               environment.sources.map(source => commonResourceCacheActor ! GetResource(source.file))
               awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources.map(source => () => source.file))
@@ -203,13 +205,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       try {
         runTestCase(connection, testSetName, testCase, resolvedEnvironment)
       } catch {
-
         case e: java.lang.OutOfMemoryError =>
-          println(s"OutOfMemoryError: $testSetName ${testCase.name}")
-          throw e
-
-        case e: java.lang.StackOverflowError =>
-          println(s"StackOverflowError: $testSetName ${testCase.name}")
+          System.err.println(s"OutOfMemoryError: $testSetName ${testCase.name}")
           throw e
       }
     })
@@ -228,6 +225,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the result of executing the XQTS test-case.
     */
+    @throws(classOf[OutOfMemoryError])
   private def runTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : TestResult = {
     testCase.test match {
       case Some(test) =>
@@ -246,7 +244,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
             getDynamicContextAvailableCollections(connection)(testCase, resolvedEnvironment).flatMap(availableCollections =>
               getDynamicContextAvailableTextResources(connection)(testCase, resolvedEnvironment).flatMap(availableTextResources =>
                 getVariableDeclarations(connection)(testCase).flatMap(variableDeclarations =>
-                  connection.executeQuery(queryString, false, baseUri, contextSequence, availableDocuments, availableCollections, availableTextResources, variableDeclarations)
+                  connection.executeQuery(queryString, false, baseUri, contextSequence, availableDocuments, availableCollections, availableTextResources, testCase.environment.map(_.namespaces).getOrElse(List.empty), variableDeclarations, testCase.environment.map(_.decimalFormats).getOrElse(List.empty), testCase.dependencies.filter(_.`type` == DependencyType.Feature).headOption.nonEmpty)
                 )
               )
             )
@@ -1144,15 +1142,41 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                 val totalExecutionTime = executionTime + expectedQueryExecutionTime + actualQueryExecutionTime
 
                 try {
-                  val differences = (
-                    for (i <- 0 until expectedQueryResult.getItemCount)
-                      yield findDifferences(expectedQueryResult.itemAt(i).asInstanceOf[StringValue].getStringValue, actualQueryResult.itemAt(0).asInstanceOf[StringValue].getStringValue())
-                    ).flatten
+                  val strActualResult = actualQueryResult.itemAt(0).asInstanceOf[StringValue].getStringValue();
 
-                  if (differences.isEmpty) {
-                    PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
-                  } else {
-                    FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-xml: differences='${differences.mkString(". ")}")
+                  val itemIdxs =  (0 until expectedQueryResult.getItemCount)
+                  val differences : \/[XMLUnitException, Seq[String]] = itemIdxs.foldLeft(\/.right[XMLUnitException, Seq[String]](Seq.empty[String]))((accum, itemIdx) => {
+                    accum match {
+                        // if we have an error don't process anything else, just perpetuate the error
+                      case error @ -\/(_) =>
+                        error
+
+                      case current @ \/-(results) =>
+                        val strExpectedResult = expectedQueryResult.itemAt(itemIdx).asInstanceOf[StringValue].getStringValue
+                        val differences = findDifferences(strExpectedResult, strActualResult)
+                        differences match {
+                          // if we have an error don't process anything else, just perpetuate the error
+                          case diffError @ -\/(_) =>
+                            diffError
+
+                          case \/-(Some(result)) =>
+                            \/-(results :+ result)
+
+                          case \/-(None) =>
+                            current
+                        }
+                    }
+                  })
+
+                  differences match {
+                    case -\/(diffError) =>
+                      ErrorResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, diffError)
+
+                    case \/-(results) if results.isEmpty =>
+                      PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
+
+                    case \/-(results) =>
+                      FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-xml: differences='${results.mkString(". ")}")
                   }
                 } catch {
                   // TODO(AR) temp try/catch for NPE due to a problem with XmlDiff and eXist-db's DOM(s)?
@@ -1218,20 +1242,25 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return Some string describing the differences, or None of there are no differences.
     */
-  private def findDifferences(expected : String, actual: String) : Option[String] = {
-    val expectedSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expected</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
-    val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
-    val diff = DiffBuilder.compare(actualSource)
-      .withTest(expectedSource)
-      .checkForIdentical()
-      .withComparisonFormatter(ignorableWrapperComparisonFormatter)
-      .checkForSimilar()
-      .build()
+  private def findDifferences(expected : String, actual: String) : XMLUnitException \/ Option[String] = {
+    try {
+      val expectedSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expected</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
+      val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
+      val diff = DiffBuilder.compare(actualSource)
+        .withTest(expectedSource)
+        .checkForIdentical()
+        .withComparisonFormatter(ignorableWrapperComparisonFormatter)
+        .checkForSimilar()
+        .build()
 
-    if (diff.hasDifferences) {
-      Some(diff.toString)
-    } else {
-      None
+      if (diff.hasDifferences) {
+        \/-(Some(diff.toString))
+      } else {
+        \/-(None)
+      }
+    } catch {
+      case e: XMLUnitException =>
+        -\/(e)
     }
   }
 
@@ -1297,7 +1326,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the result or executing the query, or an exception.
     */
   private def executeQueryWith$Result(connection: ExistConnection, query: String, cacheCompiled: Boolean, contextSequence: Option[Sequence], $result: Sequence) = {
-    connection.executeQuery(query, cacheCompiled, None, contextSequence, Seq.empty, Seq.empty, Seq.empty, Seq(RESULT_VARIABLE_NAME -> $result))
+    connection.executeQuery(query, cacheCompiled, None, contextSequence, Seq.empty, Seq.empty, Seq.empty, Seq.empty, Seq(RESULT_VARIABLE_NAME -> $result))
   }
 
   /**
@@ -1446,10 +1475,9 @@ private object IgnorableWrapper {
   */
 private class IgnorableWrapperComparisonFormatter extends DefaultComparisonFormatter {
 
-  private val MTC_IGNORABLE_WRAPPER_XPATH_PREFIX = IGNORABLE_WRAPPER_XPATH_PREFIX.matcher("")
-
   private def abbridgeXPath(xpath: String) : String = {
-    MTC_IGNORABLE_WRAPPER_XPATH_PREFIX.reset(xpath).replaceFirst("") match {
+    val matcher = IGNORABLE_WRAPPER_XPATH_PREFIX.matcher(xpath)
+    matcher.replaceFirst("") match {
       case empty if empty.isEmpty => "/"
       case xpath => xpath
     }

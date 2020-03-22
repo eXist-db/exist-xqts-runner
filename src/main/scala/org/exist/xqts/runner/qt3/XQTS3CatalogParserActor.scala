@@ -29,6 +29,7 @@ import com.fasterxml.aalto.AsyncXMLStreamReader.EVENT_INCOMPLETE
 import com.fasterxml.aalto.{AsyncByteBufferFeeder, AsyncInputFeeder, AsyncXMLStreamReader}
 import grizzled.slf4j.Logger
 import javax.xml.stream.XMLStreamConstants.{CHARACTERS, END_DOCUMENT, END_ELEMENT, START_ELEMENT}
+import net.sf.saxon.value.AnyURIValue
 import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
 import org.exist.xqts.runner.XQTSParserActor.Spec.Spec
 import org.exist.xqts.runner.XQTSParserActor.XmlVersion.XmlVersion
@@ -137,7 +138,7 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_SCHEMA && currentEnv.nonEmpty) =>
           val file = Option(asyncReader.getAttributeValue(ATTR_FILE))
-          val uri = Option(asyncReader.getAttributeValue(ATTR_URI)).map(new URI(_))
+          val uri = Option(asyncReader.getAttributeValue(ATTR_URI)).map(new AnyURIValue(_))
           currentSchema = Some(Schema(uri, file.map(xqtsPath.resolve(_))))
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_DESCRIPTION && (currentSchema.nonEmpty || currentSource.nonEmpty)) =>

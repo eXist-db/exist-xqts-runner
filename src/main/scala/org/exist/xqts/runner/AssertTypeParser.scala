@@ -34,12 +34,11 @@ object AssertTypeParser {
   sealed trait AstNode
 
   object TypeNode {
-    type ExistCardinalityType = Int  // eXist-db's Cardinality type
-    type ExistTypeType = Int  // eXist-db's Cardinality type
+    type ExistTypeType = Int  // eXist-db's xdm type
     sealed trait ExistTypeDescription {
       def hasParameterTypes : Boolean
     }
-    case class ExplicitExistTypeDescription(base: ExistTypeType, parameterTypes: Option[Seq[ExistTypeDescription]], cardinality: Option[ExistCardinalityType]) extends ExistTypeDescription {
+    case class ExplicitExistTypeDescription(base: ExistTypeType, parameterTypes: Option[Seq[ExistTypeDescription]], cardinality: Option[ExistCardinality]) extends ExistTypeDescription {
       override def hasParameterTypes = parameterTypes.map(_.nonEmpty).getOrElse(false)
     }
     case object WildcardExistTypeDescription extends ExistTypeDescription {

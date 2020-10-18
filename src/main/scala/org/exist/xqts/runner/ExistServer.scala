@@ -41,7 +41,7 @@ import javax.xml.transform.OutputKeys
 import org.exist.Namespaces
 import org.exist.dom.memtree.{DocumentImpl, SAXAdapter}
 import org.exist.storage.txn.Txn
-import org.exist.util.io.FastByteArrayInputStream
+import org.apache.commons.io.input.UnsynchronizedByteArrayInputStream
 import org.exist.xqts.runner.XQTSParserActor.{DecimalFormat, Namespace}
 import org.exist.xquery.value._
 import org.xml.sax.InputSource
@@ -390,7 +390,7 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
     * @return either the Document object, or an exception.
     */
   def parseXml(xml: Array[Byte]): ExistServerException \/ DocumentImpl = {
-    val xmlIO = Resource.make(IO { new FastByteArrayInputStream(xml) })(is => IO { is.close() })
+    val xmlIO = Resource.make(IO { new UnsynchronizedByteArrayInputStream(xml) })(is => IO { is.close() })
 
     val parseIO = xmlIO.use(is => IO {
       val saxAdapter = new SAXAdapter()

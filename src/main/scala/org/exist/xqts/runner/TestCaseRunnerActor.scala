@@ -307,7 +307,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the context sequence if present, or an exception
     */
-  private def getContextSequence(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : ExistServerException \/ Option[Sequence] = {
+  private def getContextSequence(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : \/[ExistServerException, Option[Sequence]] = {
     testCase.environment match {
       case Some(env) if (env.name == "empty") =>
         \/-(Some(Sequence.EMPTY_SEQUENCE))
@@ -315,10 +315,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       case Some(env) =>
         env.sources.filter(_.role.filter(_ == ".").nonEmpty).headOption
           .map(resolveSource(resolvedEnvironment, _))
-          .map(_.flatMap(resolvedSource => connection.parseXml(resolvedSource.data)).map(Some(_)))
-          .getOrElse(\/-(None))
+          .map(_.flatMap(resolvedSource => connection.parseXml(resolvedSource.data)).map(doc => Option(doc.asInstanceOf[Sequence])))
+          .getOrElse(\/-[ExistServerException, Option[Sequence]](Option.empty[Sequence]))
 
-      case None => \/-(None)
+      case None => \/-[ExistServerException, Option[Sequence]](Option.empty[Sequence])
     }
   }
 
@@ -332,8 +332,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     */
   private def resolveSource(resolvedEnvironment: ResolvedEnvironment, source: Source): ExistServerException \/ ResolvedSource = {
     resolvedEnvironment.resolvedSources.find(_.path == source.file)
-      .map(\/-(_))
-      .getOrElse(-\/(ExistServerException(new IllegalStateException(s"Could not resolve source ${source.file}"))))
+      .map(\/-[ExistServerException, ResolvedSource](_))
+      .getOrElse(-\/[ExistServerException, ResolvedSource](ExistServerException(new IllegalStateException(s"Could not resolve source ${source.file}"))))
   }
 
   /**
@@ -1156,8 +1156,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                         val differences = findDifferences(strExpectedResult, strActualResult)
                         differences match {
                           // if we have an error don't process anything else, just perpetuate the error
-                          case diffError @ -\/(_) =>
-                            diffError
+                          case -\/(diffError) =>
+                            -\/(diffError)
 
                           case \/-(Some(result)) =>
                             \/-(results :+ result)

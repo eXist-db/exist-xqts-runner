@@ -274,11 +274,11 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
       */
     def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime) : ExistServerException \/ Result = {
       if (t.isInstanceOf[XPathException]) {
-        Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime).right
+        Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime).right[ExistServerException]
       } else if (t.isInstanceOf[ExistServerException]) {
-        t.asInstanceOf[ExistServerException].left  // pass-through
+        t.asInstanceOf[ExistServerException].left[Result]  // pass-through
       } else {
-        ExistServerException(t, compilationTime, executionTime).left
+        ExistServerException(t, compilationTime, executionTime).left[Result]
       }
     }
 
@@ -311,14 +311,14 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
               }
             }
               .flatMap(sequence => IO {
-                Result(sequence, compilationTime, System.currentTimeMillis() - startTime).right
+                Result(sequence, compilationTime, System.currentTimeMillis() - startTime).right[ExistServerException]
               })
               .handleErrorWith(throwable => IO {
                 fromExecutionException(throwable, compilationTime, System.currentTimeMillis() - startTime)
               })
           }
     }.handleErrorWith(throwable => IO {
-      fromExecutionException(throwable, 0, 0)
+      fromExecutionException(throwable, 0l, 0l)
     }) // 0 because an error here was caused by compilation, so  was no execution
 
     // run compilation and execution

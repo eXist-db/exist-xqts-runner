@@ -4,7 +4,7 @@ organization := "org.exist-db"
 
 version := "1.0.0"
 
-scalaVersion := "2.13.1"
+scalaVersion := "2.13.3"
 
 licenses := Seq("LGPL-3.0" -> url("http://opensource.org/licenses/lgpl-3.0"))
 
@@ -17,21 +17,21 @@ libraryDependencies ++= {
   val existV = "5.3.0-SNAPSHOT"
 
   Seq(
-    "com.typesafe.akka" %% "akka-actor" % "2.6.4",
-    "org.scalaz" %% "scalaz-core" % "7.2.30",
+    "com.typesafe.akka" %% "akka-actor" % "2.6.10",
+    "org.scalaz" %% "scalaz-core" % "7.3.2",
     "com.github.scopt" %% "scopt" % "3.7.1",
-    "org.typelevel" %% "cats-effect" % "2.1.2",
+    "org.typelevel" %% "cats-effect" % "2.2.0",
     //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
-    "org.parboiled" %% "parboiled" % "2.2.0",
+    "org.parboiled" %% "parboiled" % "2.2.1",
     "org.clapper" %% "grizzled-slf4j" % "1.3.4",
-    "org.apache.ant" % "ant-junit" % "1.10.7",   // used for formatting junit style report
+    "org.apache.ant" % "ant-junit" % "1.10.9",   // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-7",
     "org.exist-db" % "exist-core" % existV,
-    "org.xmlunit" %	"xmlunit-core" % "2.6.4",
+    "org.xmlunit" % "xmlunit-core" % "2.7.0",
 
-    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.13.1" % "runtime"
+    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.13.3" % "runtime"
   )
 }
 

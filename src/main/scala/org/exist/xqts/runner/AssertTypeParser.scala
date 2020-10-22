@@ -34,7 +34,8 @@ object AssertTypeParser {
   sealed trait AstNode
 
   object TypeNode {
-    type ExistTypeType = Int  // eXist-db's xdm type
+    type ExistCardinalityType = org.exist.xquery.Cardinality  // eXist-db's Cardinality type
+    type ExistTypeType = Int  // eXist-db's XDM type
     sealed trait ExistTypeDescription {
       def hasParameterTypes : Boolean
     }

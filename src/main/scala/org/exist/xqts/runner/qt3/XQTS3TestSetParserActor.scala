@@ -390,7 +390,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           captureText = true
 
         case END_ELEMENT if (currentTestCase.nonEmpty && asyncReader.getLocalName == ELEM_TEST) =>
-          currentTestCase = currentTestCase.map(testCase => testCase.copy(test = currentText.flatMap(text => Some(text.left)).orElse(currentFile.map(_.right))))
+          currentTestCase = currentTestCase.map(testCase => testCase.copy(test = currentText.flatMap(text => Some(text.left[Path])).orElse(currentFile.map(_.right[String]))))
           currentFile = None
           currentText = None
           captureText = false
@@ -510,8 +510,8 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
         case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_XML) =>
           currentText
-              .flatMap(text => Some(text.left))
-              .orElse(currentFile.map(_.right))
+              .flatMap(text => Some(text.left[Path]))
+              .orElse(currentFile.map(_.right[String]))
               .map(AssertXml(_, currentIgnorePrefixes.getOrElse(false))) match {
             case Some(assertXml) =>
               currentResult = currentResult.map(addAssertion(_)(assertXml))
@@ -524,8 +524,8 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
         case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_SERIALIZATION_MATCHES) =>
           currentText
-            .flatMap(text => Some(text.left))
-            .orElse(currentFile.map(_.right))
+            .flatMap(text => Some(text.left[Path]))
+            .orElse(currentFile.map(_.right[String]))
             .map(SerializationMatches(_, currentFlags)) match {
             case Some(serializationMatched) =>
               currentResult = currentResult.map(addAssertion(_)(serializationMatched))

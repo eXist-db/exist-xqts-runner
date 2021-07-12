@@ -97,7 +97,7 @@ assemblyMergeStrategy in assembly := {
 // make the assembly executable with basic shell scripts
 import sbtassembly.AssemblyPlugin.defaultUniversalScript
 
-assemblyOption in assembly := (assemblyOption in assembly).value.copy(prependShellScript = Some(defaultUniversalScript(shebang = false)))
+assemblyPrependShellScript := Some(defaultUniversalScript(shebang = false))
 
 
 // Add assembly to publish step

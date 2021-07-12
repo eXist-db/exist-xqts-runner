@@ -88,7 +88,7 @@ packageOptions in (Compile, packageBin) +=  {
 // assembly merge strategy for duplicate files from dependencies
 assemblyMergeStrategy in assembly := {
   case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql")       => MergeStrategy.first
-  case x if x.equals("module-info.class") || x.endsWith("/module-info.class")    => MergeStrategy.discard
+  case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class")    => MergeStrategy.discard
   case x =>
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)

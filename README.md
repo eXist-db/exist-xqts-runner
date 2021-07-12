@@ -1,6 +1,6 @@
 # W3C XQTS driver for eXist-db
 
-[![Build Status](https://travis-ci.com/eXist-db/exist-xqts-runner.png?branch=master)](https://travis-ci.com/eXist-db/exist-xqts-runner)
+[![CI](https://github.com/eXist-db/exist-xqts-runner/workflows/CI/badge.svg)](https://github.com/eXist-db/exist-xqts-runner/actions?query=workflow%3ACI)
 [![Scala 2.13](https://img.shields.io/badge/scala-2.13-red.svg)](http://scala-lang.org)
 [![License](https://img.shields.io/badge/license-LGPL%203.0-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0.html)
 
@@ -12,7 +12,7 @@ To build from source you will need the following pre-requisites:
 
 1. Git Command Line tools.
 2. Java 8+
-3. SBT (Simple Build Tool) 1.1.2+
+3. SBT (Simple Build Tool) 1.5.5+
 
 In the following steps, we assume that all of the above tools are available on your system path.
 

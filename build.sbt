@@ -56,7 +56,7 @@ resolvers +=
   "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
 
 // Fancy up the Assembly JAR
-packageOptions in (Compile, packageBin) +=  {
+Compile / packageBin / packageOptions +=  {
   import java.text.SimpleDateFormat
   import java.util.Calendar
   import java.util.jar.Manifest
@@ -86,11 +86,11 @@ packageOptions in (Compile, packageBin) +=  {
 }
 
 // assembly merge strategy for duplicate files from dependencies
-assemblyMergeStrategy in assembly := {
+assembly / assemblyMergeStrategy := {
   case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql")       => MergeStrategy.first
   case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class")    => MergeStrategy.discard
   case x =>
-    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)
 }
 
@@ -101,12 +101,12 @@ assemblyPrependShellScript := Some(defaultUniversalScript(shebang = false))
 
 
 // Add assembly to publish step
-artifact in (Compile, assembly) := {
-  val art = (artifact in (Compile, assembly)).value
+Compile / assembly / artifact := {
+  val art = (Compile / assembly / artifact).value
   art.withClassifier(Some("assembly"))
 }
 
-addArtifact(artifact in (Compile, assembly), assembly)
+addArtifact(Compile / assembly / artifact, assembly)
 
 // Publish to Maven Repo
 
@@ -122,7 +122,7 @@ publishTo := {
     Some("releases"  at nexus + "repository/exist-db/")
 }
 
-publishArtifact in Test := false
+Test / publishArtifact := false
 
 pomExtra := (
   <developers>

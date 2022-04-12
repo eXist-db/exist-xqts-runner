@@ -2,7 +2,7 @@ name := "exist-xqts-runner"
 
 organization := "org.exist-db"
 
-version := "1.0.0"
+version := "1.1.0-SNAPSHOT"
 
 scalaVersion := "2.13.3"
 

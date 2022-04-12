@@ -14,7 +14,7 @@ homepage := Some(url("https://github.com/exist-db/exist-xqts-runner"))
 
 
 libraryDependencies ++= {
-  val existV = "5.3.1"
+  val existV = "6.0.1"
 
   Seq(
     "com.typesafe.akka" %% "akka-actor" % "2.6.19",

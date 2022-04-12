@@ -22,8 +22,9 @@ headerLicense := Some(HeaderLicense.LGPLv3(startYear.value.map(_.toString).get, 
 
 scmInfo := Some(ScmInfo(
   url(homepage.value.map(_.toString).get),
-  "scm:git@github.com:exist-db/exist-xqts-runner.git")
-)
+  "scm:git@github.com:exist-db/exist-xqts-runner.git",
+  "scm:git@github.com:exist-db/exist-xqts-runner.git"
+))
 
 developers := List(
   Developer(
@@ -144,19 +145,3 @@ publishTo := {
 }
 
 Test / publishArtifact := false
-
-pomExtra := (
-  <developer>
-    <id>adamretter</id>
-    <name>Adam Retter</name>
-    <email>adam@evolvedbinary.com</email>
-    <url>https://www.adamretter.org.uk</url>
-    <organization>Evolved Binary</organization>
-    <organizationUrl>https://www.evolvedbinary.com</organizationUrl>
-  </developer>
-  <scm>
-    <url>git@github.com:exist-db/exist-xqts-runner.git</url>
-    <connection>scm:git:git@github.com:exist-db/exist-xqts-runner.git</connection>
-    <developerConnection>scm:git:git@github.com:exist-db/exist-xqts-runner.git</developerConnection>
-  </scm>
-)

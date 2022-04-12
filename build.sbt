@@ -35,6 +35,8 @@ developers := List(
   )
 )
 
+versionScheme := Some("semver-spec")
+
 libraryDependencies ++= {
   val existV = "6.0.1"
 

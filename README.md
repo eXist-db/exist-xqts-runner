@@ -3,6 +3,7 @@
 [![CI](https://github.com/eXist-db/exist-xqts-runner/workflows/CI/badge.svg)](https://github.com/eXist-db/exist-xqts-runner/actions?query=workflow%3ACI)
 [![Scala 2.13](https://img.shields.io/badge/scala-2.13-red.svg)](http://scala-lang.org)
 [![License](https://img.shields.io/badge/license-LGPL%203.0-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0.html)
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/org.exist-db/exist-xqts-runner_2.13/badge.svg)](https://search.maven.org/search?q=g:org.exist-db)
 
 This application executes a W3C XQTS against an embedded eXist-db server.
 
@@ -56,6 +57,12 @@ Given the standalone application, you can execute it by running either:
 
 2. or, even by just executing the `exist-xqts-runner-assembly-1.0.0.jar` file directly, as we compile an executable header into the Jar file. e.g. (on Linux/Mac): `./exist-xqts-runner-assembly-1.0.0.jar`.
 
+
+## Publishing to Maven Central / Evolved Binary Snapshots
+```bash
+sbt clean compile package assembly
+sbt publishSigned
+```
 
 ## XQTS Results
 The results of executing the XQTS will be formatted as JUnit test output.

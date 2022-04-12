@@ -6,12 +6,33 @@ version := "1.0.0"
 
 scalaVersion := "2.13.3"
 
-licenses := Seq("LGPL-3.0" -> url("http://opensource.org/licenses/lgpl-3.0"))
-
-headerLicense := Some(HeaderLicense.LGPLv3("2018", "The eXist Project"))
+description := "An XQTS driver for eXist-db"
 
 homepage := Some(url("https://github.com/exist-db/exist-xqts-runner"))
 
+startYear := Some(2018)
+
+organizationName := "The eXist Project"
+
+organizationHomepage := Some(url("https://www.exist-db.org"))
+
+licenses := Seq("LGPL-3.0" -> url("http://opensource.org/licenses/lgpl-3.0"))
+
+headerLicense := Some(HeaderLicense.LGPLv3(startYear.value.map(_.toString).get, organizationName.value))
+
+scmInfo := Some(ScmInfo(
+  url(homepage.value.map(_.toString).get),
+  "scm:git@github.com:exist-db/exist-xqts-runner.git")
+)
+
+developers := List(
+  Developer(
+    id    = "adamretter",
+    name  = "Adam Retter",
+    email = "adam@evolvedbinary.com",
+    url   = url("https://www.evolvedbinary.com")
+  )
+)
 
 libraryDependencies ++= {
   val existV = "6.0.1"
@@ -125,14 +146,17 @@ publishTo := {
 Test / publishArtifact := false
 
 pomExtra := (
-  <developers>
-    <developer>
-      <id>adamretter</id>
-      <name>Adam Retter</name>
-      <url>http://www.adamretter.org.uk</url>
-    </developer>
-  </developers>
-    <scm>
-      <url>git@github.com:exist-db/exist-xqts-runner.git</url>
-      <connection>scm:git:git@github.com:exist-db/exist-xqts-runner.git</connection>
-    </scm>)
+  <developer>
+    <id>adamretter</id>
+    <name>Adam Retter</name>
+    <email>adam@evolvedbinary.com</email>
+    <url>https://www.adamretter.org.uk</url>
+    <organization>Evolved Binary</organization>
+    <organizationUrl>https://www.evolvedbinary.com</organizationUrl>
+  </developer>
+  <scm>
+    <url>git@github.com:exist-db/exist-xqts-runner.git</url>
+    <connection>scm:git:git@github.com:exist-db/exist-xqts-runner.git</connection>
+    <developerConnection>scm:git:git@github.com:exist-db/exist-xqts-runner.git</developerConnection>
+  </scm>
+)

@@ -137,11 +137,10 @@ credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
 
 publishTo := {
   val eb = "https://repo.evolvedbinary.com/"
-  val nexus = "https://repo.evolvedbinary.com/"
   if (isSnapshot.value)
     Some("snapshots" at eb + "repository/exist-db-snapshots/")
   else
-    Some("releases" at nexus + "repository/exist-db-snapshots/")
+    Some(Opts.resolver.sonatypeStaging)
 }
 
 Test / publishArtifact := false

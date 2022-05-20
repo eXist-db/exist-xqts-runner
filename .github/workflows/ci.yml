@@ -18,9 +18,19 @@ jobs:
       uses: olafurpg/setup-scala@v12
       with:
         java-version: "adopt@1.${{ matrix.jdk }}"
+    - name: Coursier cache
+        uses: coursier/cache-action@v6
     - name: Build
       shell: bash
       run: sbt -v -Dfile.encoding=UTF-8 assembly
     - name: Test
       shell: bash
       run: target/scala-2.13/exist-xqts-runner-assembly-1.1.0-SNAPSHOT.jar --xqts-version HEAD --test-set fn-current-date
+    - name: Cleanup before cache
+        shell: bash
+        run: |
+          rm -rf "$HOME/.ivy2/local" || true
+          find $HOME/Library/Caches/Coursier/v1        -name "ivydata-*.properties" -delete || true
+          find $HOME/.ivy2/cache                       -name "ivydata-*.properties" -delete || true
+          find $HOME/.cache/coursier/v1                -name "ivydata-*.properties" -delete || true
+          find $HOME/.sbt                              -name "*.lock"               -delete || true

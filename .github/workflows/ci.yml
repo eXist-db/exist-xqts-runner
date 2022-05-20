@@ -4,7 +4,7 @@ on:
   push:
 jobs:
   assemble:
-    name: Build Assembly
+    name: Build and Test Assembly
     strategy:
       fail-fast: false
       matrix:
@@ -21,3 +21,6 @@ jobs:
     - name: Build
       shell: bash
       run: sbt -v -Dfile.encoding=UTF-8 assembly
+    - name: Test
+      shell: bash
+      run: target/scala-2.13/exist-xqts-runner-assembly-1.1.0-SNAPSHOT.jar --xqts-version HEAD --test-set fn-current-date

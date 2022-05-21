@@ -4,7 +4,7 @@ organization := "org.exist-db"
 
 version := "1.1.0-SNAPSHOT"
 
-scalaVersion := "2.13.3"
+scalaVersion := "2.13.8"
 
 description := "An XQTS driver for eXist-db"
 

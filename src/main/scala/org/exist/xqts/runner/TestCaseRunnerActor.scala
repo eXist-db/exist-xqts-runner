@@ -27,6 +27,7 @@ import scalaz.{-\/, \/, \/-}
 import scalaz.syntax.either._
 import TestCaseRunnerActor._
 import IgnorableWrapper._
+import cats.effect.unsafe.IORuntime
 import org.exist.xqts.runner.ExistServer._
 import org.exist.xquery.value._
 
@@ -210,6 +211,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
           throw e
       }
     })
+
+    implicit val runtime = IORuntime.global
 
     // execute test case IO
     testCaseIO.unsafeRunSync()
@@ -1305,6 +1308,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the content of the file as a string, or an exception.
     */
   private def readTextFile(path: Path, charset: Charset = UTF_8) : IOException \/ String = {
+    implicit val runtime = IORuntime.global
     IO {
       \/.fromTryCatchThrowable[String, IOException] {
         new String(Files.readAllBytes(path), charset)

@@ -17,10 +17,11 @@
 
 package org.exist.xqts.runner
 
+import cats.effect.unsafe.IORuntime
+
 import java.io.InputStream
 import java.nio.file.{Files, Path}
 import java.security.MessageDigest
-
 import scalaz.\/
 import scalaz.syntax.std.either._
 import cats.effect.{IO, Resource}
@@ -75,6 +76,8 @@ object Checksum {
         }
       }
     }
+
+    implicit val runtime = IORuntime.global
 
     checksumIO
       .attempt

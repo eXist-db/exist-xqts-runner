@@ -22,12 +22,13 @@ import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
 import java.nio.file.{Files, Path}
 import java.util.regex.Pattern
-
 import akka.actor.ActorRef
 import cats.effect.IO
+import cats.effect.unsafe.IORuntime
 import com.fasterxml.aalto.AsyncXMLStreamReader.EVENT_INCOMPLETE
 import com.fasterxml.aalto.{AsyncByteBufferFeeder, AsyncXMLStreamReader}
 import grizzled.slf4j.Logger
+
 import javax.xml.stream.XMLStreamConstants.{CHARACTERS, END_DOCUMENT, END_ELEMENT, START_ELEMENT}
 import net.sf.saxon.value.AnyURIValue
 import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
@@ -255,6 +256,8 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
         )
       )
     )
+
+    implicit val runtime = IORuntime.global
 
     // TODO(AR) handleErrorWith for XQTSParseException and others?
     parseIO.unsafeRunSync()

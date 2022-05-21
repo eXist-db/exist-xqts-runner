@@ -19,9 +19,9 @@ package org.exist.xqts.runner
 
 import java.io.IOException
 import java.nio.file.{Files, Path}
-
 import akka.actor.Actor
 import cats.effect.IO
+import cats.effect.unsafe.IORuntime
 import org.exist.xqts.runner.ReadFileActor.{FileContent, FileReadError, ReadFile}
 import scalaz.{-\/, \/, \/-}
 
@@ -46,6 +46,9 @@ class ReadFileActor extends Actor {
     val fileIO = IO {
       \/.fromTryCatchThrowable[Array[Byte], IOException](Files.readAllBytes(path))
     }
+
+    implicit val runtime = IORuntime.global
+
     fileIO.unsafeRunSync()
   }
 }

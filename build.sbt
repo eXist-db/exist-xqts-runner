@@ -48,7 +48,7 @@ libraryDependencies ++= {
     "com.typesafe.akka" %% "akka-actor" % "2.6.19",
     "org.scalaz" %% "scalaz-core" % "7.3.6",
     "com.github.scopt" %% "scopt" % "4.0.1",
-    "org.typelevel" %% "cats-effect" % "2.5.4",
+    "org.typelevel" %% "cats-effect" % "3.3.12",
     //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
     "org.parboiled" %% "parboiled" % "2.4.0",

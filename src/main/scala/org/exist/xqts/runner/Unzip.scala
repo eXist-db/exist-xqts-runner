@@ -17,10 +17,11 @@
 
 package org.exist.xqts.runner
 
+import cats.effect.unsafe.IORuntime
+
 import java.io.{IOException, InputStream, OutputStream}
 import java.nio.file.{Files, Path}
 import java.util.zip.{ZipEntry, ZipInputStream}
-
 import cats.effect.{IO, Resource}
 
 import scala.annotation.tailrec
@@ -96,6 +97,7 @@ object Unzip {
             }
         }
 
+    implicit val runtime = IORuntime.global
 
     unzipIO
       .unsafeRunSync()

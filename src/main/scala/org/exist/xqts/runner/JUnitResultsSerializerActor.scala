@@ -17,9 +17,10 @@
 
 package org.exist.xqts.runner
 
+import cats.effect.unsafe.IORuntime
+
 import java.io.{BufferedOutputStream, OutputStream}
 import java.nio.file.{Files, Path}
-
 import cats.effect.{IO, Resource}
 import grizzled.slf4j.Logger
 import junit.framework.{AssertionFailedError, Test => JUTest, TestResult => JUTestResult}
@@ -47,14 +48,16 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
 
     case testSetResults : TestSetResults =>
       logger.info(s"Serializing results for TestSet: ${testSetResults.testSetRef.name} (${testSetResults.testSetRef.file})...")
-      dataDir
+      val serializeIo: IO[Option[Throwable]] = dataDir
         .flatMap(dataFile(_, testSetResults.testSetRef.name))
         .flatMap(dataFileOutput(_)
           .use(formatJunitTestSet(testSetResults, _)))
         .map(_ => None)
         .handleErrorWith(t => IO.pure { Some(t) })
-        .unsafeRunSync()
-      match {
+
+      implicit val runtime = IORuntime.global
+
+      serializeIo.unsafeRunSync() match {
         case None =>
           logger.info(s"Serialized results for TestSet: ${testSetResults.testSetRef.name} OK.")
         case Some(t) =>
@@ -67,13 +70,15 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
     case FinalizeSerialization =>
       val start = System.currentTimeMillis()
       logger.info(s"Aggregating results report...")
-      dataDir
+      val aggregateIO: IO[Option[Throwable]] = dataDir
         .flatMap(dd => htmlDir.map(hd => (dd, hd)))
         .flatMap { case (dataDir, htmlDir) => aggregateJUnitReports(dataDir, htmlDir) }
         .map(_ => None)
         .handleErrorWith(t => IO.pure { Some(t) })
-        .unsafeRunSync()
-      match {
+
+      implicit val runtime = IORuntime.global
+
+      aggregateIO.unsafeRunSync() match {
         case None =>
           logger.info(s"Aggregated results report OK (${System.currentTimeMillis() - start} ms).")
 

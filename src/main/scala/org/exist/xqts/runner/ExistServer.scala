@@ -20,7 +20,6 @@ package org.exist.xqts.runner
 import java.io._
 import java.nio.charset.Charset
 import java.util.Properties
-
 import org.exist.source.{Source, StringSource}
 import org.exist.storage.DBBroker
 import org.exist.test.ExistEmbeddedServer
@@ -32,8 +31,10 @@ import scalaz.\/
 import scalaz.syntax.either._
 import scalaz.syntax.std.either._
 import ExistServer._
+import cats.effect.unsafe.IORuntime
 import cats.effect.{IO, Resource}
 import com.evolvedbinary.j8fu.function.{QuadFunctionE, TriFunctionE}
+
 import javax.xml.namespace.QName
 import javax.xml.parsers.SAXParserFactory
 import javax.xml.transform.OutputKeys
@@ -321,6 +322,8 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
     }) // 0 because an error here was caused by compilation, so  was no execution
 
     // run compilation and execution
+    implicit val runtime = IORuntime.global
+
     val queryResult = executeQueryIO.unsafeRunSync()
     queryResult
   }
@@ -377,6 +380,8 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
         .replace("\r", "").replace("\n", ", ")  // further improves the output for expected value messages
     })
 
+    implicit val runtime = IORuntime.global
+
     serializationIO.unsafeRunSync()
   }
 
@@ -402,6 +407,8 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
 
       saxAdapter.getDocument
     })
+
+    implicit val runtime = IORuntime.global
 
     parseIO
       .attempt

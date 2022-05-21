@@ -101,7 +101,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       if (unchangedStatsTicks > 5) {
         val incompleteTestSets = testCases
           .map { case (testSetRef, testCaseNames) => (testSetRef, testCaseNames.removedAll(completedTestCases.get(testSetRef).map(_.keySet).getOrElse(Set.empty)))}
-          .filter {case (testSetRef, testCaseNames) => testCaseNames.nonEmpty}
+          .filter {case (_, testCaseNames) => testCaseNames.nonEmpty}
 
         logger.debug(s"incompleteTestSets=${incompleteTestSets.map { case (testSetRef, testCaseNames) => (testSetRef.name, testCaseNames)}}")
 
@@ -110,7 +110,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       }
       previousStats = stats
 
-    case ParseComplete(xqtsVersion, xqtsPath) =>
+    case ParseComplete(_, _) =>
       // there is nothing we need to do here
 
     case ParsingTestSet(testSetRef) =>

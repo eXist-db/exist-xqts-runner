@@ -18,7 +18,7 @@
 package org.exist.xqts.runner
 
 import java.io.{IOException, InputStream, OutputStream}
-import java.nio.file.{Files, Path, StandardOpenOption}
+import java.nio.file.{Files, Path}
 import java.util.zip.{ZipEntry, ZipInputStream}
 
 import cats.effect.{IO, Resource}
@@ -41,9 +41,9 @@ object Unzip {
     * @throws IOException if an error occurs whilst unzipping the {@code src} file.
     */
   @throws[IOException]
-  def unzip(src: Path, dir: Path) {
+  def unzip(src: Path, dir: Path): Unit = {
 
-    def writeZipEntry(zipInputStream: ZipInputStream, zipEntry: ZipEntry) {
+    def writeZipEntry(zipInputStream: ZipInputStream, zipEntry: ZipEntry): Unit = {
       val destFile = dir.resolve(zipEntry.getName)
       Files.createDirectories(destFile.getParent) // ensure dir path exists
 
@@ -58,7 +58,7 @@ object Unzip {
     }
 
     @tailrec
-    def copy(buffer: Array[Byte])(is: InputStream, os: OutputStream) {
+    def copy(buffer: Array[Byte])(is: InputStream, os: OutputStream): Unit = {
       val read = is.read(buffer)
       if (read <= 0) {
         return
@@ -70,7 +70,7 @@ object Unzip {
     }
 
     @tailrec
-    def processEntries[T](zis: ZipInputStream)(entryFn: ZipEntry => Unit) {
+    def processEntries[T](zis: ZipInputStream)(entryFn: ZipEntry => Unit): Unit = {
       val zipEntry = zis.getNextEntry
       if (zipEntry == null) {
         return
@@ -83,7 +83,6 @@ object Unzip {
       processEntries(zis)(entryFn)
     }
 
-    import cats.implicits._
 
     val unzipIO : IO[Unit] =
       Resource

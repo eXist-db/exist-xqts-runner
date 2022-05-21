@@ -26,7 +26,7 @@ import java.util.regex.Pattern
 import akka.actor.ActorRef
 import cats.effect.IO
 import com.fasterxml.aalto.AsyncXMLStreamReader.EVENT_INCOMPLETE
-import com.fasterxml.aalto.{AsyncByteBufferFeeder, AsyncInputFeeder, AsyncXMLStreamReader}
+import com.fasterxml.aalto.{AsyncByteBufferFeeder, AsyncXMLStreamReader}
 import grizzled.slf4j.Logger
 import javax.xml.stream.XMLStreamConstants.{CHARACTERS, END_DOCUMENT, END_ELEMENT, START_ELEMENT}
 import net.sf.saxon.value.AnyURIValue
@@ -117,7 +117,7 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
       */
     @tailrec
     @throws[XQTSParseException]
-    def parseAll(event: Int, asyncReader: AsyncXMLStreamReader[AsyncByteBufferFeeder], xqtsPath: Path, channel: SeekableByteChannel, buf: ByteBuffer) {
+    def parseAll(event: Int, asyncReader: AsyncXMLStreamReader[AsyncByteBufferFeeder], xqtsPath: Path, channel: SeekableByteChannel, buf: ByteBuffer): Unit = {
       event match {
         case END_DOCUMENT =>
           return // exit parse

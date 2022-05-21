@@ -132,17 +132,17 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
       junitResultFormatter.startTest(test)
 
       result match {
-        case PassResult(_, _, compilationTime, executionTime) =>
+        case PassResult(_, _, _, _) =>
           junitResultFormatter.endTest(test)
 
-        case AssumptionFailedResult(_, _, compilationTime, executionTime, reason) =>
+        case AssumptionFailedResult(_, _, _, _, reason) =>
           junitResultFormatter.formatSkip(test, reason)
 
-        case FailureResult(_, _, compilationTime, executionTime, reason) =>
+        case FailureResult(_, _, _, _, reason) =>
           junitResultFormatter.addFailure(test, new AssertionFailedError(reason))
           junitResultFormatter.endTest(test)
 
-        case ErrorResult(_, _, compilationTime, executionTime, throwable) =>
+        case ErrorResult(_, _, _, _, throwable) =>
           junitResultFormatter.addError(test, throwable)
           junitResultFormatter.endTest(test)
       }
@@ -191,14 +191,14 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
 
     def getExecutionTime : Long = testResult.executionTime
 
-    override def run(juTestResult: JUTestResult)  {}
+    override def run(juTestResult: JUTestResult): Unit =  {}
   }
 
   class XQTSXMLJUnitResultFormatter extends XMLJUnitResultFormatter {
     private val rootElementField = classOf[XMLJUnitResultFormatter].getDeclaredField("rootElement")
     rootElementField.setAccessible(true)
 
-    override def endTest(test: JUTest) {
+    override def endTest(test: JUTest): Unit = {
       super.endTest(test)
       if (test.isInstanceOf[XQTSJUnitTest]) {
         val xqtsJunitTest = test.asInstanceOf[XQTSJUnitTest]

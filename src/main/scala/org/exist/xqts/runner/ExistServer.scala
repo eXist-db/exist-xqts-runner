@@ -18,7 +18,6 @@
 package org.exist.xqts.runner
 
 import java.io._
-import java.net.UnknownHostException
 import java.nio.charset.Charset
 import java.util.Properties
 
@@ -29,7 +28,7 @@ import org.exist.util.serializer.XQuerySerializer
 import org.exist.xquery.{CompiledXQuery, Function, XPathException, XQueryContext}
 
 import scala.util.{Failure, Success, Try}
-import scalaz.{-\/, \/, \/-}
+import scalaz.\/
 import scalaz.syntax.either._
 import scalaz.syntax.std.either._
 import ExistServer._
@@ -110,7 +109,7 @@ class ExistServer {
   /**
     * Shutdown the eXist-db server.
     */
-  def stopServer() {
+  def stopServer(): Unit = {
     existServer.stopDb()
   }
 }
@@ -154,7 +153,7 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
       *
       * @param context The XQuery Context to configure
       */
-    def setupContext(context: XQueryContext) {
+    def setupContext(context: XQueryContext): Unit = {
 
       // Turn on/off XPath 1.0 backwards compatibility.
       context.setBackwardsCompatibility(xpath1Compatibility)
@@ -296,7 +295,7 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
 
     // execute step
     val executeQueryIO: IO[ExistServerException \/ Result] = compiledQueryIO.use {
-      case (compiled, context, compilationTime) =>
+      case (compiled, _, compilationTime) =>
         IO {
           System.currentTimeMillis()
         }

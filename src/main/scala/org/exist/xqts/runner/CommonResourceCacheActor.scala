@@ -18,7 +18,7 @@
 package org.exist.xqts.runner
 
 import java.io.IOException
-import java.nio.file.{Files, Path}
+import java.nio.file.Path
 
 import akka.actor.{Actor, ActorRef}
 import grizzled.slf4j.Logger
@@ -121,7 +121,7 @@ object CommonResourceCacheActor {
       keysForNBytes(cache.tail, bytesToClaim - cacheEntry._2._2.length) :+ cacheEntry._1
     }
     // sort the cache entries by the least-recently-used
-    val lru = cache.toList.sortWith(_._2._1 < _._2._1)
+    cache.toList.sortWith(_._2._1 < _._2._1)
     // find the first n bytes worth of keys
     val keysToEvict = keysForNBytes(cache, bytes)
     // remove the stale entries

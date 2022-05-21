@@ -6,6 +6,10 @@ version := "1.1.0-SNAPSHOT"
 
 scalaVersion := "2.13.8"
 
+semanticdbEnabled := true
+
+semanticdbVersion := scalafixSemanticdb.revision
+
 description := "An XQTS driver for eXist-db"
 
 homepage := Some(url("https://github.com/exist-db/exist-xqts-runner"))
@@ -78,6 +82,8 @@ resolvers +=
 
 resolvers +=
   "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
+
+scalacOptions += "-Ywarn-unused"
 
 // Fancy up the Assembly JAR
 Compile / packageBin / packageOptions +=  {

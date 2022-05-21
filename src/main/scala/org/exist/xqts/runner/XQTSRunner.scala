@@ -261,7 +261,7 @@ private class XQTSRunner {
     *
     * @param cmdConfig the command line arguments
     */
-  private def run(cmdConfig: CmdConfig) {
+  private def run(cmdConfig: CmdConfig): Unit = {
     logger.info(s"eXist-db XQTS Runner starting for: ${XQTSVersion.label(cmdConfig.xqtsVersion)}")
 
     // 1) prepare the actor system

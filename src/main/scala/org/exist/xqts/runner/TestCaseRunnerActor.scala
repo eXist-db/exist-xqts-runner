@@ -70,7 +70,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
     case rtc@RunTestCase(testSetRef, testCase, manager) =>
       testCase.test match {
-        case Some(-\/(queryStr)) =>
+        case Some(-\/(_)) =>
           testCase.environment match {
             //TODO(AR) on the line below, and the line below that, we use `.filter(_.file.nonEmpty)` to skip schemas here which don't have a `file` attribute... this is temporary! Ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
             case Some(environment) if (environment.schemas.filter(_.file.nonEmpty).nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
@@ -596,9 +596,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
               Some(error.left)
             case failure: FailureResult =>
               Some(failure.right)
-            case pass: PassResult =>
+            case _: PassResult =>
               None
-            case assumptionFailed: AssumptionFailedResult =>
+            case _: AssumptionFailedResult =>
               throw new IllegalStateException("Assumption should have already been evaluated")
           }
         }
@@ -642,7 +642,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
               case error: ErrorResult =>
                 errors.leftMap(_ :+ -\/(error))
 
-              case assumptionFailed: AssumptionFailedResult =>
+              case _: AssumptionFailedResult =>
                 throw new IllegalStateException("Assumption should have already been evaluated")
             }
         }

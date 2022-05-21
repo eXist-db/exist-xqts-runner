@@ -134,7 +134,7 @@ object XQTSRunner {
   private implicit val xmlVersionRead: scopt.Read[XmlVersion] = scopt.Read.reads(XmlVersion.withName(_))
   private implicit val xsdVersionRead: scopt.Read[XsdVersion] = scopt.Read.reads(XsdVersion.withName(_))
   private def fileExists(f: Path) : Either[String, Unit] = if(Files.exists(f)) { Right(()) } else Left(s"${f.toAbsolutePath} does not exist")
-  private def isDirOrNotExists(f: Path) : Either[String, Unit] = if(Files.isDirectory(f) || !Files.exists(f)) { Right() } else { Left(s"${f.toAbsolutePath} is not a writable directory")}
+  private def isDirOrNotExists(f: Path) : Either[String, Unit] = if(Files.isDirectory(f) || !Files.exists(f)) { Right(()) } else { Left(s"${f.toAbsolutePath} is not a writable directory")}
 
 
   /**
@@ -254,7 +254,7 @@ object XQTSRunner {
 private class XQTSRunner {
 
   private val logger = Logger(classOf[XQTSRunner])
-  private var existServer: Option[ExistServer] = None
+  @scala.annotation.unused private var existServer: Option[ExistServer] = None
 
   /**
     * Run's an XQTS against eXist-db.

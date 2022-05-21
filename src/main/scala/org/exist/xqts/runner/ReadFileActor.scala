@@ -36,9 +36,9 @@ class ReadFileActor extends Actor {
     case ReadFile(path) =>
       readFile(path) match {
         case -\/(ioe) =>
-          sender ! FileReadError(path, ioe)
+          sender() ! FileReadError(path, ioe)
         case \/-(content) =>
-          sender ! FileContent(path, content)
+          sender() ! FileContent(path, content)
       }
   }
 

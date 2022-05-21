@@ -20,8 +20,8 @@ package org.exist.xqts.runner
 import java.net.URI
 import java.nio.file.Path
 import java.util.regex.Pattern
-
 import akka.actor.Actor
+
 import javax.xml.namespace.QName
 import net.sf.saxon.value.AnyURIValue
 import org.exist.xqts.runner.XQTSParserActor.DependencyType.DependencyType
@@ -30,6 +30,8 @@ import org.exist.xqts.runner.XQTSParserActor.Spec.Spec
 import org.exist.xqts.runner.XQTSParserActor.XmlVersion.XmlVersion
 import org.exist.xqts.runner.XQTSParserActor.XsdVersion.XsdVersion
 import scalaz.\/
+
+import scala.annotation.unused
 
 /**
   * An initial Actor that parses
@@ -116,9 +118,11 @@ object XQTSParserActor {
     * Enumeration of XQTS dependency types.
     */
   object DependencyType extends Enumeration {
-    protected case class Val(xqtsName: String) extends super.Val
-    implicit def valueToDependencyTypeVal(x: Value): Val = x.asInstanceOf[Val]
-    type DependencyType = Val
+    import scala.language.implicitConversions
+
+    protected case class DependencyTypeVal(xqtsName: String) extends super.Val
+    implicit def valueToDependencyTypeVal(x: Value): DependencyTypeVal = x.asInstanceOf[DependencyTypeVal]
+    type DependencyType = DependencyTypeVal
 
     @throws[IllegalArgumentException]
     def fromXqtsName(xqtsName: String) : DependencyType = {
@@ -128,20 +132,20 @@ object XQTSParserActor {
       }
     }
 
-    val Calendar = Val("calendar")
-    val CollectionStability = Val("collection-stability")
-    val DefaultLanguage = Val("default-language")
-    val DirectoryAsCollectionUri = Val("directory-as-collection-uri")
-    val Feature = Val("feature")
-    val FormatIntegerSequence = Val("format-integer-sequence")
-    val Language = Val("language")
-    val Limits = Val("limits")
-    val Spec = Val("spec")
-    val SchemaAware = Val("schemaAware")
-    val UnicodeVersion = Val("unicode-version")
-    val UnicodeNormalizationForm = Val("unicode-normalization-form")
-    val XmlVersion = Val("xml-version")
-    val XsdVersion = Val("xsd-version")
+    val Calendar = DependencyTypeVal("calendar")
+    val CollectionStability = DependencyTypeVal("collection-stability")
+    val DefaultLanguage = DependencyTypeVal("default-language")
+    val DirectoryAsCollectionUri = DependencyTypeVal("directory-as-collection-uri")
+    val Feature = DependencyTypeVal("feature")
+    val FormatIntegerSequence = DependencyTypeVal("format-integer-sequence")
+    val Language = DependencyTypeVal("language")
+    val Limits = DependencyTypeVal("limits")
+    val Spec = DependencyTypeVal("spec")
+    val SchemaAware = DependencyTypeVal("schemaAware")
+    val UnicodeVersion = DependencyTypeVal("unicode-version")
+    val UnicodeNormalizationForm = DependencyTypeVal("unicode-normalization-form")
+    val XmlVersion = DependencyTypeVal("xml-version")
+    val XsdVersion = DependencyTypeVal("xsd-version")
   }
 
   /**
@@ -187,9 +191,11 @@ object XQTSParserActor {
     * Enumeration of XQTS dependency feature values.
     */
   object Feature extends Enumeration {
-    protected case class Val(xqtsName: String) extends super.Val
-    implicit def valueToFeatureVal(x: Value): Val = x.asInstanceOf[Val]
-    type Feature = Val
+    import scala.language.implicitConversions
+
+    protected case class FeatureVal(xqtsName: String) extends super.Val
+    implicit def valueToFeatureVal(x: Value): FeatureVal = x.asInstanceOf[FeatureVal]
+    type Feature = FeatureVal
 
     @throws[IllegalArgumentException]
     def fromXqtsName(xqtsName: String) : Feature = {
@@ -199,29 +205,31 @@ object XQTSParserActor {
       }
     }
 
-    val CollectionStability = Val("collection-stability")
-    val DirectoryAsCollectionUri = Val("directory-as-collection-uri")
-    val HigherOrderFunctions = Val("higherOrderFunctions")
-    val InfosetDTD = Val("infoset-dtd")
-    val ModuleImport = Val("moduleImport")
-    val NamespaceAxis = Val("namespace-axis")
-    val SchemaLocationHint = Val("schema-location-hint")
-    val SchemaAware = Val("schema-aware")
-    val SchemaImport = Val("schema-import")
-    val SchemaValidation = Val("schema-validation")
-    val Serialization = Val("serialization")
-    val StaticTyping = Val("staticTyping")
-    val TypedData = Val("typedData")
-    val XPath_1_0_Compatibility = Val("xpath-1.0-compatibility")
+    val CollectionStability = FeatureVal("collection-stability")
+    val DirectoryAsCollectionUri = FeatureVal("directory-as-collection-uri")
+    val HigherOrderFunctions = FeatureVal("higherOrderFunctions")
+    val InfosetDTD = FeatureVal("infoset-dtd")
+    val ModuleImport = FeatureVal("moduleImport")
+    val NamespaceAxis = FeatureVal("namespace-axis")
+    val SchemaLocationHint = FeatureVal("schema-location-hint")
+    val SchemaAware = FeatureVal("schema-aware")
+    val SchemaImport = FeatureVal("schema-import")
+    val SchemaValidation = FeatureVal("schema-validation")
+    val Serialization = FeatureVal("serialization")
+    val StaticTyping = FeatureVal("staticTyping")
+    val TypedData = FeatureVal("typedData")
+    val XPath_1_0_Compatibility = FeatureVal("xpath-1.0-compatibility")
   }
 
   /**
     * Enumeration of XQTS dependency xsd-version values.
     */
   object XsdVersion extends Enumeration {
-    protected case class Val(xqtsName: String) extends super.Val
-    implicit def valueToXsdVersionVal(x: Value): Val = x.asInstanceOf[Val]
-    type XsdVersion = Val
+    import scala.language.implicitConversions
+
+    protected case class XsdVersionVal(xqtsName: String) extends super.Val
+    implicit def valueToXsdVersionVal(x: Value): XsdVersionVal = x.asInstanceOf[XsdVersionVal]
+    type XsdVersion = XsdVersionVal
 
     @throws[IllegalArgumentException]
     def fromXqtsName(xqtsName: String): XsdVersion = {
@@ -231,17 +239,19 @@ object XQTSParserActor {
       }
     }
 
-    val XSD10 = Val("1.0")
-    val XSD11 = Val("1.1")
+    val XSD10 = XsdVersionVal("1.0")
+    val XSD11 = XsdVersionVal("1.1")
   }
 
   /**
     * Enumeration of XQTS dependency xml-version values.
     */
   object XmlVersion extends Enumeration {
-    protected case class Val(xqtsName: String) extends super.Val
-    implicit def valueToXmlVersionVal(x: Value): Val = x.asInstanceOf[Val]
-    type XmlVersion = Val
+    import scala.language.implicitConversions
+
+    protected case class XmlVersionVal(xqtsName: String) extends super.Val
+    implicit def valueToXmlVersionVal(x: Value): XmlVersionVal = x.asInstanceOf[XmlVersionVal]
+    type XmlVersion = XmlVersionVal
 
     @throws[IllegalArgumentException]
     def fromXqtsName(xqtsName: String): XmlVersion = {
@@ -251,10 +261,10 @@ object XQTSParserActor {
       }
     }
 
-    val XML10_4thOrEarlier = Val("1.0:4-")
-    val XML10_5thOrLater = Val("1.0:5+")
-    val XML10 = Val("1.0")
-    val XML11 = Val("1.1")
+    val XML10_4thOrEarlier = XmlVersionVal("1.0:4-")
+    val XML10_5thOrLater = XmlVersionVal("1.0:5+")
+    val XML10 = XmlVersionVal("1.0")
+    val XML11 = XmlVersionVal("1.1")
 
     /**
       * Given a base version,
@@ -352,6 +362,7 @@ object XQTSParserActor {
       }
     }
 
+    @unused
     def firstMissing(test: String => Missed, required: Seq[Dependency]) : Missed = {
       required.foldLeft(Option.empty[String]) { case (accum, x) =>
         accum.orElse(test(x.value))

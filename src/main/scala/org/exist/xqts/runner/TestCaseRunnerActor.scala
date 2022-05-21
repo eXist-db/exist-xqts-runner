@@ -20,7 +20,6 @@ package org.exist.xqts.runner
 import java.io.IOException
 import java.nio.charset.Charset
 import java.nio.file.{Files, Path}
-
 import akka.actor.{Actor, ActorRef}
 import org.exist.xqts.runner.TestCaseRunnerActor.RunTestCase
 import org.exist.xqts.runner.XQTSParserActor._
@@ -30,9 +29,9 @@ import TestCaseRunnerActor._
 import IgnorableWrapper._
 import org.exist.xqts.runner.ExistServer._
 import org.exist.xquery.value._
+
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.regex.Pattern
-
 import cats.effect.{IO, Resource}
 import grizzled.slf4j.Logger
 import org.exist.dom.memtree.DocumentImpl
@@ -44,6 +43,7 @@ import org.xmlunit.XMLUnitException
 import org.xmlunit.builder.{DiffBuilder, Input}
 import org.xmlunit.diff.{Comparison, ComparisonType, DefaultComparisonFormatter}
 
+import scala.annotation.unused
 import scala.util.{Failure, Success}
 
 /**
@@ -412,7 +412,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the dynamically available text resources, or an exception
     */
-  private def getDynamicContextAvailableTextResources(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : ExistServerException \/ List[(String, Charset, String)] = {
+  private def getDynamicContextAvailableTextResources(@unused connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : ExistServerException \/ List[(String, Charset, String)] = {
     def toString(data: Array[Byte], encoding: Option[String]) : ExistServerException \/ (Charset, String) = {
       \/.fromTryCatchNonFatal(encoding.map(Charset.forName).getOrElse(UTF_8))
         .map(charset => (charset, new String(data, charset)))
@@ -1097,7 +1097,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the test result from processing the assertion.
     */
-  private def assertXml(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expectedXml: String \/ Path, ignorePrefixes: Boolean, actual: ExistServer.QueryResult): TestResult = {
+  private def assertXml(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expectedXml: String \/ Path, @unused ignorePrefixes: Boolean, actual: ExistServer.QueryResult): TestResult = {
     expectedXml.map(readTextFile(_)).fold(\/-(_), r => r) match {
       case -\/(t) =>
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
@@ -1271,6 +1271,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return true if all sequence items are nodes, false otherwise.
     */
+  @unused
   private def allAreNodes(sequence: Sequence) : Boolean = {
     val types = for (i <- (0 until sequence.getItemCount))
       yield sequence.itemAt(i).getType
@@ -1452,7 +1453,7 @@ object TestCaseRunnerActor {
     }
   }
 
-  private def addQueryStrs(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]) : Map[TestCaseId, PendingTestCase] = {
+  private def addQueryStrs(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], @unused path: Path, value: Array[Byte]) : Map[TestCaseId, PendingTestCase] = {
     testCases.foldLeft(pending){(accum, x) =>
       val pendingTestCase = accum(x)
       accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedQuery = Some(new String(value, UTF_8)))))

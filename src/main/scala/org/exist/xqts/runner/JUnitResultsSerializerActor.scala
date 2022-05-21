@@ -62,7 +62,7 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
       }
 
       // notify the sender that we have completed serializing the results
-      sender ! SerializedTestSetResults(testSetResults.testSetRef)
+      sender() ! SerializedTestSetResults(testSetResults.testSetRef)
 
     case FinalizeSerialization =>
       val start = System.currentTimeMillis()
@@ -82,7 +82,7 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
       }
 
       // notify the sender that we have completed serialization
-      sender ! FinishedSerialization
+      sender() ! FinishedSerialization
   }
 
   private def dataDir : IO[Path] = IO {
@@ -119,7 +119,7 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
       results.filter(_.isInstanceOf[ErrorResult]).size,
       results.filter(_.isInstanceOf[AssumptionFailedResult]).size
     )
-    junitTestSet.setRunTime(results.foldLeft(0l)((accum, x) => accum + x.compilationTime + x.executionTime))
+    junitTestSet.setRunTime(results.foldLeft(0L)((accum, x) => accum + x.compilationTime + x.executionTime))
     junitTestSet.setProperties(asJavaHashtable(Map(
       "file" -> testSetRef.file.toString,
       "name" -> testSetRef.name,
@@ -151,7 +151,7 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
   }
 
   private def asJavaHashtable[K, V](map: Map[K, V]) : java.util.Hashtable[K, V] = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     new java.util.Hashtable(map.asJava)
   }
 
@@ -204,7 +204,7 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
         val xqtsJunitTest = test.asInstanceOf[XQTSJUnitTest]
         val rootElement = rootElementField.get(this).asInstanceOf[Element]
         val currentTest = rootElement.getLastChild().asInstanceOf[Element]
-        val timeInSeconds = java.lang.Double.toString((xqtsJunitTest.getCompilationTime + xqtsJunitTest.getExecutionTime) / 1000)
+        val timeInSeconds = ((xqtsJunitTest.getCompilationTime + xqtsJunitTest.getExecutionTime) / 1000D).toString
         currentTest.setAttribute(ATTR_TIME, timeInSeconds)
       }
     }

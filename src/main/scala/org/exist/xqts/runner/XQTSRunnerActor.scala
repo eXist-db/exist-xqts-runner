@@ -19,7 +19,6 @@ package org.exist.xqts.runner
 
 import java.nio.file.Path
 import java.util.regex.Pattern
-
 import akka.actor.{Actor, Props, Timers}
 import XQTSRunnerActor._
 import akka.routing.FromConfig
@@ -34,6 +33,7 @@ import org.exist.xqts.runner.XQTSResultsSerializerActor.{FinalizeSerialization, 
 import org.exist.xqts.runner.qt3.XQTS3TestSetParserActor
 import scalaz.\/
 
+import scala.annotation.unused
 import scala.collection.immutable.Map
 
 /**
@@ -170,6 +170,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
         !testCases.keySet.map(isTestSetCompleted(_)).contains(false)
   }
 
+  @unused
   private def add(map: Map[TestSetRef, Map[String, Option[TestResult]]], testSetRef: TestSetRef) : Map[TestSetRef, Map[String, Option[TestResult]]] = {
     if (map.contains(testSetRef)) {
       map
@@ -178,6 +179,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     }
   }
 
+  @unused
   private def add(map: Map[TestSetRef, Map[String, Option[TestResult]]], testSetRef: TestSetRef, testCase: String) : Map[TestSetRef, Map[String, Option[TestResult]]] = {
     if (map.contains(testSetRef)) {
       if (!map(testSetRef).contains(testCase)) {
@@ -190,6 +192,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     }
   }
 
+  @unused
   private def add(map: Map[TestSetRef, Map[String, Option[TestResult]]], testSetRef: TestSetRef, testCases: Seq[String]) : Map[TestSetRef, Map[String, Option[TestResult]]] = {
     if (map.contains(testSetRef)) {
       map + (testSetRef -> (map(testSetRef) ++ testCases.filterNot(map(testSetRef).contains(_)).map((_, None)).toMap))
@@ -214,6 +217,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     }
   }
 
+  @unused
   private def removeOutstanding(map: Map[TestSetRef, Set[String]], testSetRef: TestSetRef, testCase: String) : Map[TestSetRef, Set[String]] = {
     if (map.contains(testSetRef)) {
       val newValueSet = map(testSetRef) - testCase

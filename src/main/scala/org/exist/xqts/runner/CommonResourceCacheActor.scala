@@ -41,7 +41,7 @@ class CommonResourceCacheActor(readFileActor: ActorRef, maxCacheBytes: Long) ext
     case GetResource(key) =>
       cached.get(key) match {
         case Some((_, value)) =>
-          sender ! CachedResource(key, value)
+          sender() ! CachedResource(key, value)
           cached = incrementUseCount(cached)(key)
 
         case None =>
@@ -50,7 +50,7 @@ class CommonResourceCacheActor(readFileActor: ActorRef, maxCacheBytes: Long) ext
           }
 
           // we always need to send a response, so add to pending
-          pending = addPending(pending)(key, sender)
+          pending = addPending(pending)(key, sender())
       }
 
     case FileReadError(path, error) =>

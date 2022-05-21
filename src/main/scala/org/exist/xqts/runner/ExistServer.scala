@@ -252,7 +252,7 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
           case None =>
             val context = new XQueryContext(broker.getBrokerPool())
             setupContext(context)
-            val compiled = xquery.compile(broker, context, source)
+            val compiled = xquery.compile(context, source)
             (compiled, context, System.currentTimeMillis() - startTime)
         }
     }
@@ -317,7 +317,7 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
               })
           }
     }.handleErrorWith(throwable => IO {
-      fromExecutionException(throwable, 0l, 0l)
+      fromExecutionException(throwable, 0L, 0L)
     }) // 0 because an error here was caused by compilation, so  was no execution
 
     // run compilation and execution
@@ -405,7 +405,7 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
 
     parseIO
       .attempt
-      .map(_.disjunction.leftMap(ExistServerException(_)))
+      .map(_.toDisjunction.leftMap(ExistServerException(_)))
       .unsafeRunSync()
   }
 

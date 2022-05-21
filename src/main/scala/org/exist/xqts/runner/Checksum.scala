@@ -78,7 +78,7 @@ object Checksum {
 
     checksumIO
       .attempt
-      .map(_.disjunction)
+      .map(_.toDisjunction)
       .unsafeRunSync()
   }
 

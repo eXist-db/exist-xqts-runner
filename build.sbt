@@ -83,7 +83,7 @@ resolvers +=
 resolvers +=
   "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
 
-scalacOptions += "-Ywarn-unused"
+scalacOptions ++= Seq("-deprecation", "-feature", "-Ywarn-unused")
 
 // Fancy up the Assembly JAR
 Compile / packageBin / packageOptions +=  {

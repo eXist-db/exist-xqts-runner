@@ -43,7 +43,8 @@ import org.exist.Namespaces
 import org.exist.dom.memtree.{DocumentImpl, SAXAdapter}
 import org.exist.storage.txn.Txn
 import org.apache.commons.io.input.UnsynchronizedByteArrayInputStream
-import org.exist.xqts.runner.XQTSParserActor.{DecimalFormat, Namespace}
+import org.exist.xmldb.XmldbURI
+import org.exist.xqts.runner.XQTSParserActor.{DecimalFormat, Module, Namespace}
 import org.exist.xquery.value._
 import org.xml.sax.InputSource
 
@@ -158,7 +159,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     *
     * @return the result or executing the query, or an exception.
     */
-  def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, xpath1Compatibility : Boolean = false) : ExistServerException \/ Result = {
+  def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false) : ExistServerException \/ Result = {
     /**
       * Gets the XQuery Pool.
       *
@@ -367,7 +368,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       *
       * @param context The XQuery Context to configure
       */
-    def setupContext(context: XQueryContext)(staticBaseUri: Option[String], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, xpath1Compatibility : Boolean = false): XQueryContext = {
+    def setupContext(context: XQueryContext)(staticBaseUri: Option[String], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false): XQueryContext = {
 
       // Turn on/off XPath 1.0 backwards compatibility.
       context.setBackwardsCompatibility(xpath1Compatibility)
@@ -426,8 +427,12 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
         )
 
         val decimalFormatName = df.name.getOrElse(new QName(Function.BUILTIN_FUNCTION_NS, "__UNNAMED__"))
-
         context.setStaticDecimalFormat(org.exist.dom.QName.fromJavaQName(decimalFormatName), modifiedDecimalFormat)
+      }
+
+      for (module <- modules) {
+        val fileUri : XmldbURI = XmldbURI.createInternal(module.file.toAbsolutePath.toUri.toString)
+        context.mapModule(module.uri.getStringValue, fileUri)
       }
 
       context
@@ -445,7 +450,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       getXQueryService(broker).flatMap { xqueryService =>
           maybeXQueryPoolIo.flatMap { maybeXqueryPool =>
 
-            val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, xpath1Compatibility)
+            val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
 
             compiledXQuery(broker, source, fnConfigureContext, maybeXqueryPool)
               .use(compiledQuery => executeCompiledQuery(broker, xqueryService, compiledQuery, contextSequence))

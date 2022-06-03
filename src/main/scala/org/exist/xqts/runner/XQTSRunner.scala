@@ -89,7 +89,6 @@ object XQTSRunner {
     DirectoryAsCollectionUri,
     HigherOrderFunctions,
     ModuleImport,
-    NamespaceAxis,
     Serialization,
     StaticTyping,
     TypedData,

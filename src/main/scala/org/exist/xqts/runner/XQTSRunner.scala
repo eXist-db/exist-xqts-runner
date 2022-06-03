@@ -147,12 +147,12 @@ object XQTSRunner {
       head("xqtsrunner", "1.0")
 
       opt[XQTSVersion]('x', "xqts-version")
-        .text("The version of XQTS to run")
+        .text("The version of XQTS to run. These are configured in the application.conf file. We ship with 'W3C' (the final W3C XQTS 3.1) and 'HEAD' (the GitHub community maintained XQTS) pre-configured")
         .validate(x => if (x == XQTS_3_1 || x == XQTS_HEAD) success else failure("only version 3.1, or HEAD is currently supported"))
         .action((x, c) => c.copy(xqtsVersion = x))
 
       opt[Path]('l', "local-dir")
-        .text ("A directory where downloaded copies of XQTS are cached. If not provided then 'work' is assumed")
+        .text ("A directory where downloaded copies of XQTS are cached. If not provided then a directory 'work' within the current working directory is assumed")
         .validate(fileExists)
         .action((x, c) => c.copy(localDir = Some(x)))
 

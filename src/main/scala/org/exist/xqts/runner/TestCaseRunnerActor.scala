@@ -33,7 +33,7 @@ import org.exist.xquery.value._
 
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.regex.Pattern
-import cats.effect.{IO, Resource}
+import cats.effect.IO
 import grizzled.slf4j.Logger
 import org.exist.dom.memtree.DocumentImpl
 import org.exist.xqts.runner.AssertTypeParser.TypeNode.{ExistTypeDescription, ExplicitExistTypeDescription, WildcardExistTypeDescription}
@@ -201,16 +201,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the result of executing the XQTS test-case.
     */
   private def runTestCaseWithExist(testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : TestResult = {
-    val existIO = Resource.make(IO { existServer.getConnection() })(connection => IO { connection.close() })
-    val testCaseIO = existIO.use(connection => IO {
+    val testCaseIO = IO.blocking {
       try {
-        runTestCase(connection, testSetName, testCase, resolvedEnvironment)
+        runTestCase(existServer.getConnection(), testSetName, testCase, resolvedEnvironment)
       } catch {
         case e: java.lang.OutOfMemoryError =>
           System.err.println(s"OutOfMemoryError: $testSetName ${testCase.name}")
           throw e
       }
-    })
+    }
 
     implicit val runtime = IORuntime.global
 

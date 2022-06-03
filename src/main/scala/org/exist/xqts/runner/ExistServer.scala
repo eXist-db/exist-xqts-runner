@@ -21,19 +21,20 @@ import java.io._
 import java.nio.charset.Charset
 import java.util.Properties
 import org.exist.source.{Source, StringSource}
-import org.exist.storage.DBBroker
+import org.exist.storage.{DBBroker, XQueryPool}
 import org.exist.test.ExistEmbeddedServer
 import org.exist.util.serializer.XQuerySerializer
-import org.exist.xquery.{CompiledXQuery, Function, XPathException, XQueryContext}
+import org.exist.xquery.{CompiledXQuery, Function, XPathException, XQuery, XQueryContext}
 
 import scala.util.{Failure, Success, Try}
 import scalaz.\/
 import scalaz.syntax.either._
 import scalaz.syntax.std.either._
-import ExistServer._
+import ExistServer.{CompilationTime, _}
 import cats.effect.unsafe.IORuntime
 import cats.effect.{IO, Resource}
 import com.evolvedbinary.j8fu.function.{QuadFunctionE, TriFunctionE}
+import grizzled.slf4j.Logger
 
 import javax.xml.namespace.QName
 import javax.xml.parsers.SAXParserFactory
@@ -92,6 +93,7 @@ object ExistServer {
   */
 class ExistServer {
   private lazy val existServer = new ExistEmbeddedServer(true, true)
+  private val logger = Logger(classOf[ExistServer])
 
   /**
     * Starts the eXist-db server.
@@ -104,7 +106,18 @@ class ExistServer {
     * Get a connection to the eXist-db server.
     */
   def getConnection() : ExistConnection = {
-    ExistConnection(existServer.getBrokerPool.getBroker)
+    val brokerRes = Resource.make {
+      // build
+      IO.blocking(existServer.getBrokerPool.getBroker)
+    } {
+      // release
+      broker =>
+        IO.blocking(broker.close()).handleErrorWith { t =>
+          logger.warn(s"Error releasing DBBroker: ${t.getMessage}", t)
+          IO.unit
+        }
+    }
+    ExistConnection(brokerRes)
   }
 
   /**
@@ -116,7 +129,7 @@ class ExistServer {
 }
 
 private object ExistConnection {
-  def apply(broker: DBBroker) = new ExistConnection(broker)
+  def apply(brokerRes: Resource[IO, DBBroker]) = new ExistConnection(brokerRes)
 
   private val saxParserFactory = SAXParserFactory.newInstance()
   saxParserFactory.setNamespaceAware(true)
@@ -128,9 +141,7 @@ private object ExistConnection {
   *
   * @param broker the eXist-db broker to wrap.
   */
-class ExistConnection(broker: DBBroker) extends AutoCloseable {
-  private val xqueryPool = broker.getBrokerPool.getXQueryPool
-  private val xquery = broker.getBrokerPool.getXQueryService
+class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
 
   /**
     * Execute an XQuery with eXist-db.
@@ -148,13 +159,215 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
     * @return the result or executing the query, or an exception.
     */
   def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, xpath1Compatibility : Boolean = false) : ExistServerException \/ Result = {
+    /**
+      * Gets the XQuery Pool.
+      *
+      * @param broker the database broker.
+      *
+      * @return the XQuery Pool.
+      */
+    def getXQueryPool(broker: DBBroker) : IO[XQueryPool] = {
+      IO.pure(broker.getBrokerPool.getXQueryPool)
+    }
+
+    /**
+      * Gets the XQuery Service.
+      *
+      * @param broker the database broker.
+      *
+      * @return the XQuery Service.
+      */
+    def getXQueryService(broker: DBBroker) : IO[XQuery] = {
+      IO.pure(broker.getBrokerPool.getXQueryService)
+    }
+
+    /**
+      * Data class for a Compiled XQuery.
+      *
+      * @param compiledXquery the compiled query itself.
+      * @param xqueryContext the context prepared for use when executing the compiled query.
+      * @param compilationTime the time it took to compile the XQuery.
+      */
+    case class CompiledQuery(compiledXquery: CompiledXQuery, xqueryContext: XQueryContext, compilationTime: CompilationTime)
+
+    /**
+      * Gets a compiled XQuery from an the XQuery Pool.
+      *
+      * @param broker the database broker.
+      * @param xqueryPool the XQuery Pool.
+      * @param source the source of the XQuery.
+      * @param fnConfigureContext a function that can configure the context of the query.
+      *
+      * @return The compiled XQuery from the pool, or None if the pool did not have a compiled query available.
+      */
+    def compiledXQueryFromPool(broker: DBBroker, xqueryPool: XQueryPool, source: Source, fnConfigureContext: XQueryContext => XQueryContext) : Resource[IO, Option[CompiledQuery]] = {
+      Resource.make {
+        // build
+        for (
+          startCompilationTime <- IO.pure(System.currentTimeMillis());
+          maybeCompiledXQuery <- IO.blocking(Option(xqueryPool.borrowCompiledXQuery(broker, source)));
+          maybeCompiledXQueryContext <- IO.blocking(maybeCompiledXQuery.map(compiledXQuery => fnConfigureContext(compiledXQuery.getContext)));
+          endCompilationTime <- IO.pure(System.currentTimeMillis())
+        ) yield maybeCompiledXQuery.zip(maybeCompiledXQueryContext).map{ case (compiledXQuery, compiledXQueryContext) => CompiledQuery(compiledXQuery, compiledXQueryContext, endCompilationTime - startCompilationTime)}
+      } {
+        // release
+        _ match {
+          case Some(compiledQuery) =>
+            for (
+              _ <- IO.blocking(compiledQuery.xqueryContext.runCleanupTasks());
+              _ <- IO.blocking(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery))
+            ) yield ()
+          case None =>
+            IO.unit
+        }
+      }
+    }
+
+    /**
+      * Compiles an XQuery.
+      *
+      * @param broker the database broker.
+      * @param source the source of the XQuery.
+      * @param fnConfigureContext a function that can configure the context of the query.
+      * @param maybeXQueryPool if present, the query will be returned to the pool after it is used.
+      *
+      * @return The compiled XQuery.
+      */
+    def compileXQuery(broker: DBBroker, source: Source, fnConfigureContext: XQueryContext => XQueryContext, maybeXQueryPool: Option[XQueryPool]) : Resource[IO, CompiledQuery] = {
+      val xqueryContextRes = Resource.make {
+        // build
+        IO.blocking {
+          fnConfigureContext(new XQueryContext(broker.getBrokerPool()))
+        }
+      } {
+        // release
+        xqueryContext =>
+          xqueryContext.runCleanupTasks()
+          IO.unit
+      }
+
+      xqueryContextRes.flatMap { xqueryContext =>
+        Resource.make {
+          // build
+          for (
+            startCompilationTime <- IO.pure(System.currentTimeMillis());
+            xqueryService <- getXQueryService(broker);
+            compiledXQuery <- IO.blocking(xqueryService.compile(xqueryContext, source));
+            endCompilationTime <- IO.pure(System.currentTimeMillis())
+          )
+          yield CompiledQuery(compiledXQuery, xqueryContext, endCompilationTime - startCompilationTime)
+        } {
+          // release
+          compiledQuery =>
+            maybeXQueryPool match {
+              case Some(xqueryPool) => {
+                xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery)
+                IO.unit
+              }
+              case None => IO.unit
+            }
+        }
+      }
+    }
+
+    /**
+      * Gets a compiled XQuery from an XQuery source.
+      *
+      * Handles caching of compiled XQuery:
+      *
+      *   1. If the cache should be used, then it will try
+      *   and retrieve a compiled version. If there is no
+      *   compiled version, the query source will be
+      *   compiled and added to the cache, before being
+      *   returned.
+      *
+      *   2. If the cache should not be used, then the
+      *   query source will be compiled before being
+      *   returned.
+      *
+      * @param broker the database broker.
+      * @param source the source of the XQuery.
+      * @param fnConfigureContext a function that can configure the context of the query.
+      * @param maybeXQueryPool if present, the query will be returned to the pool after it is used.
+      *
+      * @return The compiled XQuery.
+      */
+    def compiledXQuery(broker: DBBroker, source: Source, fnConfigureContext: XQueryContext => XQueryContext, maybeXqueryPool: Option[XQueryPool]): Resource[IO, CompiledQuery] = {
+      maybeXqueryPool match {
+        case Some(xqueryPool) =>
+          compiledXQueryFromPool(broker, xqueryPool, source, fnConfigureContext).flatMap { maybeCompiledQueryFromPool =>
+            maybeCompiledQueryFromPool match {
+              case Some(compiledQueryFromPool) => Resource.pure(compiledQueryFromPool)            // use the existing query from the pool
+              case None => compileXQuery(broker, source, fnConfigureContext, maybeXqueryPool)     // no existing query in the pool, fallback to compiling a new query
+            }
+          }
+        case None => compileXQuery(broker, source, fnConfigureContext, maybeXqueryPool)           // compile a new query
+      }
+    }
+
+    /**
+      * Executes a compiled XQuery.
+      *
+      * @param broker the database broker.
+      * @param xqueryService the XQuery Service.
+      * @param compiledQuery the compiled XQuery to execute.
+      * @param contextSequence an optional context sequence for the XQuery to execute over.
+      *
+      * @return the result of the query, or an exception.
+      */
+    def executeCompiledQuery(broker: DBBroker, xqueryService: XQuery, compiledQuery: CompiledQuery, contextSequence: Option[Sequence]): IO[ExistServerException \/ Result] = {
+      def execute(broker: DBBroker, compiledQuery: CompiledQuery, executionStartTime: ExecutionTime, contextSequence: Option[Sequence]) : IO[ExistServerException \/ Result] = {
+        IO.blocking {
+          try {
+            val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.getOrElse(null))
+            Result(resultSequence, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime).right[ExistServerException]
+          } catch {
+            // NOTE(AR): bugs in eXist-db's XQuery implementation can produce a StackOverflowError - handle as any other server exception
+            case e: StackOverflowError =>
+              ExistServerException(e, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime).left
+          }
+        }
+      }
+
+      for (
+        executionStartTime <- IO.pure(System.currentTimeMillis());
+        errorOrResult <- execute(broker, compiledQuery, executionStartTime, contextSequence)
+          .handleErrorWith(fromExecutionException(_, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime))
+      ) yield errorOrResult
+    }
+
+    /**
+      * Handler to manage an XPathException
+      * differently from any other type of throwable.
+      *
+      * XPathException will be converted to a {@link Result}
+      * of {@link QueryError}, wilst any other exception
+      * will be converted to an {@link ExistServerException}.
+      *
+      * @param t the exception.
+      * @param compilationTime the time taken to compile the XQuery.
+      * @param executionTime the time taken to execute the XQuery.
+      *
+      * @return either a {@link Result}, or a {@link ExistServerException}.
+      */
+    def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime) : IO[ExistServerException \/ Result] = {
+      IO {
+        if (t.isInstanceOf[XPathException]) {
+          Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime).right[ExistServerException]
+        } else if (t.isInstanceOf[ExistServerException]) {
+          t.asInstanceOf[ExistServerException].left[Result] // pass-through
+        } else {
+          ExistServerException(t, compilationTime, executionTime).left[Result]
+        }
+      }
+    }
 
     /**
       * Sets up the XQuery Context.
       *
       * @param context The XQuery Context to configure
       */
-    def setupContext(context: XQueryContext): Unit = {
+    def setupContext(context: XQueryContext)(staticBaseUri: Option[String], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, xpath1Compatibility : Boolean = false): XQueryContext = {
 
       // Turn on/off XPath 1.0 backwards compatibility.
       context.setBackwardsCompatibility(xpath1Compatibility)
@@ -216,115 +429,37 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
 
         context.setStaticDecimalFormat(org.exist.dom.QName.fromJavaQName(decimalFormatName), modifiedDecimalFormat)
       }
+
+      context
     }
 
-    /**
-      * Get's a compiled XQuery from an XQuery source.
-      *
-      * Handles caching of compiled XQuery:
-      *
-      *   1. If the cache should be used, then it will try
-      *   and retrieve a compiled version. If there is no
-      *   compiled version, the query source will be
-      *   compiled and added to the cache, before being
-      *   returned.
-      *
-      *   2. If the cache should not be used, then the
-      *   query source will be compiled before being
-      *   returned.
-      *
-      * @param source The XQuery source to compile.
-      *
-      * @return A tuple of: the compiled XQuery,
-      *         the XQuery context, and the time taken
-      *         to compile the XQuery.
-      */
-    def getCompiledQuery(source: Source) : (CompiledXQuery, XQueryContext, CompilationTime) = {
-      val startTime = System.currentTimeMillis()
-      Option(cacheCompiled)
-          .filter(b => b)
-          .flatMap(_ => Option(xqueryPool.borrowCompiledXQuery(broker, source)))
-        match {
-          case Some(compiled) =>
-            val context = compiled.getContext
-            setupContext(compiled.getContext)
-            (compiled, context, System.currentTimeMillis() - startTime)
+    val executeQueryIo: IO[ExistServerException \/ Result] = brokerRes.use { broker =>
 
-          case None =>
-            val context = new XQueryContext(broker.getBrokerPool())
-            setupContext(context)
-            val compiled = xquery.compile(context, source)
-            (compiled, context, System.currentTimeMillis() - startTime)
-        }
-    }
+      val source = new StringSource(query)
 
-    /**
-      * Handler to manage an XPathException
-      * differently from any other type of throwable.
-      *
-      * XPathException will be converted to a {@link Result}
-      * of {@link QueryError}, wilst any other exception
-      * will be converted to an {@link ExistServerException}.
-      *
-      * @param t the exception.
-      * @param compilationTime the time taken to compile the XQuery.
-      * @param executionTime the time taken to execute the XQuery.
-      *
-      * @return either a {@link Result}, or a {@link ExistServerException}.
-      */
-    def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime) : ExistServerException \/ Result = {
-      if (t.isInstanceOf[XPathException]) {
-        Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime).right[ExistServerException]
-      } else if (t.isInstanceOf[ExistServerException]) {
-        t.asInstanceOf[ExistServerException].left[Result]  // pass-through
-      } else {
-        ExistServerException(t, compilationTime, executionTime).left[Result]
-      }
-    }
+      val maybeXQueryPoolIo : IO[Option[XQueryPool]] = IO.pure(cacheCompiled).flatMap { _ match {
+        case true => getXQueryPool(broker).map(Some(_))
+        case false => IO.none
+      }}
 
-    val source = new StringSource(query)
+      getXQueryService(broker).flatMap { xqueryService =>
+          maybeXQueryPoolIo.flatMap { maybeXqueryPool =>
 
-    // compile step
-    val compiledQueryIO : Resource[IO, (CompiledXQuery, XQueryContext, CompilationTime)] = Resource.make(IO {
-      getCompiledQuery(source)
-    })(compiledContext => IO {
-      compiledContext._2.runCleanupTasks()
-      if(cacheCompiled) {
-        xqueryPool.returnCompiledXQuery(source, compiledContext._1)
-      }
-    })
+            val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, xpath1Compatibility)
 
-    // execute step
-    val executeQueryIO: IO[ExistServerException \/ Result] = compiledQueryIO.use {
-      case (compiled, _, compilationTime) =>
-        IO {
-          System.currentTimeMillis()
-        }
-          .flatMap { startTime =>
-            IO {
-              try {
-                xquery.execute(broker, compiled, contextSequence.getOrElse(null))
-              } catch {
-                // NOTE: bugs in eXist-db's XQuery implementation can produce StackOverflowError - handle as normal Server Error
-                case e: StackOverflowError =>
-                  throw ExistServerException(e, compilationTime, System.currentTimeMillis() - startTime)
-              }
-            }
-              .flatMap(sequence => IO {
-                Result(sequence, compilationTime, System.currentTimeMillis() - startTime).right[ExistServerException]
-              })
-              .handleErrorWith(throwable => IO {
-                fromExecutionException(throwable, compilationTime, System.currentTimeMillis() - startTime)
-              })
+            compiledXQuery(broker, source, fnConfigureContext, maybeXqueryPool)
+              .use(compiledQuery => executeCompiledQuery(broker, xqueryService, compiledQuery, contextSequence))
+              .handleErrorWith(throwable =>
+                fromExecutionException(throwable, 0L, 0L)
+              ) // We use 0L, 0L because an error here was caused by compilation, so there was no complete compilation, and also no execution
           }
-    }.handleErrorWith(throwable => IO {
-      fromExecutionException(throwable, 0L, 0L)
-    }) // 0 because an error here was caused by compilation, so  was no execution
+      }
+    }
 
+    // TODO(AR) should we just return IO from here and allow the caller to do the execution?
     // run compilation and execution
     implicit val runtime = IORuntime.global
-
-    val queryResult = executeQueryIO.unsafeRunSync()
+    val queryResult = executeQueryIo.unsafeRunSync()
     queryResult
   }
 
@@ -371,17 +506,19 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
     * @return the result of serializing the sequence.
     */
   def sequenceToString(sequence: Sequence, outputProperties: Properties): String = {
-    val writerIO = Resource.make(IO { new StringWriter() })(writer => IO { writer.close() })
+    val writerRes = Resource.make(IO { new StringWriter() })(writer => IO { writer.close() })
 
-    val serializationIO = writerIO.use(writer => IO {
-      val serializer = new XQuerySerializer(broker, outputProperties, writer)
-      serializer.serialize(sequence)
-      writer.getBuffer.toString
-        .replace("\r", "").replace("\n", ", ")  // further improves the output for expected value messages
-    })
+    val serializationIO : IO[String] = brokerRes.both(writerRes).use { case (broker, writer) =>
+      IO.blocking {
+        val serializer = new XQuerySerializer(broker, outputProperties, writer)
+        serializer.serialize(sequence)
+        writer.getBuffer.toString
+          .replace("\r", "").replace("\n", ", ")  // further improves the output for expected value messages
+      }
+    }
 
+    // TODO(AR) should we just return IO from here and allow the caller to do the execution?
     implicit val runtime = IORuntime.global
-
     serializationIO.unsafeRunSync()
   }
 
@@ -394,9 +531,9 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
     * @return either the Document object, or an exception.
     */
   def parseXml(xml: Array[Byte]): ExistServerException \/ DocumentImpl = {
-    val xmlIO = Resource.make(IO { new UnsynchronizedByteArrayInputStream(xml) })(is => IO { is.close() })
+    val xmlRes = Resource.make(IO { new UnsynchronizedByteArrayInputStream(xml) })(is => IO { is.close() })
 
-    val parseIO = xmlIO.use(is => IO {
+    val parseIO = xmlRes.use(is => IO.blocking {
       val saxAdapter = new SAXAdapter()
       val saxParser = ExistConnection.saxParserFactory.newSAXParser()
       val xmlReader = saxParser.getXMLReader()
@@ -408,17 +545,11 @@ class ExistConnection(broker: DBBroker) extends AutoCloseable {
       saxAdapter.getDocument
     })
 
+    // TODO(AR) should we just return IO from here and allow the caller to do the execution?
     implicit val runtime = IORuntime.global
-
     parseIO
       .attempt
       .map(_.toDisjunction.leftMap(ExistServerException(_)))
       .unsafeRunSync()
   }
-
-  /**
-    * Closes the connection
-    * to the eXist-db server.
-    */
-  override def close(): Unit = broker.close()
 }

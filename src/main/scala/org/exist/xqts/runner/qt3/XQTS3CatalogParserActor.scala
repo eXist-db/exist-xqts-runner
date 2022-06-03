@@ -77,9 +77,9 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
     case Parse(xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, testSets, testCases, excludeTestSets, excludeTestCases) =>
       val sender = context.sender()
       logger.info(s"Parsing XQTS Catalog: ${xqtsPath.resolve(CATALOG_FILE)}...")
-      parseCatalog(sender, xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, testSets, testCases, excludeTestSets, excludeTestCases)
-      logger.info(s"Parsed XQTS Catalog OK.")
-      sender ! ParseComplete(xqtsVersion, xqtsPath)
+      val matchedTestSets = parseCatalog(sender, xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, testSets, testCases, excludeTestSets, excludeTestCases)
+      logger.info("Parsed XQTS Catalog OK.")
+      sender ! ParseComplete(xqtsVersion, xqtsPath, matchedTestSets)
 
       context.stop(self)  // we are no longer needed
   }
@@ -101,8 +101,10 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
     * @param testCases the test-cases to parse, or an empty set to parse all.
     * @param excludeTestSets the names of any test sets to exclude from the parse.
     * @param excludeTestCases the names of any test cases to exclude from the parse.
+    *
+    * @return the number of test sets that were matched in the catalog and dispatched to the testSetParserRouter.
     */
-  private def parseCatalog(xqtsRunner: ActorRef, xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Set[String] \/ Pattern, testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String]) = {
+  private def parseCatalog(xqtsRunner: ActorRef, xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Set[String] \/ Pattern, testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String]) : Int = {
 
     /**
       * The asynchronous STaX parsing loop,
@@ -114,14 +116,18 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
       * @param channel the file channel for the {@code asyncReader}.
       * @param buf the buffer for the {@code asyncReader}.
       *
+      * @return the number of test sets that were matched in the catalog and dispatched to the testSetParserRouter.
+      *
       * @throws XQTSParseException if an error happens during parsing.
       */
     @tailrec
     @throws[XQTSParseException]
-    def parseAll(event: Int, asyncReader: AsyncXMLStreamReader[AsyncByteBufferFeeder], xqtsPath: Path, channel: SeekableByteChannel, buf: ByteBuffer): Unit = {
+    def parseAll(event: Int, asyncReader: AsyncXMLStreamReader[AsyncByteBufferFeeder], xqtsPath: Path, channel: SeekableByteChannel, buf: ByteBuffer, matchedTestSets: Int = 0): Int = {
+      var matchedTestSet = false
+
       event match {
         case END_DOCUMENT =>
-          return // exit parse
+          return matchedTestSets  // exit parse
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_ENVIRONMENT) =>
           val name = asyncReader.getAttributeValue(ATTR_NAME)
@@ -212,9 +218,11 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
               testSets match {
                 case \/-(testSetPattern) if (testSetPattern.matcher(testSetRef.name).matches() && !excludeTestSets.contains(testSetRef.name)) =>
                   testSetParserRouter ! ParseTestSet(testSetRef, testCases, features, specs, xmlVersions, xsdVersions, excludeTestCases, globalEnvironments, xqtsRunner)
+                  matchedTestSet = true
 
                 case -\/(filterTestSets) if ((filterTestSets.isEmpty || filterTestSets.contains(testSetRef.name)) && !excludeTestSets.contains(testSetRef.name)) =>
                   testSetParserRouter ! ParseTestSet(testSetRef, testCases, features, specs, xmlVersions, xsdVersions, excludeTestCases, globalEnvironments, xqtsRunner)
+                  matchedTestSet = true
 
                 case _ =>
                   logger.debug(s"Filtered out test-set: ${testSetRef.name}")
@@ -240,7 +248,8 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
           // we can ignore anything else
       }
 
-      parseAll(asyncReader.next(), asyncReader, xqtsPath, channel, buf)
+      val updatedMatchedTestSets : Int = if (matchedTestSet) matchedTestSets + 1 else matchedTestSets
+      parseAll(asyncReader.next(), asyncReader, xqtsPath, channel, buf, updatedMatchedTestSets)
     }
 
     val bufIO = cats.effect.Resource.make(IO { ByteBuffer.allocate(xmlParserBufferSize) })(buf => IO { buf.clear() })

@@ -110,8 +110,12 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       }
       previousStats = stats
 
-    case ParseComplete(_, _) =>
-      // there is nothing we need to do here
+    case ParseComplete(xqtsVersion, _, matchedTestSets) =>
+      logger.info(s"Matched $matchedTestSets Test Sets in XQTS ${XQTSVersion.toVersionName(xqtsVersion)}...")
+      if (matchedTestSets == 0) {
+        logger.warn("Nothing to do! Did you specify your Test Set names/patterns correctly?")
+        shutdown()
+      }
 
     case ParsingTestSet(testSetRef) =>
       unparsedTestSets += testSetRef
@@ -150,11 +154,15 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     case FinishedSerialization =>
       // all tests have run, and serialization is finished
       logger.info(s"Completed XQTS in (${System.currentTimeMillis() - started} ms)")
-      if (logger.isDebugEnabled) {
-        timers.cancel(TimerStatsKey)
-      }
-      context.stop(self)
-      context.system.terminate()
+      shutdown()
+  }
+
+  private def shutdown(): Unit = {
+    if (logger.isDebugEnabled) {
+      timers.cancel(TimerStatsKey)
+    }
+    context.stop(self)
+    context.system.terminate()
   }
 
   private def isTestSetCompleted(testSetRef: TestSetRef) : Boolean = {

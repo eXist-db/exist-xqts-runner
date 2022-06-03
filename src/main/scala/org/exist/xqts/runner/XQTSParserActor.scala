@@ -49,7 +49,7 @@ trait XQTSParserActor extends Actor {
   */
 object XQTSParserActor {
   case class Parse(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Set[String] \/ Pattern, testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String])
-  case class ParseComplete(xqtsVersion: XQTSVersion, xqtsPath: Path)
+  case class ParseComplete(xqtsVersion: XQTSVersion, xqtsPath: Path, matchedTestSets: Int)
 
   object Validation extends Enumeration {
     type Validation = Value

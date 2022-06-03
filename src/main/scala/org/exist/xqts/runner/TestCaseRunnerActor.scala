@@ -368,7 +368,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
                 }
               }
-              .map((x.uri.toString, _))
+              .map((x.uri.getStringValue, _))
               .map(_ +: results)
         }
       }

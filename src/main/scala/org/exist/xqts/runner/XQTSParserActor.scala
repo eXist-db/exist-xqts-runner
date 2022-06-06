@@ -237,6 +237,8 @@ object XQTSParserActor {
     val StaticTyping = FeatureVal("staticTyping")
     val TypedData = FeatureVal("typedData")
     val XPath_1_0_Compatibility = FeatureVal("xpath-1.0-compatibility")
+    val TransformXSLT = FeatureVal("fn-transform-XSLT")
+    val TransformXSLT_30 = FeatureVal("fn-transform-XSLT30")
   }
 
   /**

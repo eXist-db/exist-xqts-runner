@@ -508,6 +508,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               throw new XQTSParseException(s"No text captured for element: $ELEM_ASSERT_TYPE")
           }
           currentText = None
+          captureTexqt = false
 
         case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_XML) =>
           currentText
@@ -522,6 +523,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentFile = None
           currentIgnorePrefixes = None
           currentText = None
+          captureText = false
 
         case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_SERIALIZATION_MATCHES) =>
           currentText
@@ -536,6 +538,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentFile = None
           currentFlags = None
           currentText = None
+          captureText = false
 
         case END_ELEMENT if(asyncReader.getLocalName == ELEM_ASSERT_EMPTY) =>
           currentResult = currentResult.map(addAssertion(_)(AssertEmpty))

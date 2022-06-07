@@ -508,7 +508,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               throw new XQTSParseException(s"No text captured for element: $ELEM_ASSERT_TYPE")
           }
           currentText = None
-          captureTexqt = false
+          captureText = false
 
         case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_XML) =>
           currentText

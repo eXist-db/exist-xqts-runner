@@ -410,8 +410,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
           case \/-(results) =>
             x.role
               .flatMap(role => resolvedEnvironment.resolvedSources.find(_.path == x.file)
-                .map(resolvedSource => (role, resolvedSource.data))
-                .map { case (role, data) => SAXParser.parseXml(data).map(doc => (role.asInstanceOf[ExternalVariableRole].name, doc)) }
+                .map(resolvedSource => (role, resolvedSource.data, resolvedSource.path))
+                .map { case (role, data, path) => SAXParser.parseXml(data).map(doc => {
+                  doc.setDocumentURI(path.toUri().toString())
+                  (role.asInstanceOf[ExternalVariableRole].name, doc)
+                }
+                ) }
               )
               .map(_.map(result => result +: results))
               .getOrElse(-\/(ExistServerException(new IllegalStateException(s"Could not resolve source ${x.file}"))))

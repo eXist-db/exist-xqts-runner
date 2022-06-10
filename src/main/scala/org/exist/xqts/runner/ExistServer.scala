@@ -48,6 +48,9 @@ import org.exist.xqts.runner.XQTSParserActor.{DecimalFormat, Module, Namespace}
 import org.exist.xquery.value._
 import org.xml.sax.InputSource
 
+import java.util.concurrent.Executors
+import scala.concurrent.ExecutionContext
+
 object ExistServer {
   type ExecutionTime = Long
   type CompilationTime = Long
@@ -107,17 +110,21 @@ class ExistServer {
     * Get a connection to the eXist-db server.
     */
   def getConnection() : ExistConnection = {
+
+    val executorService = Executors.newSingleThreadExecutor()
+    val executionContext = ExecutionContext.fromExecutorService(executorService)
+
     val brokerRes = Resource.make {
       // build
-      IO.blocking(existServer.getBrokerPool.getBroker)
+      IO.delay(existServer.getBrokerPool.getBroker)
     } {
       // release
       broker =>
-        IO.blocking(broker.close()).handleErrorWith { t =>
+        IO.delay(broker.close()).handleErrorWith { t =>
           logger.warn(s"Error releasing DBBroker: ${t.getMessage}", t)
           IO.unit
         }
-    }
+    }.evalOn(executionContext)  // NOTE: eXist-db requires the broker to be acquired and released by the same thread.
     ExistConnection(brokerRes)
   }
 

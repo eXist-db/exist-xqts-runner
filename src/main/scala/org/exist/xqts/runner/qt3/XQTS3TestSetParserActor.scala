@@ -566,6 +566,8 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentResult = None
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_TEST_CASE) =>
+          currentTestCase = currentTestCase.map(testCase => testCase.copy(environment = 
+            if (testCase.environment.isEmpty) { Some(new Environment(testCase.name)) } else { testCase.environment }))
           currentTestCase match {
             case Some(testCase) =>
               if (testCases.isEmpty || testCases.contains(testCase.name)) {

@@ -31,7 +31,7 @@ import scalaz.\/
 import scalaz.syntax.either._
 import ExistServer.{CompilationTime, _}
 import cats.effect.unsafe.IORuntime
-import cats.effect.{IO, Resource}
+import cats.effect.{Clock, IO, Resource}
 import com.evolvedbinary.j8fu.function.{QuadFunctionE, TriFunctionE}
 import grizzled.slf4j.Logger
 
@@ -198,19 +198,19 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       Resource.make {
         // build
         for (
-          startCompilationTime <- IO.pure(System.currentTimeMillis());
-          maybeCompiledXQuery <- IO.blocking(Option(xqueryPool.borrowCompiledXQuery(broker, source)));
-          maybeCompiledXQueryContext <- IO.blocking(maybeCompiledXQuery.map(compiledXQuery => fnConfigureContext(compiledXQuery.getContext)));
-          endCompilationTime <- IO.pure(System.currentTimeMillis())
+          startCompilationTime <- Clock[IO].realTime.map(_.toMillis);
+          maybeCompiledXQuery <- IO.delay(Option(xqueryPool.borrowCompiledXQuery(broker, source)));
+          maybeCompiledXQueryContext <- IO.delay(maybeCompiledXQuery.map(compiledXQuery => fnConfigureContext(compiledXQuery.getContext)));
+          endCompilationTime <- Clock[IO].realTime.map(_.toMillis)
         ) yield maybeCompiledXQuery.zip(maybeCompiledXQueryContext).map{ case (compiledXQuery, compiledXQueryContext) => CompiledQuery(compiledXQuery, compiledXQueryContext, endCompilationTime - startCompilationTime)}
       } {
         // release
         _ match {
           case Some(compiledQuery) =>
             for (
-              _ <- IO.blocking(compiledQuery.xqueryContext.runCleanupTasks());
-              _ <- IO.blocking(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery))
-            ) yield ()
+              _ <- IO.delay(compiledQuery.xqueryContext.runCleanupTasks());
+              _ <- IO.delay(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery))
+            ) yield IO.unit
           case None =>
             IO.unit
         }
@@ -230,35 +230,33 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     def compileXQuery(broker: DBBroker, source: Source, fnConfigureContext: XQueryContext => XQueryContext, maybeXQueryPool: Option[XQueryPool]) : Resource[IO, CompiledQuery] = {
       val xqueryContextRes = Resource.make {
         // build
-        IO.blocking {
+        IO.delay {
           fnConfigureContext(new XQueryContext(broker.getBrokerPool()))
         }
       } {
         // release
         xqueryContext =>
-          xqueryContext.runCleanupTasks()
-          IO.unit
+          IO.delay(xqueryContext.runCleanupTasks())
       }
 
       xqueryContextRes.flatMap { xqueryContext =>
         Resource.make {
           // build
           for (
-            startCompilationTime <- IO.pure(System.currentTimeMillis());
+            startCompilationTime <- Clock[IO].realTime.map(_.toMillis);
             xqueryService <- getXQueryService(broker);
-            compiledXQuery <- IO.blocking(xqueryService.compile(xqueryContext, source));
-            endCompilationTime <- IO.pure(System.currentTimeMillis())
+            compiledXQuery <- IO.delay(xqueryService.compile(xqueryContext, source));
+            endCompilationTime <- Clock[IO].realTime.map(_.toMillis)
           )
           yield CompiledQuery(compiledXQuery, xqueryContext, endCompilationTime - startCompilationTime)
         } {
           // release
           compiledQuery =>
             maybeXQueryPool match {
-              case Some(xqueryPool) => {
-                xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery)
+              case Some(xqueryPool) =>
+                IO.delay(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery))
+              case None =>
                 IO.unit
-              }
-              case None => IO.unit
             }
         }
       }
@@ -311,7 +309,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       */
     def executeCompiledQuery(broker: DBBroker, xqueryService: XQuery, compiledQuery: CompiledQuery, contextSequence: Option[Sequence]): IO[ExistServerException \/ Result] = {
       def execute(broker: DBBroker, compiledQuery: CompiledQuery, executionStartTime: ExecutionTime, contextSequence: Option[Sequence]) : IO[ExistServerException \/ Result] = {
-        IO.blocking {
+        IO.delay {
           try {
             val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.getOrElse(null))
             Result(resultSequence, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime).right[ExistServerException]
@@ -324,7 +322,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       }
 
       for (
-        executionStartTime <- IO.pure(System.currentTimeMillis());
+        executionStartTime <- Clock[IO].realTime.map(_.toMillis);
         errorOrResult <- execute(broker, compiledQuery, executionStartTime, contextSequence)
           .handleErrorWith(fromExecutionException(_, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime))
       ) yield errorOrResult
@@ -516,7 +514,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     val writerRes = Resource.make(IO { new StringWriter() })(writer => IO { writer.close() })
 
     val serializationIO : IO[String] = brokerRes.both(writerRes).use { case (broker, writer) =>
-      IO.blocking {
+      IO.delay {
         val serializer = new XQuerySerializer(broker, outputProperties, writer)
         serializer.serialize(sequence)
         writer.getBuffer.toString

@@ -32,6 +32,7 @@ import scalaz.syntax.either._
 import ExistServer.{CompilationTime, _}
 import cats.effect.unsafe.IORuntime
 import cats.effect.{Clock, IO, Resource}
+import cats.syntax.all._
 import com.evolvedbinary.j8fu.function.{QuadFunctionE, TriFunctionE}
 import grizzled.slf4j.Logger
 
@@ -309,6 +310,12 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       */
     def executeCompiledQuery(broker: DBBroker, xqueryService: XQuery, compiledQuery: CompiledQuery, contextSequence: Option[Sequence]): IO[ExistServerException \/ Result] = {
       def execute(broker: DBBroker, compiledQuery: CompiledQuery, executionStartTime: ExecutionTime, contextSequence: Option[Sequence]) : IO[ExistServerException \/ Result] = {
+//        IO.delay(xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.getOrElse(null)))
+//          .flatMap(resultSequence => Clock[IO].realTime.map(_.toMillis).map((_, resultSequence)))
+//          .map { case (executionEndTime, resultSequence) => Result(resultSequence, compiledQuery.compilationTime, executionEndTime - executionStartTime).right[ExistServerException] }
+//          .recoverWith { case e: StackOverflowError =>
+//            IO.delay { ExistServerException(e, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime).left }
+//          }
         IO.delay {
           try {
             val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.getOrElse(null))
@@ -324,7 +331,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       for (
         executionStartTime <- Clock[IO].realTime.map(_.toMillis);
         errorOrResult <- execute(broker, compiledQuery, executionStartTime, contextSequence)
-          .handleErrorWith(fromExecutionException(_, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime))
+          .handleError(fromExecutionException(_, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime))
       ) yield errorOrResult
     }
 
@@ -342,8 +349,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       *
       * @return either a {@link Result}, or a {@link ExistServerException}.
       */
-    def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime) : IO[ExistServerException \/ Result] = {
-      IO {
+    def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime) : ExistServerException \/ Result = {
         if (t.isInstanceOf[XPathException]) {
           Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime).right[ExistServerException]
         } else if (t.isInstanceOf[ExistServerException]) {
@@ -351,7 +357,6 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
         } else {
           ExistServerException(t, compilationTime, executionTime).left[Result]
         }
-      }
     }
 
     /**
@@ -429,42 +434,101 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       context
     }
 
-    val executeQueryIo: IO[ExistServerException \/ Result] = brokerRes.use { broker =>
-
-      val source = new StringSource(query)
-
-      val maybeXQueryPoolIo : IO[Option[XQueryPool]] = IO.pure(cacheCompiled).flatMap { _ match {
-        case true => getXQueryPool(broker).map(Some(_))
-        case false => IO.none
-      }}
-
-      getXQueryService(broker).flatMap { xqueryService =>
-          maybeXQueryPoolIo.flatMap { maybeXqueryPool =>
-
-            val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
-
-            compiledXQuery(broker, source, fnConfigureContext, maybeXqueryPool)
-              .use(compiledQuery => executeCompiledQuery(broker, xqueryService, compiledQuery, contextSequence))
-              .handleErrorWith(throwable =>
-                fromExecutionException(throwable, 0L, 0L)
-              ) // We use 0L, 0L because an error here was caused by compilation, so there was no complete compilation, and also no execution
-          }
-      }
-    }
+//    val executeQueryIo: IO[ExistServerException \/ Result] = brokerRes.use { broker =>
+//
+//      val source = new StringSource(query)
+//
+//      val maybeXQueryPoolIo : IO[Option[XQueryPool]] = IO.pure(cacheCompiled).flatMap { _ match {
+//        case true => getXQueryPool(broker).map(Some(_))
+//        case false => IO.none
+//      }}
+//
+//      getXQueryService(broker).flatMap { xqueryService =>
+//          maybeXQueryPoolIo.flatMap { maybeXqueryPool =>
+//
+//            val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
+//
+//            compiledXQuery(broker, source, fnConfigureContext, maybeXqueryPool)
+//              .use(compiledQuery => executeCompiledQuery(broker, xqueryService, compiledQuery, contextSequence))
+//              .handleError(throwable =>
+//                fromExecutionException(throwable, 0L, 0L)
+//              ) // We use 0L, 0L because an error here was caused by compilation, so there was no complete compilation, and also no execution
+//          }
+//      }
+//    }
 
     // TODO(AR) should we just return IO from here and allow the caller to do the execution?
     // run compilation and execution
-    val executorRes : IO[ExistServerException \/ Result] = Resource.make {
+//    val executorRes : IO[ExistServerException \/ Result] = Resource.make {
+//      // build
+//      IO.delay(SingleThreadedExecutorPool.borrowSingleThreadedExecutor())
+//    } {
+//      // release
+//      singleThreadedExecutionContext =>
+//        IO.delay(SingleThreadedExecutorPool.returnSingleThreadedExecutor(singleThreadedExecutionContext))
+//    }.use(singleThreadedExecutor => executeQueryIo.evalOn(singleThreadedExecutor.executionContext))  // NOTE: eXist-db requires the broker to be acquired, used (e.g XQuery compilation and execution), and then released by the same thread.
+
+    val executorRes : Resource[IO, SingleThreadedExecutor] = Resource.make {
       // build
       IO.delay(SingleThreadedExecutorPool.borrowSingleThreadedExecutor())
     } {
       // release
       singleThreadedExecutionContext =>
         IO.delay(SingleThreadedExecutorPool.returnSingleThreadedExecutor(singleThreadedExecutionContext))
-    }.use(singleThreadedExecutor => executeQueryIo.evalOn(singleThreadedExecutor.executionContext))  // NOTE: eXist-db requires the broker to be acquired, used (e.g XQuery compilation and execution), and then released by the same thread.
+    }
+
+    val source = new StringSource(query)
+    val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
+
+    //TODO(AR) best attempt so far by Adam...
+//    val res = executorRes.flatMap { singleThreadedExecutor =>
+//
+//      brokerRes
+//        .evalOn(singleThreadedExecutor.executionContext)   // SHOULD evalOn be here? helps with acquire/release
+//        .evalMap { broker =>
+//          IO.pure(cacheCompiled)
+//            .ifM(getXQueryPool(broker).map(Some(_)), IO.none)
+//            .flatMap { case maybeXqueryPool =>
+//              getXQueryService(broker).map { xqueryService =>
+//                (broker, maybeXqueryPool, xqueryService)
+//              }
+//            }
+//        }.flatMap { case (broker, maybeXqueryPool, xqueryService) =>
+//          compileXQuery(broker, source, fnConfigureContext, maybeXqueryPool)
+//            .evalMap(compiledQuery => executeCompiledQuery(broker, xqueryService, compiledQuery, contextSequence))
+//            .handleError(throwable =>
+//              fromExecutionException(throwable, 0L, 0L)
+//            ) // We use 0L, 0L because an error here was caused by compilation, so there was no complete compilation, and also no execution
+//        } //.evalOn(singleThreadedExecutor.executionContext)   // or SHOULD evalOn be here? helps with acquire/execute
+//
+//    }
+//
+//    implicit val runtime = IORuntime.global
+//    val queryResult = res.use(IO.pure(_)).unsafeRunSync()
+//    queryResult
+
+    //TODO(AR) suggestions from @BalmungSan and @armanbilge
+    val res: IO[\/[ExistServerException, Result]] =
+      executorRes.use { singleEC =>
+        val compiledQueryRes =
+          for {
+            broker <- brokerRes
+            xqueryPool <- Resource.eval(getXQueryPool(broker))
+            compiledQuery <- compileXQuery(broker, source, fnConfigureContext, Option(xqueryPool))
+          } yield (broker, compiledQuery)
+
+        compiledQueryRes.evalOn(singleEC.executionContext).use {
+          case (broker, compiledQuery) =>
+            getXQueryService(broker).flatMap { xqueryService =>
+              executeCompiledQuery(broker, xqueryService, compiledQuery, contextSequence)
+            }.evalOn(singleEC.executionContext)
+        }.handleError(throwable =>
+          fromExecutionException(throwable, 0L, 0L)
+        ) // NOTE(AR): We use 0L, 0L because an error here was ACTUALLY caused by compilation (execution errors are handled inside executeCompiledQuery), so there was no complete compilation, and also no execution
+      }
 
     implicit val runtime = IORuntime.global
-    val queryResult = executorRes.unsafeRunSync()
+    val queryResult = res.unsafeRunSync()
     queryResult
   }
 

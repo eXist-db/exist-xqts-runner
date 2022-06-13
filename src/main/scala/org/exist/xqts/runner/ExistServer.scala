@@ -48,7 +48,7 @@ import org.exist.xqts.runner.XQTSParserActor.{DecimalFormat, Module, Namespace}
 import org.exist.xquery.value._
 import org.xml.sax.InputSource
 
-import java.util.concurrent.Executors
+import java.util.concurrent.{ConcurrentLinkedDeque, ExecutorService, Executors}
 import scala.concurrent.ExecutionContext
 
 object ExistServer {
@@ -96,7 +96,8 @@ object ExistServer {
   * Encapsulation of operations for an exist-db server.
   */
 class ExistServer {
-  private lazy val existServer = new ExistEmbeddedServer(true, true)
+  private val existServer = new ExistEmbeddedServer(true, true)
+  private val brokerExecutorPool = new ConcurrentLinkedDeque[(ExecutorService, ExecutionContext)]()
   private val logger = Logger(classOf[ExistServer])
 
   /**
@@ -111,8 +112,29 @@ class ExistServer {
     */
   def getConnection() : ExistConnection = {
 
-    val executorService = Executors.newSingleThreadExecutor()
-    val executionContext = ExecutionContext.fromExecutorService(executorService)
+    def borrowSingleThreadedExecutionContext() : (ExecutorService, ExecutionContext) = {
+      def createSingleThreadedExecutionContext() : (ExecutorService, ExecutionContext) = {
+        val executorService = Executors.newSingleThreadExecutor()
+        val executionContext = ExecutionContext.fromExecutorService(executorService)
+        (executorService, executionContext)
+      }
+
+      val maybeBrokerExecutor = Option(brokerExecutorPool.poll())
+      maybeBrokerExecutor.getOrElse(createSingleThreadedExecutionContext())
+    }
+
+    def returnSingleThreadedExecutionContext(singleThreadedExecutionContext: (ExecutorService, ExecutionContext)) : Unit = {
+      brokerExecutorPool.push(singleThreadedExecutionContext)
+    }
+
+    val executorRes = Resource.make {
+      // build
+      IO.delay(borrowSingleThreadedExecutionContext())
+    } {
+      // release
+      singleThreadedExecutionContext =>
+        IO.delay(returnSingleThreadedExecutionContext(singleThreadedExecutionContext))
+    }
 
     val brokerRes = Resource.make {
       // build
@@ -124,8 +146,14 @@ class ExistServer {
           logger.warn(s"Error releasing DBBroker: ${t.getMessage}", t)
           IO.unit
         }
-    }.evalOn(executionContext)  // NOTE: eXist-db requires the broker to be acquired and released by the same thread.
-    ExistConnection(brokerRes)
+    }
+
+    val res = executorRes.flatMap(singleThreadedExecutionContext =>
+      brokerRes.evalOn(singleThreadedExecutionContext._2)
+    )
+
+    // NOTE: eXist-db requires the broker to be acquired and released by the same thread.
+    ExistConnection(res)
   }
 
   /**

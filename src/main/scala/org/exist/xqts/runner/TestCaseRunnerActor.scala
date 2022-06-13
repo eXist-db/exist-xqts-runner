@@ -317,7 +317,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       case Some(env) =>
         env.sources.filter(_.role.filter(_ == ".").nonEmpty).headOption
           .map(resolveSource(resolvedEnvironment, _))
-          .map(_.flatMap(resolvedSource => connection.parseXml(resolvedSource.data)).map(doc => Option(doc.asInstanceOf[Sequence])))
+          .map(_.flatMap(resolvedSource => SAXParser.parseXml(resolvedSource.data)).map(doc => Option(doc.asInstanceOf[Sequence])))
           .getOrElse(\/-[ExistServerException, Option[Sequence]](Option.empty[Sequence]))
 
       case None => \/-[ExistServerException, Option[Sequence]](Option.empty[Sequence])
@@ -363,7 +363,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                   case resolveError@ -\/(_) => resolveError
                   case \/-(resolvedSources) =>
                     resolveSource(resolvedEnvironment, y)
-                      .flatMap(resolveSource => connection.parseXml(resolveSource.data))
+                      .flatMap(resolveSource => SAXParser.parseXml(resolveSource.data))
                       .map(_ +: resolvedSources)
 
                 }
@@ -396,7 +396,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
             x.uri
               .flatMap(uri => resolvedEnvironment.resolvedSources.find(_.path == x.file)
                 .map(resolvedSource => (uri, resolvedSource.data))
-                .map { case (uri, data) => connection.parseXml(data).map(doc => (uri, doc)) }
+                .map { case (uri, data) => SAXParser.parseXml(data).map(doc => (uri, doc)) }
               )
               .map(_.map(result => result +: results))
               .getOrElse(-\/(ExistServerException(new IllegalStateException(s"Could not resolve source ${x.file}"))))

@@ -29,7 +29,6 @@ import org.exist.xquery.{CompiledXQuery, Function, XPathException, XQuery, XQuer
 import scala.util.{Failure, Success, Try}
 import scalaz.\/
 import scalaz.syntax.either._
-import scalaz.syntax.std.either._
 import ExistServer.{CompilationTime, _}
 import cats.effect.unsafe.IORuntime
 import cats.effect.{IO, Resource}
@@ -37,16 +36,12 @@ import com.evolvedbinary.j8fu.function.{QuadFunctionE, TriFunctionE}
 import grizzled.slf4j.Logger
 
 import javax.xml.namespace.QName
-import javax.xml.parsers.SAXParserFactory
 import javax.xml.transform.OutputKeys
-import org.exist.Namespaces
-import org.exist.dom.memtree.{DocumentImpl, SAXAdapter}
+import org.exist.dom.memtree.DocumentImpl
 import org.exist.storage.txn.Txn
-import org.apache.commons.io.input.UnsynchronizedByteArrayInputStream
 import org.exist.xmldb.XmldbURI
 import org.exist.xqts.runner.XQTSParserActor.{DecimalFormat, Module, Namespace}
 import org.exist.xquery.value._
-import org.xml.sax.InputSource
 
 object ExistServer {
   type ExecutionTime = Long
@@ -107,15 +102,6 @@ class ExistServer {
     * Get a connection to the eXist-db server.
     */
   def getConnection() : ExistConnection = {
-    val executorRes = Resource.make {
-      // build
-      IO.delay(SingleThreadedExecutorPool.borrowSingleThreadedExecutor())
-    } {
-      // release
-      singleThreadedExecutionContext =>
-        IO.delay(SingleThreadedExecutorPool.returnSingleThreadedExecutor(singleThreadedExecutionContext))
-    }
-
     val brokerRes = Resource.make {
       // build
       IO.delay(existServer.getBrokerPool.getBroker)
@@ -128,12 +114,7 @@ class ExistServer {
         }
     }
 
-    val res = executorRes.flatMap(singleThreadedExecutor =>
-      // NOTE: eXist-db requires the broker to be acquired and released by the same thread.
-      brokerRes.evalOn(singleThreadedExecutor.executionContext)
-    )
-
-    ExistConnection(res)
+    ExistConnection(brokerRes)
   }
 
   /**
@@ -146,9 +127,6 @@ class ExistServer {
 
 private object ExistConnection {
   def apply(brokerRes: Resource[IO, DBBroker]) = new ExistConnection(brokerRes)
-
-  private val saxParserFactory = SAXParserFactory.newInstance()
-  saxParserFactory.setNamespaceAware(true)
 }
 
 /**
@@ -478,8 +456,17 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
 
     // TODO(AR) should we just return IO from here and allow the caller to do the execution?
     // run compilation and execution
+    val executorRes : IO[ExistServerException \/ Result] = Resource.make {
+      // build
+      IO.delay(SingleThreadedExecutorPool.borrowSingleThreadedExecutor())
+    } {
+      // release
+      singleThreadedExecutionContext =>
+        IO.delay(SingleThreadedExecutorPool.returnSingleThreadedExecutor(singleThreadedExecutionContext))
+    }.use(singleThreadedExecutor => executeQueryIo.evalOn(singleThreadedExecutor.executionContext))  // NOTE: eXist-db requires the broker to be acquired, used (e.g XQuery compilation and execution), and then released by the same thread.
+
     implicit val runtime = IORuntime.global
-    val queryResult = executeQueryIo.unsafeRunSync()
+    val queryResult = executorRes.unsafeRunSync()
     queryResult
   }
 
@@ -540,36 +527,5 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     // TODO(AR) should we just return IO from here and allow the caller to do the execution?
     implicit val runtime = IORuntime.global
     serializationIO.unsafeRunSync()
-  }
-
-  /**
-    * Parses a String representation of an XML Document
-    * to an in-memory DOM.
-    *
-    * @param xml the string of xml to parse.
-    *
-    * @return either the Document object, or an exception.
-    */
-  def parseXml(xml: Array[Byte]): ExistServerException \/ DocumentImpl = {
-    val xmlRes = Resource.make(IO { new UnsynchronizedByteArrayInputStream(xml) })(is => IO { is.close() })
-
-    val parseIO = xmlRes.use(is => IO.blocking {
-      val saxAdapter = new SAXAdapter()
-      val saxParser = ExistConnection.saxParserFactory.newSAXParser()
-      val xmlReader = saxParser.getXMLReader()
-
-      xmlReader.setContentHandler(saxAdapter)
-      xmlReader.setProperty(Namespaces.SAX_LEXICAL_HANDLER, saxAdapter)
-      xmlReader.parse(new InputSource(is))
-
-      saxAdapter.getDocument
-    })
-
-    // TODO(AR) should we just return IO from here and allow the caller to do the execution?
-    implicit val runtime = IORuntime.global
-    parseIO
-      .attempt
-      .map(_.toDisjunction.leftMap(ExistServerException(_)))
-      .unsafeRunSync()
   }
 }

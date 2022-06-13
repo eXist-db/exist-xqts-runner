@@ -27,13 +27,13 @@ import scalaz.{-\/, \/, \/-}
 import scalaz.syntax.either._
 import TestCaseRunnerActor._
 import IgnorableWrapper._
-import cats.effect.unsafe.IORuntime
 import org.exist.xqts.runner.ExistServer._
 import org.exist.xquery.value._
 
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.regex.Pattern
 import cats.effect.IO
+import cats.effect.unsafe.IORuntime
 import grizzled.slf4j.Logger
 import org.exist.dom.memtree.DocumentImpl
 import org.exist.xqts.runner.AssertTypeParser.TypeNode.{ExistTypeDescription, ExplicitExistTypeDescription, WildcardExistTypeDescription}
@@ -201,7 +201,6 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the result of executing the XQTS test-case.
     */
   private def runTestCaseWithExist(testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : TestResult = {
-    val testCaseIO = IO.blocking {
       try {
         runTestCase(existServer.getConnection(), testSetName, testCase, resolvedEnvironment)
       } catch {
@@ -209,12 +208,6 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
           System.err.println(s"OutOfMemoryError: $testSetName ${testCase.name}")
           throw e
       }
-    }
-
-    implicit val runtime = IORuntime.global
-
-    // execute test case IO
-    testCaseIO.unsafeRunSync()
   }
 
   /**

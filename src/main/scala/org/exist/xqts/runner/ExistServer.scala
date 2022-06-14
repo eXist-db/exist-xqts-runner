@@ -442,7 +442,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
           for {
             broker <- brokerRes
             maybeXqueryPool <- Resource.eval(IO.pure(cacheCompiled).ifM(getXQueryPool(broker).map(Some(_)), IO.none))
-            compiledQuery <- compileXQuery(broker, source, fnConfigureContext, maybeXqueryPool)
+            compiledQuery <- compiledXQuery(broker, source, fnConfigureContext, maybeXqueryPool)
           } yield (broker, compiledQuery)
 
         compiledQueryRes.evalOn(singleThreadedExecutor.executionContext).use {

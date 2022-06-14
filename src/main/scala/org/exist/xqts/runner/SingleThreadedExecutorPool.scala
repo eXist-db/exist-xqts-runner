@@ -47,12 +47,12 @@ object SingleThreadedExecutorPool {
     Resource.make {
       // build
       IO.delay(SingleThreadedExecutorPool.borrowSingleThreadedExecutor())
-        .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Build"))
+//        .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Build"))  // enable for debugging
     } {
       // release
       singleThreadedExecutionContext =>
         IO.delay(SingleThreadedExecutorPool.returnSingleThreadedExecutor(singleThreadedExecutionContext))
-          .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Release"))
+//          .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Release"))  // enable for debugging
     }
   }
 }

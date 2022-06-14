@@ -106,14 +106,15 @@ class ExistServer {
     val brokerRes = Resource.make {
       // build
       IO.delay(existServer.getBrokerPool.getBroker)
-        .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Acquire"))
+//        .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Acquire"))  // enable for debugging
     } {
       // release
       broker =>
         IO.delay(broker.close()).handleErrorWith { t =>
           logger.warn(s"Error releasing DBBroker: ${t.getMessage}", t)
           IO.unit
-        }.flatTap(_ => IOUtil.printlnExecutionContext("Broker/Release"))
+        }
+//          .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Release"))  // enable for debugging
     }
 
     ExistConnection(brokerRes)
@@ -199,20 +200,22 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     def compiledXQueryFromPool(broker: DBBroker, xqueryPool: XQueryPool, source: Source, fnConfigureContext: XQueryContext => XQueryContext) : Resource[IO, Option[CompiledQuery]] = {
       Resource.make {
         // build
-        for (
-          startCompilationTime <- Clock[IO].realTime.map(_.toMillis);
-          maybeCompiledXQuery <- IO.delay(Option(xqueryPool.borrowCompiledXQuery(broker, source))).flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Borrow"));
-          maybeCompiledXQueryContext <- IO.delay(maybeCompiledXQuery.map(compiledXQuery => fnConfigureContext(compiledXQuery.getContext)));
+        for {
+          startCompilationTime <- Clock[IO].realTime.map(_.toMillis)
+          maybeCompiledXQuery <- IO.delay(Option(xqueryPool.borrowCompiledXQuery(broker, source)))
+//            .flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Borrow"))  // enable for debugging
+          maybeCompiledXQueryContext <- IO.delay(maybeCompiledXQuery.map(compiledXQuery => fnConfigureContext(compiledXQuery.getContext)))
           endCompilationTime <- Clock[IO].realTime.map(_.toMillis)
-        ) yield maybeCompiledXQuery.zip(maybeCompiledXQueryContext).map{ case (compiledXQuery, compiledXQueryContext) => CompiledQuery(compiledXQuery, compiledXQueryContext, endCompilationTime - startCompilationTime)}
+        } yield maybeCompiledXQuery.zip(maybeCompiledXQueryContext).map{ case (compiledXQuery, compiledXQueryContext) => CompiledQuery(compiledXQuery, compiledXQueryContext, endCompilationTime - startCompilationTime)}
       } {
         // release
         _ match {
           case Some(compiledQuery) =>
-            for (
-              _ <- IO.delay(compiledQuery.xqueryContext.runCleanupTasks());
-              _ <- IO.delay(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery)).flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Return"))
-            ) yield IO.unit
+            for {
+              _ <- IO.delay(compiledQuery.xqueryContext.runCleanupTasks())
+              _ <- IO.delay(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery))
+//                .flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Return"))  // enable for debugging
+            } yield IO.unit
           case None =>
             IO.unit
         }
@@ -233,12 +236,12 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       val xqueryContextRes = Resource.make {
         // build
         IO.delay(fnConfigureContext(new XQueryContext(broker.getBrokerPool())))
-          .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Build"))
+//          .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Build"))  // enable for debugging
       } {
         // release
         xqueryContext =>
           IO.delay(xqueryContext.runCleanupTasks())
-            .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Release"))
+//            .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Release"))  // enable for debugging
       }
 
       xqueryContextRes.flatMap { xqueryContext =>
@@ -326,7 +329,8 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
             case e: StackOverflowError =>
               ExistServerException(e, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime).left[Result]
           }
-        }.flatTap(_ => IOUtil.printlnExecutionContext("ExecuteQuery"))
+        }
+//          .flatTap(_ => IOUtil.printlnExecutionContext("ExecuteQuery"))  // enable for debugging
       }
 
       for (

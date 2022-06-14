@@ -40,7 +40,6 @@ import org.exist.xqts.runner.XQTSParserActor.XsdVersion.XsdVersion
 import org.exist.xqts.runner.XQTSParserActor.{missingDependencies, _}
 import org.exist.xqts.runner.XQTSRunnerActor.{ParsedTestSet, ParsingTestSet, RanTestCase, RunningTestCase}
 import org.exist.xqts.runner.qt3.XQTS3TestSetParserActor._
-import scalaz.syntax.either._
 
 import scala.annotation.tailrec
 
@@ -395,7 +394,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           captureText = true
 
         case END_ELEMENT if (currentTestCase.nonEmpty && asyncReader.getLocalName == ELEM_TEST) =>
-          currentTestCase = currentTestCase.map(testCase => testCase.copy(test = currentText.flatMap(text => Some(text.left[Path])).orElse(currentFile.map(_.right[String]))))
+          currentTestCase = currentTestCase.map(testCase => testCase.copy(test = currentText.flatMap(text => Some(Left(text))).orElse(currentFile.map(Right(_)))))
           currentFile = None
           currentText = None
           captureText = false
@@ -516,8 +515,8 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
         case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_XML) =>
           currentText
-              .flatMap(text => Some(text.left[Path]))
-              .orElse(currentFile.map(_.right[String]))
+              .flatMap(text => Some(Left(text)))
+              .orElse(currentFile.map(Right(_)))
               .map(AssertXml(_, currentIgnorePrefixes.getOrElse(false))) match {
             case Some(assertXml) =>
               currentResult = currentResult.map(addAssertion(_)(assertXml))
@@ -531,8 +530,8 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
         case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_SERIALIZATION_MATCHES) =>
           currentText
-            .flatMap(text => Some(text.left[Path]))
-            .orElse(currentFile.map(_.right[String]))
+            .flatMap(text => Some(Left(text)))
+            .orElse(currentFile.map(Right(_)))
             .map(SerializationMatches(_, currentFlags)) match {
             case Some(serializationMatched) =>
               currentResult = currentResult.map(addAssertion(_)(serializationMatched))

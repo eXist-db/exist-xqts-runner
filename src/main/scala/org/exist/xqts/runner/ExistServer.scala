@@ -27,8 +27,6 @@ import org.exist.util.serializer.XQuerySerializer
 import org.exist.xquery.{CompiledXQuery, Function, XPathException, XQuery, XQueryContext}
 
 import scala.util.{Failure, Success, Try}
-import scalaz.\/
-import scalaz.syntax.either._
 import ExistServer.{CompilationTime, _}
 import cats.effect.unsafe.IORuntime
 import cats.effect.{Clock, IO, Resource}
@@ -51,10 +49,10 @@ object ExistServer {
   case class ExistServerException(t: Throwable, compilationTime: CompilationTime = 0, executionTime: ExecutionTime = 0) extends Exception(t)
 
   object Result {
-    def apply(queryError: QueryError, compilationTime: CompilationTime, executionTime: ExecutionTime) = new Result(queryError.left, compilationTime, executionTime)
-    def apply(queryResult: QueryResult, compilationTime: CompilationTime, executionTime: ExecutionTime) = new Result(queryResult.right, compilationTime, executionTime)
+    def apply(queryError: QueryError, compilationTime: CompilationTime, executionTime: ExecutionTime) = new Result(Left(queryError), compilationTime, executionTime)
+    def apply(queryResult: QueryResult, compilationTime: CompilationTime, executionTime: ExecutionTime) = new Result(Right(queryResult), compilationTime, executionTime)
   }
-  case class Result(result: QueryError \/ QueryResult, compilationTime: CompilationTime, executionTime: ExecutionTime)
+  case class Result(result: Either[QueryError, QueryResult], compilationTime: CompilationTime, executionTime: ExecutionTime)
 
   type QueryResult = Sequence
   object QueryError {
@@ -67,13 +65,13 @@ object ExistServer {
     *
     * @return A reference to the server, or an exception.
     */
-  def start(): Throwable \/ ExistServer = {
+  def start(): Either[Throwable, ExistServer] = {
     val server = new ExistServer
     server.startServer() match {
       case Success(_) =>
-        server.right
+        Right(server)
       case Failure(e) =>
-        e.left
+        Left(e)
     }
   }
 
@@ -155,7 +153,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     *
     * @return the result or executing the query, or an exception.
     */
-  def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false) : ExistServerException \/ Result = {
+  def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false) : Either[ExistServerException, Result] = {
     /**
       * Gets the XQuery Pool.
       *
@@ -312,16 +310,16 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       *
       * @return the result of the query, or an exception.
       */
-    def executeCompiledQuery(broker: DBBroker, xqueryService: XQuery, compiledQuery: CompiledQuery, contextSequence: Option[Sequence]): IO[ExistServerException \/ Result] = {
-      def execute(broker: DBBroker, compiledQuery: CompiledQuery, executionStartTime: ExecutionTime, contextSequence: Option[Sequence]) : IO[ExistServerException \/ Result] = {
+    def executeCompiledQuery(broker: DBBroker, xqueryService: XQuery, compiledQuery: CompiledQuery, contextSequence: Option[Sequence]): IO[Either[ExistServerException, Result]] = {
+      def execute(broker: DBBroker, compiledQuery: CompiledQuery, executionStartTime: ExecutionTime, contextSequence: Option[Sequence]) : IO[Either[ExistServerException, Result]] = {
         IO.delay {
           try {
-            val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.getOrElse(null))
-            Result(resultSequence, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime).right[ExistServerException]
+            val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.orNull)
+            Right(Result(resultSequence, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime))
           } catch {
             // NOTE(AR): bugs in eXist-db's XQuery implementation can produce a StackOverflowError - handle as any other server exception
             case e: StackOverflowError =>
-              ExistServerException(e, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime).left[Result]
+              Left(ExistServerException(e, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime))
           }
         }
 //          .flatTap(_ => IOUtil.printlnExecutionContext("ExecuteQuery"))  // enable for debugging
@@ -348,13 +346,13 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       *
       * @return either a {@link Result}, or a {@link ExistServerException}.
       */
-    def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime) : ExistServerException \/ Result = {
+    def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime) : Either[ExistServerException, Result] = {
         if (t.isInstanceOf[XPathException]) {
-          Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime).right[ExistServerException]
+          Right(Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime))
         } else if (t.isInstanceOf[ExistServerException]) {
-          t.asInstanceOf[ExistServerException].left[Result] // pass-through
+          Left(t.asInstanceOf[ExistServerException]) // pass-through
         } else {
-          ExistServerException(t, compilationTime, executionTime).left[Result]
+          Left(ExistServerException(t, compilationTime, executionTime))
         }
     }
 
@@ -436,7 +434,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     val source = new StringSource(query)
     val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
 
-    val res: IO[\/[ExistServerException, Result]] =
+    val res: IO[Either[ExistServerException, Result]] =
       SingleThreadedExecutorPool.newResource().use { singleThreadedExecutor =>
         val compiledQueryRes =
           for {
@@ -461,7 +459,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     queryResult
   }
 
-  // TODO(AR) should return Throwable \/ String type
+  // TODO(AR) should return Either[Throwable, String] type
   /**
     * Serializes a Sequence to a String
     * using Adaptive serialization.
@@ -477,7 +475,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     sequenceToString(sequence, outputProperties)
   }
 
-  // TODO(AR) should return Throwable \/ String type
+  // TODO(AR) should return Either[Throwable, String] type
   /**
     * Serializes a Sequence to a String
     * using XML serialization.
@@ -490,7 +488,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     sequenceToString(sequence, new Properties())
   }
 
-  // TODO(AR) should return Throwable \/ String type
+  // TODO(AR) should return Either[Throwable, String] type
   /**
     * Serializes a Sequence to a String.
     *

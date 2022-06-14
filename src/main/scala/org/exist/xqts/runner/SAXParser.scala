@@ -18,14 +18,13 @@
 package org.exist.xqts.runner
 
 import cats.effect.{IO, Resource}
+import cats.syntax.either._
 import cats.effect.unsafe.IORuntime
 import org.apache.commons.io.input.UnsynchronizedByteArrayInputStream
 import org.exist.Namespaces
 import org.exist.dom.memtree.{DocumentImpl, SAXAdapter}
 import org.exist.xqts.runner.ExistServer.ExistServerException
 import org.xml.sax.InputSource
-import scalaz.syntax.std.either._
-import scalaz.\/
 
 import javax.xml.parsers.SAXParserFactory
 
@@ -41,7 +40,7 @@ object SAXParser {
     *
     * @return either the Document object, or an exception.
     */
-  def parseXml(xml: Array[Byte]): ExistServerException \/ DocumentImpl = {
+  def parseXml(xml: Array[Byte]): Either[ExistServerException, DocumentImpl] = {
     val xmlRes = Resource.make(IO { new UnsynchronizedByteArrayInputStream(xml) })(is => IO { is.close() })
 
     val parseIO = xmlRes.use(is => IO.blocking {
@@ -58,9 +57,10 @@ object SAXParser {
 
     // TODO(AR) should we just return IO from here and allow the caller to do the execution?
     implicit val runtime = IORuntime.global
+
     parseIO
       .attempt
-      .map(_.toDisjunction.leftMap(ExistServerException(_)))
+      .map(_.leftMap(ExistServerException(_)))
       .unsafeRunSync()
   }
 }

@@ -568,19 +568,27 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     * @return the result of serializing the sequence.
     */
   def sequenceToString(sequence: Sequence, outputProperties: Properties): String = {
-    val writerRes = Resource.make(IO { new StringWriter() })(writer => IO { writer.close() })
 
-    val serializationIO : IO[String] = brokerRes.both(writerRes).use { case (broker, writer) =>
-      IO.delay {
-        val serializer = new XQuerySerializer(broker, outputProperties, writer)
-        serializer.serialize(sequence)
-        writer.getBuffer.toString
-          .replace("\r", "").replace("\n", ", ")  // further improves the output for expected value messages
+    val res: IO[String] = SingleThreadedExecutorPool.newResource().use { singleThreadedExecutor =>
+      val writerRes =
+        for {
+          broker <- brokerRes
+          writer <- Resource.make(IO.delay { new StringWriter() })(writer => IO.delay { writer.close() })
+        } yield (broker, writer)
+
+      writerRes.evalOn(singleThreadedExecutor.executionContext).use {
+        case (broker, writer) =>
+          IO.delay {
+            val serializer = new XQuerySerializer(broker, outputProperties, writer)
+            serializer.serialize(sequence)
+            writer.getBuffer.toString
+              .replace("\r", "").replace("\n", ", ")  // further improves the output for expected value messages
+          }.evalOn(singleThreadedExecutor.executionContext)
       }
     }
 
     // TODO(AR) should we just return IO from here and allow the caller to do the execution?
     implicit val runtime = IORuntime.global
-    serializationIO.unsafeRunSync()
+    res.unsafeRunSync()
   }
 }

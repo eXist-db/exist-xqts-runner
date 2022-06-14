@@ -24,6 +24,14 @@ import scala.concurrent.ExecutionContext
 
 case class SingleThreadedExecutor(executorService: ExecutorService, executionContext: ExecutionContext)
 
+/**
+  * eXist-db requires the broker to be acquired, used (e.g XQuery compilation and execution),
+  * and then released by the same thread.
+  *
+  * Therefore we create a SingleThreadExecutorPool whereby we have a pool of
+  * SingleThreadedExecutor that can be used for processing an Acquire, Compile, Execute, and Release
+  * sequence of actions against eXist-db all on the same thread.
+  */
 object SingleThreadedExecutorPool {
 
   private val brokerExecutorPool = new ConcurrentLinkedDeque[SingleThreadedExecutor]()

@@ -17,6 +17,8 @@
 
 package org.exist.xqts.runner
 
+import cats.effect.{IO, Resource}
+
 import java.util.concurrent.{ConcurrentLinkedDeque, ExecutorService, Executors}
 import scala.concurrent.ExecutionContext
 
@@ -39,5 +41,18 @@ object SingleThreadedExecutorPool {
 
   def returnSingleThreadedExecutor(singleThreadedExecutor: SingleThreadedExecutor) : Unit = {
     brokerExecutorPool.push(singleThreadedExecutor)
+  }
+
+  def newResource() : Resource[IO, SingleThreadedExecutor] = {
+    Resource.make {
+      // build
+      IO.delay(SingleThreadedExecutorPool.borrowSingleThreadedExecutor())
+        .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Build"))
+    } {
+      // release
+      singleThreadedExecutionContext =>
+        IO.delay(SingleThreadedExecutorPool.returnSingleThreadedExecutor(singleThreadedExecutionContext))
+          .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Release"))
+    }
   }
 }

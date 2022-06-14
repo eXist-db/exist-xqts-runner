@@ -106,13 +106,14 @@ class ExistServer {
     val brokerRes = Resource.make {
       // build
       IO.delay(existServer.getBrokerPool.getBroker)
+        .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Acquire"))
     } {
       // release
       broker =>
         IO.delay(broker.close()).handleErrorWith { t =>
           logger.warn(s"Error releasing DBBroker: ${t.getMessage}", t)
           IO.unit
-        }
+        }.flatTap(_ => IOUtil.printlnExecutionContext("Broker/Release"))
     }
 
     ExistConnection(brokerRes)
@@ -200,7 +201,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
         // build
         for (
           startCompilationTime <- Clock[IO].realTime.map(_.toMillis);
-          maybeCompiledXQuery <- IO.delay(Option(xqueryPool.borrowCompiledXQuery(broker, source)));
+          maybeCompiledXQuery <- IO.delay(Option(xqueryPool.borrowCompiledXQuery(broker, source))).flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Borrow"));
           maybeCompiledXQueryContext <- IO.delay(maybeCompiledXQuery.map(compiledXQuery => fnConfigureContext(compiledXQuery.getContext)));
           endCompilationTime <- Clock[IO].realTime.map(_.toMillis)
         ) yield maybeCompiledXQuery.zip(maybeCompiledXQueryContext).map{ case (compiledXQuery, compiledXQueryContext) => CompiledQuery(compiledXQuery, compiledXQueryContext, endCompilationTime - startCompilationTime)}
@@ -210,7 +211,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
           case Some(compiledQuery) =>
             for (
               _ <- IO.delay(compiledQuery.xqueryContext.runCleanupTasks());
-              _ <- IO.delay(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery))
+              _ <- IO.delay(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery)).flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Return"))
             ) yield IO.unit
           case None =>
             IO.unit
@@ -231,13 +232,13 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     def compileXQuery(broker: DBBroker, source: Source, fnConfigureContext: XQueryContext => XQueryContext, maybeXQueryPool: Option[XQueryPool]) : Resource[IO, CompiledQuery] = {
       val xqueryContextRes = Resource.make {
         // build
-        IO.delay {
-          fnConfigureContext(new XQueryContext(broker.getBrokerPool()))
-        }
+        IO.delay(fnConfigureContext(new XQueryContext(broker.getBrokerPool())))
+          .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Build"))
       } {
         // release
         xqueryContext =>
           IO.delay(xqueryContext.runCleanupTasks())
+            .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Release"))
       }
 
       xqueryContextRes.flatMap { xqueryContext =>
@@ -323,9 +324,9 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
           } catch {
             // NOTE(AR): bugs in eXist-db's XQuery implementation can produce a StackOverflowError - handle as any other server exception
             case e: StackOverflowError =>
-              ExistServerException(e, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime).left
+              ExistServerException(e, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime).left[Result]
           }
-        }
+        }.flatTap(_ => IOUtil.printlnExecutionContext("ExecuteQuery"))
       }
 
       for (
@@ -468,15 +469,6 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
 //        IO.delay(SingleThreadedExecutorPool.returnSingleThreadedExecutor(singleThreadedExecutionContext))
 //    }.use(singleThreadedExecutor => executeQueryIo.evalOn(singleThreadedExecutor.executionContext))  // NOTE: eXist-db requires the broker to be acquired, used (e.g XQuery compilation and execution), and then released by the same thread.
 
-    val executorRes : Resource[IO, SingleThreadedExecutor] = Resource.make {
-      // build
-      IO.delay(SingleThreadedExecutorPool.borrowSingleThreadedExecutor())
-    } {
-      // release
-      singleThreadedExecutionContext =>
-        IO.delay(SingleThreadedExecutorPool.returnSingleThreadedExecutor(singleThreadedExecutionContext))
-    }
-
     val source = new StringSource(query)
     val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
 
@@ -509,7 +501,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
 
     //TODO(AR) suggestions from @BalmungSan and @armanbilge
     val res: IO[\/[ExistServerException, Result]] =
-      executorRes.use { singleEC =>
+      SingleThreadedExecutorPool.newResource().use { singleThreadedExecutor =>
         val compiledQueryRes =
           for {
             broker <- brokerRes
@@ -517,16 +509,17 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
             compiledQuery <- compileXQuery(broker, source, fnConfigureContext, Option(xqueryPool))
           } yield (broker, compiledQuery)
 
-        compiledQueryRes.evalOn(singleEC.executionContext).use {
+        compiledQueryRes.evalOn(singleThreadedExecutor.executionContext).use {
           case (broker, compiledQuery) =>
             getXQueryService(broker).flatMap { xqueryService =>
               executeCompiledQuery(broker, xqueryService, compiledQuery, contextSequence)
-            }.evalOn(singleEC.executionContext)
+            }.evalOn(singleThreadedExecutor.executionContext)
         }.handleError(throwable =>
           fromExecutionException(throwable, 0L, 0L)
         ) // NOTE(AR): We use 0L, 0L because an error here was ACTUALLY caused by compilation (execution errors are handled inside executeCompiledQuery), so there was no complete compilation, and also no execution
       }
 
+    // TODO(AR) should we just return IO from here and allow the caller to do the execution?
     implicit val runtime = IORuntime.global
     val queryResult = res.unsafeRunSync()
     queryResult

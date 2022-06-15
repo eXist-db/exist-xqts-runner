@@ -92,7 +92,9 @@ object XQTSRunner {
     Serialization,
     StaticTyping,
     TypedData,
-    XPath_1_0_Compatibility
+    XPath_1_0_Compatibility,
+    TransformXSLT,
+    TransformXSLT_30
   )
 
   /**

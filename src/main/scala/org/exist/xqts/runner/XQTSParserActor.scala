@@ -56,9 +56,27 @@ object XQTSParserActor {
     val strict, lax, skip = Value
   }
 
+  object Role {
+    def parse(role : String) : Role = {
+      role match {
+        case "." => ContextItemRole
+        case _ if role.charAt(0).equals('$') => ExternalVariableRole(role.substring(1))
+        case _ => throw new IllegalArgumentException(s"source role: '$role' is not a valid role")
+      }
+    }
+
+    def isContextItem(role: Role): Boolean = {
+      role == ContextItemRole
+    }
+  }
+  sealed abstract class Role
+  case object ContextItemRole extends Role
+  case class ExternalVariableRole(name: String) extends Role
+
+
   case class Environment(name: String, schemas: List[Schema] = List.empty, sources: List[Source] = List.empty, resources: List[Resource] = List.empty, params: List[Param] = List.empty, contextItem: Option[String] = None, decimalFormats: List[DecimalFormat] = List.empty, namespaces: List[Namespace] = List.empty, collections: List[Collection] = List.empty, staticBaseUri: Option[String] = None, collation: Option[Collation] = None)
   case class Schema(uri: Option[AnyURIValue], file: Option[Path], xsdVersion: Float = 1.0f, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
-  case class Source(role: Option[String], file: Path, uri: Option[String], validation: Option[Validation.Validation] = None, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
+  case class Source(role: Option[Role], file: Path, uri: Option[String], validation: Option[Validation.Validation] = None, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
   case class Resource(file: Path, uri: String, mediaType: Option[String] = None, encoding: Option[String], description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
   case class Param(name: String, select: Option[String] = None, as: Option[String] = None, source: Option[String] = None, declared: Boolean = false)
   case class DecimalFormat(name: Option[QName] = None, decimalSeparator: Option[Int] = None, exponentSeparator: Option[Int] = None, groupingSeparator: Option[Int] = None, zeroDigit: Option[Int] = None, digit: Option[Int] = None, minusSign: Option[Int] = None, percent: Option[Int] = None, perMille: Option[Int] = None, patternSeparator: Option[Int] = None, infinity: Option[String] = None, notANumber: Option[String] = None)

@@ -272,7 +272,11 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentSchema = None
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_SOURCE && currentEnv.nonEmpty) =>
-          val role = asyncReader.getAttributeValueOptNE(ATTR_ROLE)
+          val role = try {
+            asyncReader.getAttributeValueOptNE(ATTR_ROLE).map(Role.parse(_))
+          } catch {
+            case e: IllegalArgumentException => throw XQTSParseException(e.getMessage)
+          }
           val file = asyncReader.getAttributeValue(ATTR_FILE)
           val validation = asyncReader.getAttributeValueOptNE(ATTR_VALIDATION)
           val uri = asyncReader.getAttributeValueOptNE(ATTR_URI)

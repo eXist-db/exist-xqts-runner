@@ -179,7 +179,12 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
           currentSchema = None
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_SOURCE && currentEnv.nonEmpty) =>
-          val role = Option(asyncReader.getAttributeValue(ATTR_ROLE)).filter(_.nonEmpty)
+          val role = try {
+            Option(asyncReader.getAttributeValue(ATTR_ROLE)).filter(_.nonEmpty).map(Role.parse(_))
+          } catch {
+            case e: IllegalArgumentException => throw XQTSParseException(e.getMessage)
+          }
+
           val file = asyncReader.getAttributeValue(ATTR_FILE)
           val validation = Option(asyncReader.getAttributeValue(ATTR_VALIDATION)).filter(_.nonEmpty)
           val uri = Option(asyncReader.getAttributeValue(ATTR_URI)).filter(_.nonEmpty)

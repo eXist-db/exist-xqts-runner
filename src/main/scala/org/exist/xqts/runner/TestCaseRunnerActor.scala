@@ -308,7 +308,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         \/-(Some(Sequence.EMPTY_SEQUENCE))
 
       case Some(env) =>
-        env.sources.filter(_.role.filter(_ == ".").nonEmpty).headOption
+        env.sources.filter(_.role.filter(Role.isContextItem(_)).nonEmpty).headOption
           .map(resolveSource(resolvedEnvironment, _))
           .map(_.flatMap(resolvedSource => SAXParser.parseXml(resolvedSource.data)).map(doc => Option(doc.asInstanceOf[Sequence])))
           .getOrElse(\/-[ExistServerException, Option[Sequence]](Option.empty[Sequence]))

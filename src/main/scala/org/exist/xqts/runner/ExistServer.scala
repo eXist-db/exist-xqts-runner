@@ -151,12 +151,11 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     * @param availableCollections Any dynamically available Collections that should be available to the XQuery.
     * @param availableTextResources Any dynamically available Text Resources that should be available to the XQuery.
     * @param externalVariables Any external variables that should be bound for the XQuery.
-    * @param documentVariables Any documents to be available as external variables for the XQuery.
     * @param decimalFormats Any changes to the `unnamed` decimal format.
     *
     * @return the result or executing the query, or an exception.
     */
-  def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, documentVariables: Seq[(String, DocumentImpl)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false) : ExistServerException \/ Result = {
+  def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false) : ExistServerException \/ Result = {
     /**
       * Gets the XQuery Pool.
       *
@@ -364,7 +363,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       *
       * @param context The XQuery Context to configure
       */
-    def setupContext(context: XQueryContext)(staticBaseUri: Option[String], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, documentVariables: Seq[(String, DocumentImpl)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false): XQueryContext = {
+    def setupContext(context: XQueryContext)(staticBaseUri: Option[String], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false): XQueryContext = {
 
       // Turn on/off XPath 1.0 backwards compatibility.
       context.setBackwardsCompatibility(xpath1Compatibility)
@@ -405,11 +404,6 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
         context.declareVariable(name, value)
       }
 
-      // bind documents with variable roles as external variables
-      for ((name, value) <- documentVariables) {
-        context.declareVariable(name, value)
-      }
-
       // modify/create the decimal formats
       for (df <- decimalFormats ) {
         val unnamedDecimalFormat = context.getStaticDecimalFormat(null)
@@ -440,7 +434,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     }
 
     val source = new StringSource(query)
-    val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, documentVariables, decimalFormats, modules, xpath1Compatibility)
+    val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
 
     val res: IO[\/[ExistServerException, Result]] =
       SingleThreadedExecutorPool.newResource().use { singleThreadedExecutor =>

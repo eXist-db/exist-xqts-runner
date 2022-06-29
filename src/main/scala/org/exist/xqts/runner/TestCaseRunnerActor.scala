@@ -237,11 +237,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         getContextSequence(connection)(testCase, resolvedEnvironment).flatMap(contextSequence =>
           getDynamicContextAvailableDocuments(connection)(testCase, resolvedEnvironment).flatMap(availableDocuments =>
             getDynamicContextAvailableCollections(connection)(testCase, resolvedEnvironment).flatMap(availableCollections =>
-              getDynamicContextDocumentsAsVariables(connection)(testCase, resolvedEnvironment).flatMap(documentVariables =>            
-                getDynamicContextAvailableTextResources(connection)(testCase, resolvedEnvironment).flatMap(availableTextResources =>
-                  getVariableDeclarations(connection)(testCase).flatMap(variableDeclarations =>
-                    connection.executeQuery(queryString, false, baseUri, contextSequence, availableDocuments, availableCollections, availableTextResources, testCase.environment.map(_.namespaces).getOrElse(List.empty), variableDeclarations, documentVariables, testCase.environment.map(_.decimalFormats).getOrElse(List.empty), testCase.modules, testCase.dependencies.filter(_.`type` == DependencyType.Feature).headOption.nonEmpty)
-                  )
+              getDynamicContextAvailableTextResources(connection)(testCase, resolvedEnvironment).flatMap(availableTextResources =>
+                getVariableDeclarations(connection)(testCase, resolvedEnvironment).flatMap(variableDeclarations =>
+                  connection.executeQuery(queryString, false, baseUri, contextSequence, availableDocuments, availableCollections, availableTextResources, testCase.environment.map(_.namespaces).getOrElse(List.empty), variableDeclarations, testCase.environment.map(_.decimalFormats).getOrElse(List.empty), testCase.modules, testCase.dependencies.filter(_.`type` == DependencyType.Feature).headOption.nonEmpty)
                 )
               )
             )
@@ -399,30 +397,6 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       }
   }
 
-  private def getDynamicContextDocumentsAsVariables(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : ExistServerException \/ List[(String, DocumentImpl)] = {
-    val initAccum: ExistServerException \/ List[(String, DocumentImpl)] = \/-(List.empty)
-    testCase.environment
-      .map(env => env.sources.filter(source => source.role.filter(_.isInstanceOf[ExternalVariableRole]).nonEmpty))
-      .getOrElse(List.empty)
-      .foldLeft(initAccum) { case (accum, x) =>
-        accum match {
-          case error@ -\/(_) => error
-          case \/-(results) =>
-            x.role
-              .flatMap(role => resolvedEnvironment.resolvedSources.find(_.path == x.file)
-                .map(resolvedSource => (role, resolvedSource.data, resolvedSource.path))
-                .map { case (role, data, path) => SAXParser.parseXml(data).map(doc => {
-                  doc.setDocumentURI(path.toUri().toString())
-                  (role.asInstanceOf[ExternalVariableRole].name, doc)
-                }
-                ) }
-              )
-              .map(_.map(result => result +: results))
-              .getOrElse(-\/(ExistServerException(new IllegalStateException(s"Could not resolve source ${x.file}"))))
-        }
-      }
-  }
-
   /**
     * Get the dynamically available text resources for the XQuery Context.
     *
@@ -462,41 +436,71 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @param connection a connection to an eXist-db server.
     *
     * @param testCase a test-case which describes the external variable declarations.
+    * @param resolvedEnvironment the environment resources for the test-case.
     *
     * @return the external variable declarations, or an exception
     */
-  private def getVariableDeclarations(connection: ExistConnection)(testCase: TestCase): ExistServerException \/ List[(String, Sequence)] = {
-    def variableSelectToSequence(`type`: Int, select: Option[String]): ExistServerException \/ Sequence = {
-      select match {
-        case None =>
-          \/-(Sequence.EMPTY_SEQUENCE)
+  private def getVariableDeclarations(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): ExistServerException \/ List[(String, Sequence)] = {
 
-        case Some(selectExpr) =>
-          `type` match {
-            case Type.EMPTY =>
-              \/-(Sequence.EMPTY_SEQUENCE)
+    def getParams() : ExistServerException \/ List[(String, Sequence)] = {
+      def variableSelectToSequence(`type`: Int, select: Option[String]): ExistServerException \/ Sequence = {
+        select match {
+          case None =>
+            \/-(Sequence.EMPTY_SEQUENCE)
 
-            case _ =>
-              connection.executeQuery(selectExpr, false, None, None)
-                .flatMap(_.result.leftMap(queryError => ExistServerException(new IllegalStateException(s"Could not calculate param select: ${queryError.errorCode}: ${queryError.message}"))))
-          }
-      }
-    }
+          case Some(selectExpr) =>
+            `type` match {
+              case Type.EMPTY =>
+                \/-(Sequence.EMPTY_SEQUENCE)
 
-    val initAccum : ExistServerException \/ List[(String, Sequence)] = \/-(List.empty)
-
-    testCase.environment
-      .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))
-      .getOrElse(List.empty)
-      .foldLeft(initAccum) { case (accum, (name, typ, select)) =>
-        accum match {
-          case error@ -\/(_) => error
-          case \/-(results) =>
-            variableSelectToSequence(typ, select)
-              .map(seq => (name, seq))
-              .map(result => result +: results)
+              case _ =>
+                connection.executeQuery(selectExpr, false, None, None)
+                  .flatMap(_.result.leftMap(queryError => ExistServerException(new IllegalStateException(s"Could not calculate param select: ${queryError.errorCode}: ${queryError.message}"))))
+            }
         }
       }
+
+      val initAccum: ExistServerException \/ List[(String, Sequence)] = \/-(List.empty)
+
+      testCase.environment
+        .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))
+        .getOrElse(List.empty)
+        .foldLeft(initAccum) { case (accum, (name, typ, select)) =>
+          accum match {
+            case error@ -\/(_) => error
+            case \/-(results) =>
+              variableSelectToSequence(typ, select)
+                .map(seq => (name, seq))
+                .map(result => result +: results)
+          }
+        }
+    }
+
+    def getDocuments() : ExistServerException \/ List[(String, Sequence)] = {
+      val initAccum: ExistServerException \/ List[(String, Sequence)] = \/-(List.empty)
+      testCase.environment
+        .map(env => env.sources.filter(source => source.role.filter(_.isInstanceOf[ExternalVariableRole]).nonEmpty))
+        .getOrElse(List.empty)
+        .foldLeft(initAccum) { case (accum, x) =>
+          accum match {
+            case error@ -\/(_) => error
+            case \/-(results) =>
+              x.role
+                .flatMap(role => resolvedEnvironment.resolvedSources.find(_.path == x.file)
+                  .map(resolvedSource => (role, resolvedSource.data, resolvedSource.path))
+                  .map { case (role, data, path) => SAXParser.parseXml(data).map(doc => {
+                    doc.setDocumentURI(path.toUri().toString())
+                    (role.asInstanceOf[ExternalVariableRole].name, doc)
+                  }
+                  ) }
+                )
+                .map(_.map(result => result +: results))
+                .getOrElse(-\/(ExistServerException(new IllegalStateException(s"Could not resolve source ${x.file}"))))
+          }
+        }
+    }
+
+    getParams().flatMap(params => getDocuments().map(documents => params ++ documents))
   }
 
   /**

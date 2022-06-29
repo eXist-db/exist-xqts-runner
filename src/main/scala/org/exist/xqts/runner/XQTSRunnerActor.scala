@@ -31,7 +31,6 @@ import org.exist.xqts.runner.XQTSParserActor.XsdVersion.XsdVersion
 import org.exist.xqts.runner.XQTSParserActor.{Parse, ParseComplete, TestSetRef}
 import org.exist.xqts.runner.XQTSResultsSerializerActor.{FinalizeSerialization, FinishedSerialization, SerializedTestSetResults, TestSetResults}
 import org.exist.xqts.runner.qt3.XQTS3TestSetParserActor
-import scalaz.\/
 
 import scala.annotation.unused
 import scala.collection.immutable.Map
@@ -254,7 +253,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   * @author Adam Retter <adam@evolvedbinary.com>
   */
 object XQTSRunnerActor {
-  case class RunXQTS(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], maxCacheBytes: Long, testSets: Set[String] \/ Pattern, testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String])
+  case class RunXQTS(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], maxCacheBytes: Long, testSets: Either[Set[String], Pattern], testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String])
 
   case class ParsingTestSet(testSetRef: TestSetRef)
   case class ParsedTestSet(testSetRef: TestSetRef, testCases: Seq[String])

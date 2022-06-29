@@ -29,7 +29,6 @@ import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
 import org.exist.xqts.runner.XQTSParserActor.Spec.Spec
 import org.exist.xqts.runner.XQTSParserActor.XmlVersion.XmlVersion
 import org.exist.xqts.runner.XQTSParserActor.XsdVersion.XsdVersion
-import scalaz.\/
 
 import scala.annotation.unused
 
@@ -48,7 +47,7 @@ trait XQTSParserActor extends Actor {
   * @author Adam Retter <adam@evolvedbinary.com>
   */
 object XQTSParserActor {
-  case class Parse(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Set[String] \/ Pattern, testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String])
+  case class Parse(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Either[Set[String], Pattern], testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String])
   case class ParseComplete(xqtsVersion: XQTSVersion, xqtsPath: Path, matchedTestSets: Int)
 
   object Validation extends Enumeration {
@@ -97,7 +96,7 @@ object XQTSParserActor {
   case class Link(`type`: String, document: String, section: Option[String] = None)
   case class Module(uri: AnyURIValue, file: Path)
   case class Dependency(`type`: DependencyType, value: String, satisfied: Boolean)
-  case class TestCase(file: Path, name: TestCaseName, covers: String, description: Option[String] = None, created: Option[Created] = None, modifications: Seq[Modified] = Seq.empty, environment: Option[Environment] = None, modules: Seq[Module] = Seq.empty, dependencies: Seq[Dependency] = Seq.empty, test: Option[String \/ Path] = None, result: Option[Result] = None)
+  case class TestCase(file: Path, name: TestCaseName, covers: String, description: Option[String] = None, created: Option[Created] = None, modifications: Seq[Modified] = Seq.empty, environment: Option[Environment] = None, modules: Seq[Module] = Seq.empty, dependencies: Seq[Dependency] = Seq.empty, test: Option[Either[String, Path]] = None, result: Option[Result] = None)
   sealed trait Result
 
   /*
@@ -125,8 +124,8 @@ object XQTSParserActor {
   case class AssertSerializationError(expected: String) extends ValueAssertion[String]
   case class AssertStringValue(value: String, normalizeSpace: Boolean) extends Assertion
   case class AssertType(expected: String) extends ValueAssertion[String]
-  case class AssertXml(expected: String \/ Path, ignorePrefixes: Boolean = false) extends ValueAssertion[String \/ Path]
-  case class SerializationMatches(expected: String \/ Path, flags: Option[String] = None) extends ValueAssertion[String \/ Path]
+  case class AssertXml(expected: Either[String, Path], ignorePrefixes: Boolean = false) extends ValueAssertion[Either[String, Path]]
+  case class SerializationMatches(expected: Either[String, Path], flags: Option[String] = None) extends ValueAssertion[Either[String, Path]]
   case object AssertEmpty extends Assertion
   case object AssertTrue extends Assertion
   case object AssertFalse extends Assertion

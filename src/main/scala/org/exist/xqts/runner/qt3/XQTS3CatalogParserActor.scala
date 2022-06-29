@@ -39,7 +39,6 @@ import org.exist.xqts.runner.{XQTSParseException, XQTSParserActor, XQTSVersion}
 import org.exist.xqts.runner.XQTSParserActor._
 import org.exist.xqts.runner.qt3.XQTS3CatalogParserActor._
 import org.exist.xqts.runner.qt3.XQTS3TestSetParserActor.ParseTestSet
-import scalaz.{-\/, \/, \/-}
 
 import scala.annotation.tailrec
 
@@ -104,7 +103,7 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
     *
     * @return the number of test sets that were matched in the catalog and dispatched to the testSetParserRouter.
     */
-  private def parseCatalog(xqtsRunner: ActorRef, xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Set[String] \/ Pattern, testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String]) : Int = {
+  private def parseCatalog(xqtsRunner: ActorRef, xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Either[Set[String], Pattern], testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String]) : Int = {
 
     /**
       * The asynchronous STaX parsing loop,
@@ -221,11 +220,11 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
           currentTestSetRef match {
             case Some(testSetRef) =>
               testSets match {
-                case \/-(testSetPattern) if (testSetPattern.matcher(testSetRef.name).matches() && !excludeTestSets.contains(testSetRef.name)) =>
+                case Right(testSetPattern) if (testSetPattern.matcher(testSetRef.name).matches() && !excludeTestSets.contains(testSetRef.name)) =>
                   testSetParserRouter ! ParseTestSet(testSetRef, testCases, features, specs, xmlVersions, xsdVersions, excludeTestCases, globalEnvironments, xqtsRunner)
                   matchedTestSet = true
 
-                case -\/(filterTestSets) if ((filterTestSets.isEmpty || filterTestSets.contains(testSetRef.name)) && !excludeTestSets.contains(testSetRef.name)) =>
+                case Left(filterTestSets) if ((filterTestSets.isEmpty || filterTestSets.contains(testSetRef.name)) && !excludeTestSets.contains(testSetRef.name)) =>
                   testSetParserRouter ! ParseTestSet(testSetRef, testCases, features, specs, xmlVersions, xsdVersions, excludeTestCases, globalEnvironments, xqtsRunner)
                   matchedTestSet = true
 

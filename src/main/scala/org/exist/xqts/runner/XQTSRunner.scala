@@ -28,8 +28,6 @@ import grizzled.slf4j.Logger
 import org.exist.xqts.runner.Checksum.SHA256
 import org.exist.xqts.runner.XQTSRunner.CmdConfig
 import org.exist.xqts.runner.XQTSRunnerActor.RunXQTS
-import scalaz._
-import syntax.either._
 import XQTSRunner._
 import org.exist.xqts.runner.XQTSParserActor.Feature
 import org.exist.xqts.runner.XQTSParserActor.Feature._
@@ -298,15 +296,15 @@ private class XQTSRunner {
 
     // 2) Ensure that we have a copy of the XQTS we need
     ensureXqtsPresent(cmdConfig.xqtsVersion, settings, cmdConfig.localDir) match {
-      case -\/(throwable) =>
+      case Left(throwable) =>
         logger.error("Could not access XQTS", throwable)
         sys.exit(EXIT_CODE_NO_XQTS)
 
-      case \/-(localXqtsDir) =>
+      case Right(localXqtsDir) =>
         // 3) start eXist-db
         logger.info("Starting an embedded instance of eXist-db...")
         ExistServer.start() match {
-          case \/-(server) =>
+          case Right(server) =>
             this.existServer = Some(server)
             logger.info(s"eXist-db ${ExistServer.getVersion()} (${ExistServer.getCommitAbbrev()}) OK.")
 
@@ -321,9 +319,9 @@ private class XQTSRunner {
             val parserActorClass = getParserActorClass(cmdConfig.xqtsVersion)
             val serializerActorClass = getSerializerActorClass()
             val xqtsRunner = system.actorOf(Props(classOf[XQTSRunnerActor], settings.xmlParserBufferSize, server, parserActorClass, serializerActorClass, styleDir, cmdConfig.outputDir.getOrElse(Paths.get(settings.outputDir))), name = "XQTSRunner")
-            xqtsRunner ! RunXQTS(cmdConfig.xqtsVersion, localXqtsDir, getEnabled(DEFAULT_FEATURES)(cmdConfig.enableFeatures, cmdConfig.disableFeatures).toSet, getEnabled(DEFAULT_SPECS)(cmdConfig.enableSpecs, cmdConfig.disableSpecs).toSet, getEnabled(DEFAULT_XML_VERSIONS)(cmdConfig.enableXmlVersions, cmdConfig.disableXmlVersions).toSet, getEnabled(DEFAULT_XSD_VERSIONS)(cmdConfig.enableXsdVersions, cmdConfig.disableXsdVersions).toSet, settings.commonResourceCacheMaxSize, cmdConfig.testSetPattern.map(_.right[Set[String]]).getOrElse(cmdConfig.testSets.toSet.left[Pattern]), cmdConfig.testCases.toSet, cmdConfig.excludeTestSets.toSet, cmdConfig.excludeTestCases.toSet)
+            xqtsRunner ! RunXQTS(cmdConfig.xqtsVersion, localXqtsDir, getEnabled(DEFAULT_FEATURES)(cmdConfig.enableFeatures, cmdConfig.disableFeatures).toSet, getEnabled(DEFAULT_SPECS)(cmdConfig.enableSpecs, cmdConfig.disableSpecs).toSet, getEnabled(DEFAULT_XML_VERSIONS)(cmdConfig.enableXmlVersions, cmdConfig.disableXmlVersions).toSet, getEnabled(DEFAULT_XSD_VERSIONS)(cmdConfig.enableXsdVersions, cmdConfig.disableXsdVersions).toSet, settings.commonResourceCacheMaxSize, cmdConfig.testSetPattern.map(Right(_)).getOrElse(Left(cmdConfig.testSets.toSet)), cmdConfig.testCases.toSet, cmdConfig.excludeTestSets.toSet, cmdConfig.excludeTestCases.toSet)
 
-          case -\/(throwable) =>
+          case Left(throwable) =>
             logger.error("Unable to start eXist-db Server", throwable)
             sys.exit(EXIT_CODE_EXIST_START_FAILED)
         }
@@ -381,7 +379,7 @@ private class XQTSRunner {
     *
     * @return Either the path to the XQTS, or an exception
     */
-  private def ensureXqtsPresent(xqtsVersion: XQTSVersion, settings: SettingsImpl, overrideLocalDir: Option[Path]) : \/[Throwable, Path] = {
+  private def ensureXqtsPresent(xqtsVersion: XQTSVersion, settings: SettingsImpl, overrideLocalDir: Option[Path]) : Either[Throwable, Path] = {
     def getLocalWorkDir(hasDir: Option[String]) = {
       hasDir match {
         case Some(_) =>
@@ -391,29 +389,29 @@ private class XQTSRunner {
       }
     }
     def hasLocalCopy(xqtsLocalPath: Path, xqtsCheckFile: String) = Files.exists(xqtsLocalPath) && Files.exists(xqtsLocalPath.resolve(xqtsCheckFile))
-    def verifySha256(path: Path, sha256: String) : \/[Throwable, Path] = {
+    def verifySha256(path: Path, sha256: String) : Either[Throwable, Path] = {
       Checksum.checksum(path, SHA256).map(_.map(_.toChar).mkString) match {
-        case \/-(pathSha256) =>
+        case Right(pathSha256) =>
           if(sha256.equals(sha256)) {
-            path.right
+            Right(path)
           } else {
-            -\/(new IOException(s"Downloaded file checksum is: $pathSha256 but expected $sha256"))
+            Left(new IOException(s"Downloaded file checksum is: $pathSha256 but expected $sha256"))
           }
-        case -\/(e) => e.left[Path]
+        case Left(e) => Left(e)
       }
     }
 
     def getFilename(xqtsUrl: String) = Paths.get(new URI(xqtsUrl).getPath).getFileName.toString
-    def hasDownload(xqtsUrl: String, sha256: String, xqtsLocalPath: Path) : \/[Throwable, Option[Path]] = {
+    def hasDownload(xqtsUrl: String, sha256: String, xqtsLocalPath: Path) : Either[Throwable, Option[Path]] = {
       val downloadFile = xqtsLocalPath.resolve(getFilename(xqtsUrl))
       if(Files.exists(downloadFile)) {
         verifySha256(downloadFile, sha256).map(Some(_))
       } else {
-        Option.empty[Path].right[Throwable]
+        Right(Option.empty[Path])
       }
     }
 
-    def download(xqtsUrl: String, sha256: String, xqtsLocalPath: Path) : \/[Throwable, Path] = {
+    def download(xqtsUrl: String, sha256: String, xqtsLocalPath: Path) : Either[Throwable, Path] = {
       def getFile(dest: Path): Path = {
         import sys.process._
         new URL(xqtsUrl) #> dest.toFile !!;
@@ -422,11 +420,11 @@ private class XQTSRunner {
 
       Try(getFile(xqtsLocalPath.resolve(getFilename(xqtsUrl)))) match {
         case scala.util.Success(tmpFile) => verifySha256(tmpFile, sha256)
-        case scala.util.Failure(t) => t.left[Path]
+        case scala.util.Failure(t) => Left(t)
       }
     }
 
-    def expandToLocalCopy(xqtsZip: Path, xqtsLocalPath: Path) : \/[Throwable, Path] = {
+    def expandToLocalCopy(xqtsZip: Path, xqtsLocalPath: Path) : Either[Throwable, Path] = {
         logger.info(s"Expanding XQTS from: $xqtsZip to: $xqtsLocalPath")
         try {
           // create dest if doesn't exist
@@ -437,35 +435,35 @@ private class XQTSRunner {
           // unzip the file
           org.exist.xqts.runner.Unzip.unzip(xqtsZip, xqtsLocalPath)
 
-          xqtsLocalPath.right
+          Right(xqtsLocalPath)
         } catch {
           case e: IOException =>
-            -\/(e)
+            Left(e)
         }
     }
 
-    def processXqtsVersion(xqtsVersionConfig: settings.XqtsVersionConfig): \/[Throwable, Path] = {
+    def processXqtsVersion(xqtsVersionConfig: settings.XqtsVersionConfig): Either[Throwable, Path] = {
       Try(Files.createDirectories(getLocalWorkDir(xqtsVersionConfig.hasDir))) match {
         case scala.util.Failure(t) =>
-          -\/(t)
+          Left(t)
         case scala.util.Success(localDir) =>
           val localXqtsDir = xqtsVersionConfig.hasDir.map(hasDir => localDir.resolve(hasDir)).getOrElse(localDir.resolve(XQTSVersion.label(xqtsVersion)))
           if (hasLocalCopy(localXqtsDir, xqtsVersionConfig.checkFile)) {
             logger.info(s"Found XQTS at: $localXqtsDir")
-            \/-(localXqtsDir)
+            Right(localXqtsDir)
           } else {
             logger.info(s"Could not find XQTS at: $localXqtsDir, checking for downloaded copy...")
             hasDownload(xqtsVersionConfig.url, xqtsVersionConfig.sha256, localDir) match {
-              case \/-(Some(existingPath)) =>
+              case Right(Some(existingPath)) =>
                 logger.info(s"Found downloaded XQTS at: $existingPath")
                 expandToLocalCopy(existingPath, localDir)
                   .map(_ => localXqtsDir)
-              case \/-(None) =>
+              case Right(None) =>
                 logger.info(s"No downloaded copy found, downloading XSTS from: ${xqtsVersionConfig.url} to $localDir...")
                 download(xqtsVersionConfig.url, xqtsVersionConfig.sha256, localDir)
                   .flatMap(expandToLocalCopy(_, localDir))
                   .map(_ => localXqtsDir)
-              case -\/(t) => -\/(t)
+              case Left(t) => Left(t)
             }
           }
       }
@@ -477,7 +475,7 @@ private class XQTSRunner {
         processXqtsVersion(xqtsVersionConfig)
       case None =>
         val supported = settings.xqtsVersions.keys.reduceLeft(_ + ", " + _)
-        -\/(new IllegalArgumentException(s"We only support XQTS versions $supported, but version: ${XQTSVersion.label(xqtsVersion)} was requested"))
+        Left(new IllegalArgumentException(s"We only support XQTS versions $supported, but version: ${XQTSVersion.label(xqtsVersion)} was requested"))
     }
   }
 }

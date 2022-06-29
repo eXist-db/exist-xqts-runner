@@ -23,8 +23,6 @@ import java.nio.file.{Files, Path}
 import akka.actor.{Actor, ActorRef}
 import org.exist.xqts.runner.TestCaseRunnerActor.RunTestCase
 import org.exist.xqts.runner.XQTSParserActor._
-import scalaz.{-\/, \/, \/-}
-import scalaz.syntax.either._
 import TestCaseRunnerActor._
 import IgnorableWrapper._
 import org.exist.xqts.runner.ExistServer._
@@ -34,6 +32,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.regex.Pattern
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
+import cats.syntax.either._
 import grizzled.slf4j.Logger
 import org.exist.dom.memtree.DocumentImpl
 import org.exist.xqts.runner.AssertTypeParser.TypeNode.{ExistTypeDescription, ExplicitExistTypeDescription, WildcardExistTypeDescription}
@@ -71,7 +70,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
     case rtc@RunTestCase(testSetRef, testCase, manager) =>
       testCase.test match {
-        case Some(-\/(_)) =>
+        case Some(Left(_)) =>
           testCase.environment match {
             //TODO(AR) on the line below, and the line below that, we use `.filter(_.file.nonEmpty)` to skip schemas here which don't have a `file` attribute... this is temporary! Ultimately we will need the xqts-driver or eXist-db to recognise and resolve them
             case Some(environment) if (environment.schemas.filter(_.file.nonEmpty).nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
@@ -93,7 +92,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
               self ! RunTestCaseInternal(rtc, ResolvedEnvironment())
           }
 
-        case Some(\/-(queryPath)) =>
+        case Some(Right(queryPath)) =>
           commonResourceCacheActor ! GetResource(queryPath)
           awaitingQueryStr = merge1(awaitingQueryStr)((testSetRef.name, testCase.name), queryPath)
 
@@ -247,14 +246,14 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ) match {
 
           // exception occurred whilst executing the query
-          case -\/(existServerException) =>
+          case Left(existServerException) =>
             ErrorResult(testSetName, testCase.name, existServerException.compilationTime, existServerException.executionTime, existServerException)
 
-          case \/-(Result(result, compilationTime, executionTime)) =>
+          case Right(Result(result, compilationTime, executionTime)) =>
             result match {
 
               // executing query returned an error
-              case -\/(queryError) =>
+              case Left(queryError) =>
                 testCase.result match {
                   case Some(expectedResult) =>
                     expectedResult match {
@@ -270,10 +269,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                 }
 
               // executing query returned a result
-              case \/-(queryResult) if(queryResult == null) =>
+              case Right(queryResult) if(queryResult == null) =>
                 ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("eXist-db returned null from the query, this should never happen!"))
 
-              case \/-(queryResult) =>
+              case Right(queryResult) =>
                 testCase.result match {
                   case (Some(expectedError: Error)) =>  // expected an error, but got a query result
                     FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(connection)(expectedError, queryResult))
@@ -302,18 +301,18 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the context sequence if present, or an exception
     */
-  private def getContextSequence(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : \/[ExistServerException, Option[Sequence]] = {
+  private def getContextSequence(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, Option[Sequence]] = {
     testCase.environment match {
       case Some(env) if (env.name == "empty") =>
-        \/-(Some(Sequence.EMPTY_SEQUENCE))
+        Right(Some(Sequence.EMPTY_SEQUENCE))
 
       case Some(env) =>
         env.sources.filter(_.role.filter(Role.isContextItem(_)).nonEmpty).headOption
           .map(resolveSource(resolvedEnvironment, _))
           .map(_.flatMap(resolvedSource => SAXParser.parseXml(resolvedSource.data)).map(doc => Option(doc.asInstanceOf[Sequence])))
-          .getOrElse(\/-[ExistServerException, Option[Sequence]](Option.empty[Sequence]))
+          .getOrElse(Right[ExistServerException, Option[Sequence]](Option.empty[Sequence]))
 
-      case None => \/-[ExistServerException, Option[Sequence]](Option.empty[Sequence])
+      case None => Right[ExistServerException, Option[Sequence]](Option.empty[Sequence])
     }
   }
 
@@ -325,10 +324,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the resolved source, or an exception.
     */
-  private def resolveSource(resolvedEnvironment: ResolvedEnvironment, source: Source): ExistServerException \/ ResolvedSource = {
+  private def resolveSource(resolvedEnvironment: ResolvedEnvironment, source: Source): Either[ExistServerException, ResolvedSource] = {
     resolvedEnvironment.resolvedSources.find(_.path == source.file)
-      .map(\/-[ExistServerException, ResolvedSource](_))
-      .getOrElse(-\/[ExistServerException, ResolvedSource](ExistServerException(new IllegalStateException(s"Could not resolve source ${source.file}"))))
+      .map(Right[ExistServerException, ResolvedSource](_))
+      .getOrElse(Left[ExistServerException, ResolvedSource](ExistServerException(new IllegalStateException(s"Could not resolve source ${source.file}"))))
   }
 
   /**
@@ -341,20 +340,20 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the dynamically available collections, or an exception
     */
-  private def getDynamicContextAvailableCollections(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : ExistServerException \/ List[(String, List[DocumentImpl])] = {
-    val initAccum: ExistServerException \/ List[(String, List[DocumentImpl])] = \/-(List.empty)
+  private def getDynamicContextAvailableCollections(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, List[(String, List[DocumentImpl])]] = {
+    val initAccum: Either[ExistServerException, List[(String, List[DocumentImpl])]] = Right(List.empty)
     testCase.environment
       .map(env => env.collections)
       .getOrElse(List.empty)
       .foldLeft(initAccum) { case (accum, x) =>
         accum match {
-          case error@ -\/(_) => error
-          case \/-(results) =>
-            val initInnerAccum : ExistServerException \/ List[DocumentImpl] = \/-(List.empty)
+          case error@ Left(_) => error
+          case Right(results) =>
+            val initInnerAccum : Either[ExistServerException, List[DocumentImpl]] = Right(List.empty)
             x.sources.foldLeft(initInnerAccum) { case (innerAccum, y) =>
                 innerAccum match {
-                  case resolveError@ -\/(_) => resolveError
-                  case \/-(resolvedSources) =>
+                  case resolveError@ Left(_) => resolveError
+                  case Right(resolvedSources) =>
                     resolveSource(resolvedEnvironment, y)
                       .flatMap(resolveSource => SAXParser.parseXml(resolveSource.data))
                       .map(_ +: resolvedSources)
@@ -377,22 +376,22 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the dynamically available documents, or an exception
     */
-  private def getDynamicContextAvailableDocuments(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : ExistServerException \/ List[(String, DocumentImpl)] = {
-    val initAccum: ExistServerException \/ List[(String, DocumentImpl)] = \/-(List.empty)
+  private def getDynamicContextAvailableDocuments(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, List[(String, DocumentImpl)]] = {
+    val initAccum: Either[ExistServerException, List[(String, DocumentImpl)]] = Right(List.empty)
     testCase.environment
       .map(env => env.sources.filter(source => (source.role.isEmpty || source.role.filter(Role.isContextItem(_)).nonEmpty) && source.uri.nonEmpty))
       .getOrElse(List.empty)
       .foldLeft(initAccum) { case (accum, x) =>
         accum match {
-          case error@ -\/(_) => error
-          case \/-(results) =>
+          case error@ Left(_) => error
+          case Right(results) =>
             x.uri
               .flatMap(uri => resolvedEnvironment.resolvedSources.find(_.path == x.file)
                 .map(resolvedSource => (uri, resolvedSource.data))
                 .map { case (uri, data) => SAXParser.parseXml(data).map(doc => (uri, doc)) }
               )
               .map(_.map(result => result +: results))
-              .getOrElse(-\/(ExistServerException(new IllegalStateException(s"Could not resolve source ${x.file}"))))
+              .getOrElse(Left(ExistServerException(new IllegalStateException(s"Could not resolve source ${x.file}"))))
         }
       }
   }
@@ -407,25 +406,25 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the dynamically available text resources, or an exception
     */
-  private def getDynamicContextAvailableTextResources(@unused connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : ExistServerException \/ List[(String, Charset, String)] = {
-    def toString(data: Array[Byte], encoding: Option[String]) : ExistServerException \/ (Charset, String) = {
-      \/.fromTryCatchNonFatal(encoding.map(Charset.forName).getOrElse(UTF_8))
+  private def getDynamicContextAvailableTextResources(@unused connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, List[(String, Charset, String)]] = {
+    def toString(data: Array[Byte], encoding: Option[String]) : Either[ExistServerException, (Charset, String)] = {
+      Either.catchNonFatal(encoding.map(Charset.forName).getOrElse(UTF_8))
         .map(charset => (charset, new String(data, charset)))
         .leftMap(ExistServerException(_))
     }
 
-    val initAccum: ExistServerException \/ List[(String, Charset, String)] = \/-(List.empty)
+    val initAccum: Either[ExistServerException, List[(String, Charset, String)]] = Right(List.empty)
     testCase.environment
       .map(env => env.resources)
       .getOrElse(List.empty)
       .foldLeft(initAccum) { case (accum, x) =>
         accum match {
-          case error@ -\/(_) => error
-          case \/-(results) =>
+          case error@ Left(_) => error
+          case Right(results) =>
               resolvedEnvironment.resolvedResources.find(_.path == x.file)
                 .map(resolvedResource => toString(resolvedResource.data, x.encoding).map{ case (charset, string) => (x.uri, charset, string) })
                 .map(_.map(result => result +: results))
-                .getOrElse(-\/(ExistServerException(new IllegalStateException(s"Could not resolve resource ${x.file} with encoding ${x.encoding.getOrElse("UTF-8")}"))))
+                .getOrElse(Left(ExistServerException(new IllegalStateException(s"Could not resolve resource ${x.file} with encoding ${x.encoding.getOrElse("UTF-8")}"))))
         }
       }
   }
@@ -440,18 +439,18 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the external variable declarations, or an exception
     */
-  private def getVariableDeclarations(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): ExistServerException \/ List[(String, Sequence)] = {
+  private def getVariableDeclarations(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): Either[ExistServerException, List[(String, Sequence)]] = {
 
-    def getParams() : ExistServerException \/ List[(String, Sequence)] = {
-      def variableSelectToSequence(`type`: Int, select: Option[String]): ExistServerException \/ Sequence = {
+    def getParams() : Either[ExistServerException, List[(String, Sequence)]] = {
+      def variableSelectToSequence(`type`: Int, select: Option[String]): Either[ExistServerException, Sequence] = {
         select match {
           case None =>
-            \/-(Sequence.EMPTY_SEQUENCE)
+          Right(Sequence.EMPTY_SEQUENCE)
 
           case Some(selectExpr) =>
             `type` match {
               case Type.EMPTY =>
-                \/-(Sequence.EMPTY_SEQUENCE)
+              Right(Sequence.EMPTY_SEQUENCE)
 
               case _ =>
                 connection.executeQuery(selectExpr, false, None, None)
@@ -460,15 +459,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
       }
 
-      val initAccum: ExistServerException \/ List[(String, Sequence)] = \/-(List.empty)
+    val initAccum : Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
 
       testCase.environment
         .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))
         .getOrElse(List.empty)
         .foldLeft(initAccum) { case (accum, (name, typ, select)) =>
           accum match {
-            case error@ -\/(_) => error
-            case \/-(results) =>
+          case error@ Left(_) => error
+          case Right(results) =>
               variableSelectToSequence(typ, select)
                 .map(seq => (name, seq))
                 .map(result => result +: results)
@@ -476,15 +475,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
     }
 
-    def getDocuments() : ExistServerException \/ List[(String, Sequence)] = {
-      val initAccum: ExistServerException \/ List[(String, Sequence)] = \/-(List.empty)
+    def getDocuments() : Either[ExistServerException, List[(String, Sequence)]] = {
+      val initAccum: Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
       testCase.environment
         .map(env => env.sources.filter(source => source.role.filter(_.isInstanceOf[ExternalVariableRole]).nonEmpty))
         .getOrElse(List.empty)
         .foldLeft(initAccum) { case (accum, x) =>
           accum match {
-            case error@ -\/(_) => error
-            case \/-(results) =>
+            case error@ Left(_) => error
+            case Right(results) =>
               x.role
                 .flatMap(role => resolvedEnvironment.resolvedSources.find(_.path == x.file)
                   .map(resolvedSource => (role, resolvedSource.data, resolvedSource.path))
@@ -495,7 +494,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                   ) }
                 )
                 .map(_.map(result => result +: results))
-                .getOrElse(-\/(ExistServerException(new IllegalStateException(s"Could not resolve source ${x.file}"))))
+                .getOrElse(Left(ExistServerException(new IllegalStateException(s"Could not resolve source ${x.file}"))))
           }
         }
     }
@@ -612,15 +611,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the test result from processing the assertion.
     */
   private def allOf(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(assertions: List[XQTSParserActor.Result], actual: ExistServer.QueryResult): TestResult = {
-    val problem : Option[ErrorResult \/ FailureResult] = assertions.foldLeft(Option.empty[ErrorResult \/ FailureResult]) { case (failed, assertion) =>
+    val problem : Option[Either[ErrorResult, FailureResult]] = assertions.foldLeft(Option.empty[Either[ErrorResult, FailureResult]]) { case (failed, assertion) =>
         if(failed.nonEmpty) {
           failed
         } else {
           processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime)(assertion, actual) match {
             case error: ErrorResult =>
-              Some(error.left)
+              Some(Left(error))
             case failure: FailureResult =>
-              Some(failure.right)
+              Some(Right(failure))
             case _: PassResult =>
               None
             case _: AssumptionFailedResult =>
@@ -648,24 +647,24 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the test result from processing the assertion.
     */
   private def anyOf(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(assertions: List[XQTSParserActor.Result], actual: ExistServer.QueryResult): TestResult = {
-    def passOrFails() : Seq[ErrorResult \/ FailureResult] \/ PassResult= {
-      val accum = Seq.empty[ErrorResult \/ FailureResult].left[PassResult]
+    def passOrFails() : Either[Seq[Either[ErrorResult, FailureResult]], PassResult] = {
+      val accum = Either.left[Seq[Either[ErrorResult, FailureResult]], PassResult](Seq.empty[Either[ErrorResult, FailureResult]])
       assertions.foldLeft(accum) { case (results, assertion) =>
         results match {
-          case passed @ \/-(_) =>
+          case passed @ Right(_) =>
             passed  // if we have passed one, we don't need to evaluate any more assertions
 
-          case errors @ -\/(_) =>
+          case errors @ Left(_) =>
             // evaluate the next assertion
             processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime)(assertion, actual) match {
               case pass: PassResult =>
-                \/-(pass)
+                Right(pass)
 
               case failure: FailureResult =>
-                errors.leftMap(_ :+ \/-(failure))
+                errors.leftMap(_ :+ Right(failure))
 
               case error: ErrorResult =>
-                errors.leftMap(_ :+ -\/(error))
+                errors.leftMap(_ :+ Left(error))
 
               case _: AssumptionFailedResult =>
                 throw new IllegalStateException("Assumption should have already been evaluated")
@@ -697,13 +696,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     */
   private def assertXpath(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(xpath: String, actual: ExistServer.QueryResult): TestResult = {
     executeQueryWith$Result(connection, xpath, true, None, actual) match {
-      case -\/(existServerException) =>
+      case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-      case \/-(Result(-\/(queryError), errCompilationTime, errExecutionTime)) =>
+      case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
         ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing XPath: ${queryError.errorCode}: ${queryError.message}"))
 
-      case \/-(Result(\/-(actualQueryResult), resCompilationTime, resExecutionTime)) =>
+      case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
         val totalExecutionTime = executionTime + resExecutionTime
         if (actualQueryResult.getItemCount == 1
@@ -754,13 +753,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     */
   private def assertDeepEquals(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
     executeQueryWith$Result(connection, s"deep-equal(($expected), $$result)", true, None, actual) match {
-      case -\/(existServerException) =>
+      case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-      case \/-(Result(-\/(queryError), errCompilationTime, errExecutionTime)) =>
+      case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
         ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing deep-equals: ${queryError.errorCode}: ${queryError.message}}"))
 
-      case \/-(Result(\/-(actualQueryResult), resCompilationTime, resExecutionTime)) =>
+      case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
         val totalExecutionTime = executionTime + resExecutionTime
         if (actualQueryResult.getItemCount == 1
@@ -789,13 +788,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     */
   private def assertEq(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
     executeQueryWith$Result(connection, s"$expected eq $$result", false, None, actual) match {
-      case -\/(existServerException) =>
+      case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-      case \/-(Result(-\/(queryError), errCompilationTime, errExecutionTime)) =>
+      case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
         ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing eq: ${queryError.errorCode}: ${queryError.message}"))
 
-      case \/-(Result(\/-(actualQueryResult), resCompilationTime, resExecutionTime)) =>
+      case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
         val totalExecutionTime = executionTime + resExecutionTime
         if (actualQueryResult.getItemCount == 1
@@ -842,13 +841,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                         |""".stripMargin
 
     executeQueryWith$Result(connection, expectedQuery, true, None, actual) match {
-      case -\/(existServerException) =>
+      case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-      case \/-(Result(-\/(queryError), errCompilationTime, errExecutionTime)) =>
+      case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
         ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing permutation: ${queryError.errorCode}: ${queryError.message}"))
 
-      case \/-(Result(\/-(actualQueryResult), resCompilationTime, resExecutionTime)) =>
+      case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
         val totalExecutionTime = executionTime + resExecutionTime
         if (actualQueryResult.getItemCount == 1
@@ -877,16 +876,16 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     */
   private def assertSerializationError(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
     executeQueryWith$Result(connection, QUERY_ASSERT_XML_SERIALIZATION, true, None, actual) match {
-      case -\/(existServerException) =>
+      case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-      case \/-(Result(-\/(queryError), errActualCompilationTime, errActualExecutionTime)) if (queryError.errorCode == expected || expected == "*") =>
+      case Right(Result(Left(queryError), errActualCompilationTime, errActualExecutionTime)) if (queryError.errorCode == expected || expected == "*") =>
         PassResult(testSetName, testCaseName, compilationTime + errActualCompilationTime, executionTime + errActualExecutionTime)
 
-      case \/-(Result(-\/(queryError), errActualCompilationTime, errActualExecutionTime)) =>
+      case Right(Result(Left(queryError), errActualCompilationTime, errActualExecutionTime)) =>
         FailureResult(testSetName, testCaseName, compilationTime + errActualCompilationTime, executionTime + errActualExecutionTime, s"assert-serialization-error: expected='$expected' actual='${queryError.errorCode}'")
 
-      case \/-(Result(\/-(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
+      case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
         FailureResult(testSetName, testCaseName, compilationTime + actualQueryCompilationTime, executionTime + actualQueryExecutionTime, s"assert-serialization-error: expected='$expected', but query returned result='$actualQueryResult'")
     }
   }
@@ -974,22 +973,22 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       if (normalizeSpace) {
         // normalize the expected
         executeQueryWith$Result(connection, QUERY_NORMALIZED_SPACE, true, None, new StringValue(expected)) match {
-          case -\/(existServerException) =>
+          case Left(existServerException) =>
             ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-          case \/-(Result(-\/(queryError), errExpectedCompilationTime, errExpectedExecutionTime)) =>
+          case Right(Result(Left(queryError), errExpectedCompilationTime, errExpectedExecutionTime)) =>
             ErrorResult(testSetName, testCaseName, compilationTime + errExpectedCompilationTime, executionTime + errExpectedExecutionTime, new IllegalStateException(s"Error whilst normalizing expected value: ${queryError.errorCode}: ${queryError.message}"))
 
-          case \/-(Result(\/-(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) =>
+          case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) =>
             // get the actual string value and normalize
             executeQueryWith$Result(connection, QUERY_ASSERT_STRING_VALUE_NORMALIZED_SPACE, true, None, actual) match {
-              case -\/(existServerException) =>
+              case Left(existServerException) =>
                 ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + existServerException.compilationTime, executionTime + expectedQueryExecutionTime + existServerException.executionTime, existServerException)
 
-              case \/-(Result(-\/(queryError), errActualCompilationTime, errActualExecutionTime)) =>
+              case Right(Result(Left(queryError), errActualCompilationTime, errActualExecutionTime)) =>
                 ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + errActualCompilationTime, executionTime + expectedQueryExecutionTime + errActualExecutionTime, new IllegalStateException(s"Error whilst processing and normalizing actual value: ${queryError.errorCode}: ${queryError.message}"))
 
-              case \/-(Result(\/-(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
+              case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
 
                 val stringExpected : String = expectedQueryResult.asInstanceOf[StringValue].getStringValue()
                 val stringActual : String = actualQueryResult.asInstanceOf[StringValue].getStringValue()
@@ -1007,13 +1006,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       } else {
         // get the actual string value
         executeQueryWith$Result(connection, QUERY_ASSERT_STRING_VALUE, true, None, actual) match {
-          case -\/(existServerException) =>
+          case Left(existServerException) =>
             ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-          case \/-(Result(-\/(queryError), errCompilationTime, errExecutionTime)) =>
+          case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
             ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst processing and normalizing actual value: ${queryError.errorCode}: ${queryError.message}"))
 
-          case \/-(Result(\/-(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
+          case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
             val stringActual : String = actualQueryResult.asInstanceOf[StringValue].getStringValue()
             val totalCompilationTime = compilationTime + actualQueryCompilationTime
             val totalExecutionTime = executionTime + actualQueryExecutionTime
@@ -1076,12 +1075,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       }
     }
 
-    \/.fromTryCatchNonFatal(AssertTypeParser.parse(expectedType)).map(_.map(_.asExistTypeDescription)) match {
-      case -\/(t) => ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
-      case \/-(Failure(t)) => ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
+    Either.catchNonFatal(AssertTypeParser.parse(expectedType)).map(_.map(_.asExistTypeDescription)) match {
+      case Left(t) => ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
+      case Right(Failure(t)) => ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
 
       // query result returned an empty sequence
-      case \/-(Success(expectedType)) if (actual.isEmpty) =>
+      case Right(Success(expectedType)) if (actual.isEmpty) =>
         if (expectedType == WildcardExistTypeDescription || expectedType.asInstanceOf[ExplicitExistTypeDescription].base == Type.EMPTY) {
           // OK, we expected empty
           PassResult(testSetName, testCaseName, compilationTime, executionTime)
@@ -1091,7 +1090,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
 
       // query result returned a non-empty sequence
-      case \/-(Success(expectedType)) =>
+      case Right(Success(expectedType)) =>
         val actualTypes = getTypes(actual)
         if (matchCardinality(expectedType, actualTypes.size)) {
           if (matchType(expectedType, actualTypes)) {
@@ -1122,12 +1121,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the test result from processing the assertion.
     */
-  private def assertXml(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expectedXml: String \/ Path, @unused ignorePrefixes: Boolean, actual: ExistServer.QueryResult): TestResult = {
-    expectedXml.map(readTextFile(_)).fold(\/-(_), r => r) match {
-      case -\/(t) =>
+  private def assertXml(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expectedXml: Either[String, Path], @unused ignorePrefixes: Boolean, actual: ExistServer.QueryResult): TestResult = {
+    expectedXml.map(readTextFile(_)).fold(Right(_), r => r) match {
+      case Left(t) =>
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
 
-      case \/-(expectedXmlStr) =>
+      case Right(expectedXmlStr) =>
         /*
         We first have to serialize the expectedXml just as XQuery would do with
         serialization parameters: method="xml" indent="no" omit-xml-declaration="yes"
@@ -1139,30 +1138,30 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                                |""".stripMargin
 
         connection.executeQuery(expectedQuery, true, None, None) match {
-          case -\/(existServerException) =>
+          case Left(existServerException) =>
             ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-          case \/-(Result(-\/(queryError), errExpectedCompilationTime, errExpectedExecutionTime)) =>
+          case Right(Result(Left(queryError), errExpectedCompilationTime, errExpectedExecutionTime)) =>
             ErrorResult(testSetName, testCaseName, compilationTime + errExpectedCompilationTime, executionTime + errExpectedExecutionTime, new IllegalStateException(s"Error whilst executing XQuery for serializing expected value: ${queryError.errorCode}: ${queryError.message}"))
 
-          case \/-(Result(\/-(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) if(!allAreStrings(expectedQueryResult)) =>
+          case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) if(!allAreStrings(expectedQueryResult)) =>
             ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime, executionTime + expectedQueryExecutionTime, new IllegalStateException(s"Test case did not define nodes in assert-xml, expected (after serialization) was: ${connection.sequenceToStringAdaptive(expectedQueryResult)}"))
 
-          case \/-(Result(\/-(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) =>
+          case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) =>
             /*
             Next we have to serialize the actual xml in the same way as the expectedXml
             */
             executeQueryWith$Result(connection, QUERY_ASSERT_XML_SERIALIZATION, true, None, actual) match {
-              case -\/(existServerException) =>
+              case Left(existServerException) =>
                 ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + existServerException.compilationTime, executionTime + expectedQueryExecutionTime + existServerException.executionTime, existServerException)
 
-              case \/-(Result(-\/(queryError), errActualCompilationTime, errActualExecutionTime)) =>
+              case Right(Result(Left(queryError), errActualCompilationTime, errActualExecutionTime)) =>
                 ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + errActualCompilationTime, executionTime + expectedQueryExecutionTime + errActualExecutionTime, new IllegalStateException(s"Error whilst XQuery serializing actual value: ${queryError.errorCode}: ${queryError.message}"))
 
-              case \/-(Result(\/-(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) if(!allAreStrings(actualQueryResult)) =>
+              case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) if(!allAreStrings(actualQueryResult)) =>
                 ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + actualQueryCompilationTime, expectedQueryExecutionTime + actualQueryExecutionTime, new IllegalStateException(s"Test case did not produce nodes in assert-xml, actual (after serialization) was: ${connection.sequenceToStringAdaptive(actualQueryResult)}"))
 
-              case \/-(Result(\/-(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
+              case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
                 val totalCompilationTime = compilationTime + expectedQueryCompilationTime + actualQueryCompilationTime
                 val totalExecutionTime = executionTime + expectedQueryExecutionTime + actualQueryExecutionTime
 
@@ -1170,37 +1169,37 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                   val strActualResult = actualQueryResult.itemAt(0).asInstanceOf[StringValue].getStringValue();
 
                   val itemIdxs =  (0 until expectedQueryResult.getItemCount)
-                  val differences : \/[XMLUnitException, Seq[String]] = itemIdxs.foldLeft(\/.right[XMLUnitException, Seq[String]](Seq.empty[String]))((accum, itemIdx) => {
+                  val differences : Either[XMLUnitException, Seq[String]] = itemIdxs.foldLeft(Either.right[XMLUnitException, Seq[String]](Seq.empty[String]))((accum, itemIdx) => {
                     accum match {
                         // if we have an error don't process anything else, just perpetuate the error
-                      case error @ -\/(_) =>
+                      case error @ Left(_) =>
                         error
 
-                      case current @ \/-(results) =>
+                      case current @ Right(results) =>
                         val strExpectedResult = expectedQueryResult.itemAt(itemIdx).asInstanceOf[StringValue].getStringValue
                         val differences = findDifferences(strExpectedResult, strActualResult)
                         differences match {
                           // if we have an error don't process anything else, just perpetuate the error
-                          case -\/(diffError) =>
-                            -\/(diffError)
+                          case Left(diffError) =>
+                            Left(diffError)
 
-                          case \/-(Some(result)) =>
-                            \/-(results :+ result)
+                          case Right(Some(result)) =>
+                            Right(results :+ result)
 
-                          case \/-(None) =>
+                          case Right(None) =>
                             current
                         }
                     }
                   })
 
                   differences match {
-                    case -\/(diffError) =>
+                    case Left(diffError) =>
                       ErrorResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, diffError)
 
-                    case \/-(results) if results.isEmpty =>
+                    case Right(results) if results.isEmpty =>
                       PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
 
-                    case \/-(results) =>
+                    case Right(results) =>
                       FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-xml: differences='${results.mkString(". ")}")
                   }
                 } catch {
@@ -1227,25 +1226,25 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the test result from processing the assertion.
     */
-  private def serializationMatches(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String \/ Path, flags: Option[String], actual: ExistServer.QueryResult): TestResult = {
-    expected.map(readTextFile(_)).fold(\/-(_), r => r) match {
-      case -\/(t) =>
+  private def serializationMatches(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: Either[String, Path], flags: Option[String], actual: ExistServer.QueryResult): TestResult = {
+    expected.map(readTextFile(_)).fold(Right(_), r => r) match {
+      case Left(t) =>
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
 
-      case \/-(expectedRegexStr) =>
+      case Right(expectedRegexStr) =>
         val expectedQuery = s"""
                                | fn:matches($$result, "$expectedRegexStr", "${flags.getOrElse("")}")
                                |""".stripMargin
 
         val actualStr = connection.sequenceToString(actual)
         executeQueryWith$Result(connection, expectedQuery, true, None, new StringValue(actualStr)) match {
-          case -\/(existServerException) =>
+          case Left(existServerException) =>
             ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-          case \/-(Result(-\/(queryError), errCompilationTime, errExecutionTime)) =>
+          case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
             ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing serialization: ${queryError.errorCode}: ${queryError.message}"))
 
-          case \/-(Result(\/-(actualQueryResult), resCompilationTime, resExecutionTime)) =>
+          case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
             val totalCompilationTime = compilationTime + resCompilationTime
             val totalExecutionTime = executionTime + resExecutionTime
             if (actualQueryResult.getItemCount == 1
@@ -1267,7 +1266,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return Some string describing the differences, or None of there are no differences.
     */
-  private def findDifferences(expected : String, actual: String) : XMLUnitException \/ Option[String] = {
+  private def findDifferences(expected : String, actual: String) : Either[XMLUnitException, Option[String]] = {
     try {
       val expectedSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expected</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
       val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
@@ -1279,13 +1278,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         .build()
 
       if (diff.hasDifferences) {
-        \/-(Some(diff.toString))
+        Right(Some(diff.toString))
       } else {
-        \/-(None)
+        Right(None)
       }
     } catch {
       case e: XMLUnitException =>
-        -\/(e)
+        Left(e)
     }
   }
 
@@ -1329,13 +1328,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the content of the file as a string, or an exception.
     */
-  private def readTextFile(path: Path, charset: Charset = UTF_8) : IOException \/ String = {
+  private def readTextFile(path: Path, charset: Charset = UTF_8) : Either[IOException, String] = {
+    val fileIO = IO.blocking {
+      Either.catchOnly[IOException](new String(Files.readAllBytes(path), charset))
+    }
+
     implicit val runtime = IORuntime.global
-    IO {
-      \/.fromTryCatchThrowable[String, IOException] {
-        new String(Files.readAllBytes(path), charset)
-      }
-    }.unsafeRunSync()
+    fileIO.unsafeRunSync()
   }
 
   /**

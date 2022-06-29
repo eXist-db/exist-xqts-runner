@@ -22,8 +22,8 @@ import java.nio.file.{Files, Path}
 import akka.actor.Actor
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
+import cats.syntax.either._
 import org.exist.xqts.runner.ReadFileActor.{FileContent, FileReadError, ReadFile}
-import scalaz.{-\/, \/, \/-}
 
 /**
   * Actor which reads the entire
@@ -35,20 +35,19 @@ class ReadFileActor extends Actor {
   override def receive: Receive = {
     case ReadFile(path) =>
       readFile(path) match {
-        case -\/(ioe) =>
+        case Left(ioe) =>
           sender() ! FileReadError(path, ioe)
-        case \/-(content) =>
+        case Right(content) =>
           sender() ! FileContent(path, content)
       }
   }
 
-  private def readFile(path: Path) : IOException \/ Array[Byte] = {
-    val fileIO = IO {
-      \/.fromTryCatchThrowable[Array[Byte], IOException](Files.readAllBytes(path))
+  private def readFile(path: Path) : Either[IOException, Array[Byte]] = {
+    val fileIO = IO.blocking {
+      Either.catchOnly[IOException](Files.readAllBytes(path))
     }
 
     implicit val runtime = IORuntime.global
-
     fileIO.unsafeRunSync()
   }
 }

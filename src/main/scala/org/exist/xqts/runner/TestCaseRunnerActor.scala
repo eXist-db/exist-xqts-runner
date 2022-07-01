@@ -304,7 +304,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   private def getContextSequence(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, Option[Sequence]] = {
     testCase.environment match {
       case Some(env) if (env.name == "empty") =>
-        Right(Some(Sequence.EMPTY_SEQUENCE))
+        Right(None)
 
       case Some(env) =>
         env.sources.filter(_.role.filter(Role.isContextItem(_)).nonEmpty).headOption

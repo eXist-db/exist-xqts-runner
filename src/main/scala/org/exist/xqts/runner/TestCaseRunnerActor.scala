@@ -752,7 +752,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the test result from processing the assertion.
     */
   private def assertDeepEquals(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    executeQueryWith$Result(connection, s"deep-equal(($expected), $$result)", true, None, actual) match {
+    val deepEqualQuery = s"""
+                         | declare variable $$result external;
+                         |
+                         | deep-equal(($expected), $$result)
+                         |""".stripMargin
+    executeQueryWith$Result(connection, deepEqualQuery, true, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
@@ -787,7 +792,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the test result from processing the assertion.
     */
   private def assertEq(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    executeQueryWith$Result(connection, s"$expected eq $$result", false, None, actual) match {
+    val eqQuery = s"""
+                  | declare variable $$result external;
+                  |
+                  | $expected eq $$result
+                  |""".stripMargin
+    executeQueryWith$Result(connection, eqQuery, false, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
@@ -828,6 +838,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     */
   private def assertPermutation(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
     val expectedQuery = s"""
+                        | declare variable $$result external;
+                        |
                         | let $$sort-key-fun := function($$key) {
                         |   let $$data := fn:data($$key)
                         |   return
@@ -839,7 +851,6 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                         | return
                         |   fn:deep-equal(fn:sort(($expected), (), $$sort-key-fun), fn:sort($$result, (), $$sort-key-fun))
                         |""".stripMargin
-
     executeQueryWith$Result(connection, expectedQuery, true, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
@@ -1242,9 +1253,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
       case Right(expectedRegexStr) =>
         val expectedQuery = s"""
+                               | declare variable $$result external;
+                               |
                                | fn:matches($$result, "$expectedRegexStr", "${flags.getOrElse("")}")
                                |""".stripMargin
-
         val actualStr = connection.sequenceToString(actual)
         executeQueryWith$Result(connection, expectedQuery, true, None, new StringValue(actualStr)) match {
           case Left(existServerException) =>
@@ -1417,9 +1429,21 @@ object TestCaseRunnerActor {
 
   private val EXPECTED_VARIABLE_NAME = "expected"
   private val RESULT_VARIABLE_NAME = "result"
-  private val QUERY_NORMALIZED_SPACE = "normalize-space($result)"
-  private val QUERY_ASSERT_STRING_VALUE_NORMALIZED_SPACE = """normalize-space(string-join(for $r in $result return string($r), " "))"""
-  private val QUERY_ASSERT_STRING_VALUE = """string-join(for $r in $result return string($r), " ")"""
+  private val QUERY_NORMALIZED_SPACE = s"""
+                                       | declare variable $$result external;
+                                       |
+                                       | normalize-space($$result)
+                                       |""".stripMargin
+  private val QUERY_ASSERT_STRING_VALUE_NORMALIZED_SPACE = s"""
+                                                           | declare variable $$result external;
+                                                           |
+                                                           | normalize-space(string-join(for $$r in $$result return string($$r), " "))
+                                                           |""".stripMargin
+  private val QUERY_ASSERT_STRING_VALUE = s"""
+                                             | declare variable $$result external;
+                                             |
+                                             | string-join(for $$r in $$result return string($$r), " ")
+                                             |""".stripMargin
   private val QUERY_DEFAULT_SERIALIZATION = """
                                               |xquery version "3.1";
                                               |declare namespace output = "http://www.w3.org/2010/xslt-xquery-serialization";
@@ -1434,6 +1458,8 @@ object TestCaseRunnerActor {
                                               |""".stripMargin
   private val QUERY_ASSERT_XML_SERIALIZATION = s"""
                                                   | $QUERY_DEFAULT_SERIALIZATION
+                                                  |
+                                                  | declare variable $$result external;
                                                   |
                                                   | fn:serialize($$result, $$local:default-serialization)
                                                   |""".stripMargin

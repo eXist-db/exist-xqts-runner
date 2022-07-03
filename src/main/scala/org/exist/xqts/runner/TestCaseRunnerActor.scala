@@ -752,7 +752,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the test result from processing the assertion.
     */
   private def assertDeepEquals(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    executeQueryWith$Result(connection, s"deep-equal(($expected), $$result)", true, None, actual) match {
+    val deepEqualQuery = s"""
+                         | declare variable $$result external;
+                         |
+                         | deep-equal(($expected), $$result)
+                         |""".stripMargin
+    executeQueryWith$Result(connection, deepEqualQuery, true, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
@@ -787,7 +792,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     * @return the test result from processing the assertion.
     */
   private def assertEq(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    executeQueryWith$Result(connection, s"$expected eq $$result", false, None, actual) match {
+    val eqQuery = s"""
+                  | declare variable $$result external;
+                  |
+                  | $expected eq $$result
+                  |""".stripMargin
+    executeQueryWith$Result(connection, eqQuery, false, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
@@ -828,6 +838,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     */
   private def assertPermutation(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
     val expectedQuery = s"""
+                        | declare variable $$result external;
+                        |
                         | let $$sort-key-fun := function($$key) {
                         |   let $$data := fn:data($$key)
                         |   return
@@ -839,7 +851,6 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                         | return
                         |   fn:deep-equal(fn:sort(($expected), (), $$sort-key-fun), fn:sort($$result, (), $$sort-key-fun))
                         |""".stripMargin
-
     executeQueryWith$Result(connection, expectedQuery, true, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
@@ -1127,88 +1138,97 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
 
       case Right(expectedXmlStr) =>
-        /*
-        We first have to serialize the expectedXml just as XQuery would do with
-        serialization parameters: method="xml" indent="no" omit-xml-declaration="yes"
-        */
-        val expectedQuery = s"""
-                               | $QUERY_DEFAULT_SERIALIZATION
-                               |
-                               | fn:serialize(<$IGNORABLE_WRAPPER_ELEM_NAME>$expectedXmlStr</$IGNORABLE_WRAPPER_ELEM_NAME>/child::node(), $$local:default-serialization)
-                               |""".stripMargin
 
-        connection.executeQuery(expectedQuery, true, None, None) match {
-          case Left(existServerException) =>
-            ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
+        SAXParser.parseXml(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expectedXmlStr</$IGNORABLE_WRAPPER_ELEM_NAME>".getBytes(UTF_8)) match {
+          case Left(e: ExistServerException) =>
+            ErrorResult(testSetName, testCaseName, compilationTime, executionTime, e)
 
-          case Right(Result(Left(queryError), errExpectedCompilationTime, errExpectedExecutionTime)) =>
-            ErrorResult(testSetName, testCaseName, compilationTime + errExpectedCompilationTime, executionTime + errExpectedExecutionTime, new IllegalStateException(s"Error whilst executing XQuery for serializing expected value: ${queryError.errorCode}: ${queryError.message}"))
-
-          case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) if(!allAreStrings(expectedQueryResult)) =>
-            ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime, executionTime + expectedQueryExecutionTime, new IllegalStateException(s"Test case did not define nodes in assert-xml, expected (after serialization) was: ${connection.sequenceToStringAdaptive(expectedQueryResult)}"))
-
-          case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) =>
+          case Right(expectedXmlDoc) =>
             /*
-            Next we have to serialize the actual xml in the same way as the expectedXml
+            We first have to serialize the expectedXml just as XQuery would do with
+            serialization parameters: method="xml" indent="no" omit-xml-declaration="yes"
             */
-            executeQueryWith$Result(connection, QUERY_ASSERT_XML_SERIALIZATION, true, None, actual) match {
+            val expectedQuery = s"""
+                                   | $QUERY_DEFAULT_SERIALIZATION
+                                   |
+                                   | declare variable $$expected as document-node(element($IGNORABLE_WRAPPER_ELEM_NAME)) external;
+                                   |
+                                   | fn:serialize($$expected/$IGNORABLE_WRAPPER_ELEM_NAME/child::node(), $$local:default-serialization)
+                                   |""".stripMargin
+
+            connection.executeQuery(expectedQuery, true, None, None, Seq.empty, Seq.empty, Seq.empty, Seq.empty, externalVariables = Seq(EXPECTED_VARIABLE_NAME -> expectedXmlDoc)) match {
               case Left(existServerException) =>
-                ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + existServerException.compilationTime, executionTime + expectedQueryExecutionTime + existServerException.executionTime, existServerException)
+                ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-              case Right(Result(Left(queryError), errActualCompilationTime, errActualExecutionTime)) =>
-                ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + errActualCompilationTime, executionTime + expectedQueryExecutionTime + errActualExecutionTime, new IllegalStateException(s"Error whilst XQuery serializing actual value: ${queryError.errorCode}: ${queryError.message}"))
+              case Right(Result(Left(queryError), errExpectedCompilationTime, errExpectedExecutionTime)) =>
+                ErrorResult(testSetName, testCaseName, compilationTime + errExpectedCompilationTime, executionTime + errExpectedExecutionTime, new IllegalStateException(s"Error whilst executing XQuery for serializing expected value: ${queryError.errorCode}: ${queryError.message}"))
 
-              case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) if(!allAreStrings(actualQueryResult)) =>
-                ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + actualQueryCompilationTime, expectedQueryExecutionTime + actualQueryExecutionTime, new IllegalStateException(s"Test case did not produce nodes in assert-xml, actual (after serialization) was: ${connection.sequenceToStringAdaptive(actualQueryResult)}"))
+              case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) if(!allAreStrings(expectedQueryResult)) =>
+                ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime, executionTime + expectedQueryExecutionTime, new IllegalStateException(s"Test case did not define nodes in assert-xml, expected (after serialization) was: ${connection.sequenceToStringAdaptive(expectedQueryResult)}"))
 
-              case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
-                val totalCompilationTime = compilationTime + expectedQueryCompilationTime + actualQueryCompilationTime
-                val totalExecutionTime = executionTime + expectedQueryExecutionTime + actualQueryExecutionTime
+              case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) =>
+                /*
+                Next we have to serialize the actual xml in the same way as the expectedXml
+                */
+                executeQueryWith$Result(connection, QUERY_ASSERT_XML_SERIALIZATION, true, None, actual) match {
+                  case Left(existServerException) =>
+                    ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + existServerException.compilationTime, executionTime + expectedQueryExecutionTime + existServerException.executionTime, existServerException)
 
-                try {
-                  val strActualResult = actualQueryResult.itemAt(0).asInstanceOf[StringValue].getStringValue();
+                  case Right(Result(Left(queryError), errActualCompilationTime, errActualExecutionTime)) =>
+                    ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + errActualCompilationTime, executionTime + expectedQueryExecutionTime + errActualExecutionTime, new IllegalStateException(s"Error whilst XQuery serializing actual value: ${queryError.errorCode}: ${queryError.message}"))
 
-                  val itemIdxs =  (0 until expectedQueryResult.getItemCount)
-                  val differences : Either[XMLUnitException, Seq[String]] = itemIdxs.foldLeft(Either.right[XMLUnitException, Seq[String]](Seq.empty[String]))((accum, itemIdx) => {
-                    accum match {
-                        // if we have an error don't process anything else, just perpetuate the error
-                      case error @ Left(_) =>
-                        error
+                  case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) if(!allAreStrings(actualQueryResult)) =>
+                    ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + actualQueryCompilationTime, expectedQueryExecutionTime + actualQueryExecutionTime, new IllegalStateException(s"Test case did not produce nodes in assert-xml, actual (after serialization) was: ${connection.sequenceToStringAdaptive(actualQueryResult)}"))
 
-                      case current @ Right(results) =>
-                        val strExpectedResult = expectedQueryResult.itemAt(itemIdx).asInstanceOf[StringValue].getStringValue
-                        val differences = findDifferences(strExpectedResult, strActualResult)
-                        differences match {
-                          // if we have an error don't process anything else, just perpetuate the error
-                          case Left(diffError) =>
-                            Left(diffError)
+                  case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
+                    val totalCompilationTime = compilationTime + expectedQueryCompilationTime + actualQueryCompilationTime
+                    val totalExecutionTime = executionTime + expectedQueryExecutionTime + actualQueryExecutionTime
 
-                          case Right(Some(result)) =>
-                            Right(results :+ result)
+                    try {
+                      val strActualResult = actualQueryResult.itemAt(0).asInstanceOf[StringValue].getStringValue();
 
-                          case Right(None) =>
-                            current
+                      val itemIdxs =  (0 until expectedQueryResult.getItemCount)
+                      val differences : Either[XMLUnitException, Seq[String]] = itemIdxs.foldLeft(Either.right[XMLUnitException, Seq[String]](Seq.empty[String]))((accum, itemIdx) => {
+                        accum match {
+                            // if we have an error don't process anything else, just perpetuate the error
+                          case error @ Left(_) =>
+                            error
+
+                          case current @ Right(results) =>
+                            val strExpectedResult = expectedQueryResult.itemAt(itemIdx).asInstanceOf[StringValue].getStringValue
+                            val differences = findDifferences(strExpectedResult, strActualResult)
+                            differences match {
+                              // if we have an error don't process anything else, just perpetuate the error
+                              case Left(diffError) =>
+                                Left(diffError)
+
+                              case Right(Some(result)) =>
+                                Right(results :+ result)
+
+                              case Right(None) =>
+                                current
+                            }
                         }
+                      })
+
+                      differences match {
+                        case Left(diffError) =>
+                          ErrorResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, diffError)
+
+                        case Right(results) if results.isEmpty =>
+                          PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
+
+                        case Right(results) =>
+                          FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-xml: differences='${results.mkString(". ")}")
+                      }
+                    } catch {
+                      // TODO(AR) temp try/catch for NPE due to a problem with XmlDiff and eXist-db's DOM(s)?
+                      case npe : NullPointerException =>
+                        ErrorResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, npe)
                     }
-                  })
-
-                  differences match {
-                    case Left(diffError) =>
-                      ErrorResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, diffError)
-
-                    case Right(results) if results.isEmpty =>
-                      PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
-
-                    case Right(results) =>
-                      FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-xml: differences='${results.mkString(". ")}")
-                  }
-                } catch {
-                  // TODO(AR) temp try/catch for NPE due to a problem with XmlDiff and eXist-db's DOM(s)?
-                  case npe : NullPointerException =>
-                    ErrorResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, npe)
                 }
             }
-        }
+          }
     }
   }
 
@@ -1233,9 +1253,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
       case Right(expectedRegexStr) =>
         val expectedQuery = s"""
+                               | declare variable $$result external;
+                               |
                                | fn:matches($$result, "$expectedRegexStr", "${flags.getOrElse("")}")
                                |""".stripMargin
-
         val actualStr = connection.sequenceToString(actual)
         executeQueryWith$Result(connection, expectedQuery, true, None, new StringValue(actualStr)) match {
           case Left(existServerException) =>
@@ -1406,10 +1427,23 @@ object TestCaseRunnerActor {
   case class FailureResult(testSet: String, testCase: String, compilationTime: CompilationTime, executionTime: ExecutionTime, reason: String) extends TestResult
   case class ErrorResult(testSet: String, testCase: String, compilationTime: CompilationTime, executionTime: ExecutionTime, t: Throwable) extends TestResult
 
+  private val EXPECTED_VARIABLE_NAME = "expected"
   private val RESULT_VARIABLE_NAME = "result"
-  private val QUERY_NORMALIZED_SPACE = "normalize-space($result)"
-  private val QUERY_ASSERT_STRING_VALUE_NORMALIZED_SPACE = """normalize-space(string-join(for $r in $result return string($r), " "))"""
-  private val QUERY_ASSERT_STRING_VALUE = """string-join(for $r in $result return string($r), " ")"""
+  private val QUERY_NORMALIZED_SPACE = s"""
+                                       | declare variable $$result external;
+                                       |
+                                       | normalize-space($$result)
+                                       |""".stripMargin
+  private val QUERY_ASSERT_STRING_VALUE_NORMALIZED_SPACE = s"""
+                                                           | declare variable $$result external;
+                                                           |
+                                                           | normalize-space(string-join(for $$r in $$result return string($$r), " "))
+                                                           |""".stripMargin
+  private val QUERY_ASSERT_STRING_VALUE = s"""
+                                             | declare variable $$result external;
+                                             |
+                                             | string-join(for $$r in $$result return string($$r), " ")
+                                             |""".stripMargin
   private val QUERY_DEFAULT_SERIALIZATION = """
                                               |xquery version "3.1";
                                               |declare namespace output = "http://www.w3.org/2010/xslt-xquery-serialization";
@@ -1424,6 +1458,8 @@ object TestCaseRunnerActor {
                                               |""".stripMargin
   private val QUERY_ASSERT_XML_SERIALIZATION = s"""
                                                   | $QUERY_DEFAULT_SERIALIZATION
+                                                  |
+                                                  | declare variable $$result external;
                                                   |
                                                   | fn:serialize($$result, $$local:default-serialization)
                                                   |""".stripMargin

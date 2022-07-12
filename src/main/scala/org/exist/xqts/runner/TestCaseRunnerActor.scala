@@ -379,7 +379,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   private def getDynamicContextAvailableDocuments(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, List[(String, DocumentImpl)]] = {
     val initAccum: Either[ExistServerException, List[(String, DocumentImpl)]] = Right(List.empty)
     testCase.environment
-      .map(env => env.sources.filter(source => (source.role.isEmpty || source.role.filter(Role.isContextItem(_)).nonEmpty) && source.uri.nonEmpty))
+      .map(env => env.sources.filter(source => source.uri.nonEmpty))
       .getOrElse(List.empty)
       .foldLeft(initAccum) { case (accum, x) =>
         accum match {

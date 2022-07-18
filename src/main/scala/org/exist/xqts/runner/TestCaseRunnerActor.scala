@@ -62,9 +62,20 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
   private var awaitingSchemas: Map[Path, Seq[TestCaseId]] = Map.empty
   private var awaitingSources: Map[Path, Seq[TestCaseId]] = Map.empty
+  private var awaitingSourceURIs: Map[Path, Map[TestCaseId, String]] = Map.empty
   private var awaitingResources: Map[Path, Seq[TestCaseId]] = Map.empty
   private var awaitingQueryStr: Map[Path, Seq[TestCaseId]] = Map.empty
   private var pendingTestCases: Map[TestCaseId, PendingTestCase] = Map.empty
+
+  def addSourceURI(testSetRef: TestSetRef, testCase : TestCase, source : Source) : Unit = {
+
+    source.uri.map(uri => {
+      val current = awaitingSourceURIs.getOrElse(source.file, Map.empty)
+      val updated = current + ((testSetRef.name, testCase.name) -> uri)
+      awaitingSourceURIs = awaitingSourceURIs + (source.file -> updated)
+    })
+              
+  }
 
   override def receive: Receive = {
 
@@ -80,6 +91,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
               environment.sources.map(source => commonResourceCacheActor ! GetResource(source.file))
               awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources.map(source => () => source.file))
+              environment.sources.map(source => addSourceURI(testSetRef, testCase, source))
               environment.resources.map(resource => commonResourceCacheActor ! GetResource(resource.file))
               awaitingResources = merge(awaitingResources)((testSetRef.name, testCase.name), environment.resources.map(resource => () => resource.file))
               environment.collections.map(_.sources.map(source => commonResourceCacheActor ! GetResource(source.file)))
@@ -131,8 +143,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       awaitingSchemas = awaitingSchemas - path
 
       val testCasesAwaitingSources = awaitingSources.get(path).getOrElse(Seq.empty)
-      pendingTestCases = addSources(pendingTestCases)(testCasesAwaitingSources, path, value)
+      pendingTestCases = addSources(pendingTestCases)(testCasesAwaitingSources, path, value, awaitingSourceURIs.getOrElse(path, Map.empty))
       awaitingSources = awaitingSources - path
+      awaitingSourceURIs = awaitingSourceURIs - path
 
       val testCasesAwaitingResources = awaitingResources.get(path).getOrElse(Seq.empty)
       pendingTestCases = addResources(pendingTestCases)(testCasesAwaitingResources, path, value)
@@ -486,9 +499,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
             case Right(results) =>
               x.role
                 .flatMap(role => resolvedEnvironment.resolvedSources.find(_.path == x.file)
-                  .map(resolvedSource => (role, resolvedSource.data, resolvedSource.path))
-                  .map { case (role, data, path) => SAXParser.parseXml(data).map(doc => {
-                    doc.setDocumentURI(path.toUri().toString())
+                  .map(resolvedSource => (role, resolvedSource.data, resolvedSource.path, resolvedSource.uri))
+                  .map { case (role, data, path, uri) => SAXParser.parseXml(data).map(doc => {
+                    doc.setDocumentURI(uri.getOrElse(path.toUri().toString()))
                     (role.asInstanceOf[ExternalVariableRole].name, doc)
                   }
                   ) }
@@ -1470,7 +1483,7 @@ object TestCaseRunnerActor {
    Resolved Environment resources
    */
   case class ResolvedSchema(path: Path, data: Array[Byte])
-  case class ResolvedSource(path: Path, data: Array[Byte])
+  case class ResolvedSource(path: Path, data: Array[Byte], uri: Option[String])
   case class ResolvedResource(path: Path, data: Array[Byte])
   case class ResolvedEnvironment(resolvedSchemas: Seq[ResolvedSchema] = Seq.empty, resolvedSources: Seq[ResolvedSource] = Seq.empty, resolvedResources: Seq[ResolvedResource] = Seq.empty, resolvedQuery: Option[String] = None)
   case class PendingTestCase(runTestCase: RunTestCase, resolvedEnvironment: ResolvedEnvironment)
@@ -1500,10 +1513,11 @@ object TestCaseRunnerActor {
     }
   }
 
-  private def addSources(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]) : Map[TestCaseId, PendingTestCase] = {
+  private def addSources(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte], uris: Map[TestCaseId, String]) : Map[TestCaseId, PendingTestCase] = {
     testCases.foldLeft(pending){(accum, x) =>
       val pendingTestCase = accum(x)
-      accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedSources = pendingTestCase.resolvedEnvironment.resolvedSources :+ ResolvedSource(path, value))))
+      val uri = uris.get(x)
+      accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedSources = pendingTestCase.resolvedEnvironment.resolvedSources :+ ResolvedSource(path, value, uri))))
     }
   }
 

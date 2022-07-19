@@ -42,7 +42,7 @@ developers := List(
 versionScheme := Some("semver-spec")
 
 libraryDependencies ++= {
-  val existV = "6.1.0-SNAPSHOT"
+  val existV = "6.0.1"
 
   Seq(
     "com.typesafe.akka" %% "akka-actor" % "2.6.19",

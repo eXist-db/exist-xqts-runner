@@ -37,7 +37,7 @@ import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
 import org.exist.xqts.runner.XQTSParserActor.Spec.Spec
 import org.exist.xqts.runner.XQTSParserActor.XmlVersion.XmlVersion
 import org.exist.xqts.runner.XQTSParserActor.XsdVersion.XsdVersion
-import org.exist.xqts.runner.XQTSParserActor.{missingDependencies, _}
+import org.exist.xqts.runner.XQTSParserActor.{unmetDependencies, _}
 import org.exist.xqts.runner.XQTSRunnerActor.{ParsedTestSet, ParsingTestSet, RanTestCase, RunningTestCase}
 import org.exist.xqts.runner.qt3.XQTS3TestSetParserActor._
 
@@ -586,14 +586,14 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               if (matchesTestCases(testCase.name)) {
                 currentTestSet = currentTestSet.map(testSet => testSet.copy(testCases = testCase +: testSet.testCases))
                 val allDependencies : Seq[Dependency] = currentTestSet.map(testSet => (testSet.dependencies.toSet ++ testCase.dependencies.toSet).toSeq).getOrElse(testCase.dependencies)
-                val missingDeps: Missing = missingDependencies(allDependencies, features, specs, xmlVersions, xsdVersions)
-                if (missingDeps.isEmpty) {
+                val unmetDeps: Unmet = unmetDependencies(allDependencies, features, specs, xmlVersions, xsdVersions)
+                if (unmetDeps.isEmpty) {
                   testCaseRunnerActor ! RunTestCase(testSetRef.copy(name = currentTestSet.map(_.name).getOrElse("<UNKNOWN>")), testCase, manager)
                 } else {
                   // assumption failed
                   //TODO(AR) replace these two messages with AssumptionFailed() - and let the manager deal with it
                   manager ! RunningTestCase(testSetRef, testCase.name)
-                  manager ! RanTestCase(testSetRef, AssumptionFailedResult(testSetRef.name, testCase.name, 0, 0, s"Test's dependencies were not satisfiable. Missing: [${missingDeps.mkString(", ")}]"))
+                  manager ! RanTestCase(testSetRef, AssumptionFailedResult(testSetRef.name, testCase.name, 0, 0, s"Test's dependencies were not satisfiable. Not met: [${unmetDeps.mkString(", ")}]"))
                 }
               } else {
                 throw new XQTSParseException("SHOULD BE FILTERED ON START_ELEMENT")

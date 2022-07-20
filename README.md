@@ -79,10 +79,10 @@ When the Application first executes, it will check for a local copy of the XQTS 
 ### Actor Hierarchy
 Actors naturally have a supervision hierarchy, where if an Actor fails it's supervisor may be notified; The supervisor is responsible for responding to, and recovering from, failures of its supervisees. 
 
-![Actor Supervisor Hierarchy](https://github.com/exist-db/exist-xqts-runner/raw/master/doc/actor-supervisor-hierarchy.png "Actor Supervisor Hierarchy")
+![Actor Supervisor Hierarchy](https://github.com/exist-db/exist-xqts-runner/raw/main/doc/actor-supervisor-hierarchy.png "Actor Supervisor Hierarchy")
 
 
 ### Actor Message Flows
 Actors in the system communicate by sending messages between each other. The message flow of an Akka Actor system can sometimes be tricky to follow by reading the code. The diagram below attempts to inform the developer about the message flows in the system.
 
-![Actor Message Flow](https://github.com/exist-db/exist-xqts-runner/raw/master/doc/actor-message-flow.png "Actor Message Flow")
+![Actor Message Flow](https://github.com/exist-db/exist-xqts-runner/raw/main/doc/actor-message-flow.png "Actor Message Flow")

@@ -41,6 +41,7 @@ import org.exist.xqts.runner.XQTSParserActor.{missingDependencies, _}
 import org.exist.xqts.runner.XQTSRunnerActor.{ParsedTestSet, ParsingTestSet, RanTestCase, RunningTestCase}
 import org.exist.xqts.runner.qt3.XQTS3TestSetParserActor._
 
+import java.util.regex.Pattern
 import scala.annotation.tailrec
 
 /**
@@ -112,7 +113,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
     *
     * @return Some of the parsed test-set, or None.
     */
-  private def parseTestSet(testSetRef: TestSetRef, testCases: Set[String], features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], excludeTestCases: Set[String], globalEnvironments: Map[String, Environment], manager: ActorRef) : Option[TestSet] = {
+  private def parseTestSet(testSetRef: TestSetRef, testCases: Either[Set[String], Pattern], features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], excludeTestCases: Set[String], globalEnvironments: Map[String, Environment], manager: ActorRef) : Option[TestSet] = {
 
     /**
       * Get's an environment.
@@ -127,6 +128,20 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
     def getEnvironment(ref: String) : Option[Environment] = {
       environments.get(ref)
         .orElse(globalEnvironments.get(ref))
+    }
+
+    def matchesTestCases(testCaseName: String) : Boolean = {
+      if (excludeTestCases.contains(testCaseName)) {
+        return false
+      }
+
+      testCases match {
+        case Left(testCaseNames) =>
+          testCaseNames.isEmpty || testCaseNames.contains(testCaseName)
+
+        case Right(testCaseNamePattern) =>
+          testCaseNamePattern.matcher(testCaseName).matches()
+      }
     }
 
     /**
@@ -382,7 +397,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           parsingTestCases = true
           val name = asyncReader.getAttributeValue(ATTR_NAME)
           val covers = asyncReader.getAttributeValue(ATTR_COVERS)
-          if ((testCases.isEmpty || testCases.contains(name)) && !excludeTestCases.contains(name)) {
+          if (matchesTestCases(name)) {
             currentTestCase = Some(TestCase(testSetRef.file, name, covers))
           } else {
             logger.debug(s"Filtered out test-case: ${name}")
@@ -568,7 +583,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentTestCase = currentTestCase.map(testCase => testCase.copy(environment = testCase.environment.orElse(Some(Environment(testCase.name)))))
           currentTestCase match {
             case Some(testCase) =>
-              if (testCases.isEmpty || testCases.contains(testCase.name)) {
+              if (matchesTestCases(testCase.name)) {
                 currentTestSet = currentTestSet.map(testSet => testSet.copy(testCases = testCase +: testSet.testCases))
                 val allDependencies : Seq[Dependency] = currentTestSet.map(testSet => (testSet.dependencies.toSet ++ testCase.dependencies.toSet).toSeq).getOrElse(testCase.dependencies)
                 val missingDeps: Missing = missingDependencies(allDependencies, features, specs, xmlVersions, xsdVersions)
@@ -685,5 +700,5 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 }
 
 object XQTS3TestSetParserActor {
-  case class ParseTestSet(testSetRef: TestSetRef, testCases: Set[String], features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], excludeTestCases: Set[String], globalEnvironments: Map[String, Environment], manager: ActorRef)
+  case class ParseTestSet(testSetRef: TestSetRef, testCases: Either[Set[String], Pattern], features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], excludeTestCases: Set[String], globalEnvironments: Map[String, Environment], manager: ActorRef)
 }

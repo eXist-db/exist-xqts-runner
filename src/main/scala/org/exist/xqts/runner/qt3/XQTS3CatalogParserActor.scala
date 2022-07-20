@@ -103,7 +103,7 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
     *
     * @return the number of test sets that were matched in the catalog and dispatched to the testSetParserRouter.
     */
-  private def parseCatalog(xqtsRunner: ActorRef, xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Either[Set[String], Pattern], testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String]) : Int = {
+  private def parseCatalog(xqtsRunner: ActorRef, xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Either[Set[String], Pattern], testCases: Either[Set[String], Pattern], excludeTestSets: Set[String], excludeTestCases: Set[String]) : Int = {
 
     /**
       * The asynchronous STaX parsing loop,

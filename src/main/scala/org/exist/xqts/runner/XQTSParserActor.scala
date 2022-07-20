@@ -47,7 +47,7 @@ trait XQTSParserActor extends Actor {
   * @author Adam Retter <adam@evolvedbinary.com>
   */
 object XQTSParserActor {
-  case class Parse(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Either[Set[String], Pattern], testCases: Set[String], excludeTestSets: Set[String], excludeTestCases: Set[String])
+  case class Parse(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Either[Set[String], Pattern], testCases: Either[Set[String], Pattern], excludeTestSets: Set[String], excludeTestCases: Set[String])
   case class ParseComplete(xqtsVersion: XQTSVersion, xqtsPath: Path, matchedTestSets: Int)
 
   object Validation extends Enumeration {

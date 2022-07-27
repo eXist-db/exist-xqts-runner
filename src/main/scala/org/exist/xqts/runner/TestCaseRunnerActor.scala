@@ -840,13 +840,64 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     val expectedQuery = s"""
                         | declare variable $$result external;
                         |
+                        | declare function local:xdm-type($$value as item()?) as xs:QName? {
+                        |   typeswitch($$value)
+                        |     case array(*) return xs:QName("array")
+                        |     case map(*) return xs:QName("map")
+                        |     case function(*) return xs:QName("function")
+                        |     case document-node() return xs:QName("document")
+                        |     case element() return xs:QName("element")
+                        |     case attribute() return xs:QName("attribute")
+                        |     case comment() return xs:QName("comment")
+                        |     case processing-instruction() return xs:QName("processing-instruction")
+                        |     case text() return xs:QName("text")
+                        |     case xs:untypedAtomic return xs:QName('xs:untypedAtomic')
+                        |     case xs:anyURI return xs:QName('xs:anyURI')
+                        |     case xs:ENTITY return xs:QName('xs:ENTITY')
+                        |     case xs:ID return xs:QName('xs:ID')
+                        |     case xs:NMTOKEN return xs:QName('xs:NMTOKEN')
+                        |     case xs:language return xs:QName('xs:language')
+                        |     case xs:NCName return xs:QName('xs:NCName')
+                        |     case xs:Name return xs:QName('xs:Name')
+                        |     case xs:token return xs:QName('xs:token')
+                        |     case xs:normalizedString return xs:QName('xs:normalizedString')
+                        |     case xs:string return xs:QName('xs:string')
+                        |     case xs:QName return xs:QName('xs:QName')
+                        |     case xs:boolean return xs:QName('xs:boolean')
+                        |     case xs:base64Binary return xs:QName('xs:base64Binary')
+                        |     case xs:hexBinary return xs:QName('xs:hexBinary')
+                        |     case xs:byte return xs:QName('xs:byte')
+                        |     case xs:short return xs:QName('xs:short')
+                        |     case xs:int return xs:QName('xs:int')
+                        |     case xs:long return xs:QName('xs:long')
+                        |     case xs:unsignedByte return xs:QName('xs:unsignedByte')
+                        |     case xs:unsignedShort return xs:QName('xs:unsignedShort')
+                        |     case xs:unsignedInt return xs:QName('xs:unsignedInt')
+                        |     case xs:unsignedLong return xs:QName('xs:unsignedLong')
+                        |     case xs:positiveInteger return xs:QName('xs:positiveInteger')
+                        |     case xs:nonNegativeInteger return xs:QName('xs:nonNegativeInteger')
+                        |     case xs:negativeInteger return xs:QName('xs:negativeInteger')
+                        |     case xs:nonPositiveInteger return xs:QName('xs:nonPositiveInteger')
+                        |     case xs:integer return xs:QName('xs:integer')
+                        |     case xs:decimal return xs:QName('xs:decimal')
+                        |     case xs:float return xs:QName('xs:float')
+                        |     case xs:double return xs:QName('xs:double')
+                        |     case xs:date return xs:QName('xs:date')
+                        |     case xs:time return xs:QName('xs:time')
+                        |     case xs:dateTime return xs:QName('xs:dateTime')
+                        |     case xs:dayTimeDuration return xs:QName('xs:dayTimeDuration')
+                        |     case xs:yearMonthDuration return xs:QName('xs:yearMonthDuration')
+                        |     case xs:duration return xs:QName('xs:duration')
+                        |     case xs:gMonth return xs:QName('xs:gMonth')
+                        |     case xs:gYear return xs:QName('xs:gYear')
+                        |     case xs:gYearMonth return xs:QName('xs:gYearMonth')
+                        |     case xs:gDay return xs:QName('xs:gDay')
+                        |     case xs:gMonthDay return xs:QName('xs:gMonthDay')
+                        |     default return ()
+                        | };
+                        |
                         | let $$sort-key-fun := function($$key) {
-                        |   let $$data := fn:data($$key)
-                        |   return
-                        |     if ($$key instance of xs:string) then
-                        |       concat("str_", $$data)
-                        |     else
-                        |       $$data cast as xs:string
+                        |   local:xdm-type($$key) || "::" || fn:data($$key)
                         | }
                         | return
                         |   fn:deep-equal(fn:sort(($expected), (), $$sort-key-fun), fn:sort($$result, (), $$sort-key-fun))

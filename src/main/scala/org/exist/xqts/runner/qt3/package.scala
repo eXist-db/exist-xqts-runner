@@ -66,6 +66,7 @@ package object qt3 {
   val ELEM_ASSERT_TYPE = "assert-type"
   val ELEM_ASSERT_XML = "assert-xml"
   val ELEM_ERROR = "error"
+  val ELEM_NOT = "not"
   val ELEM_SERIALIZATION_MATCHES = "serialization-matches"
   val ATTR_NAME = "name"
   val ATTR_COVERS = "covers"

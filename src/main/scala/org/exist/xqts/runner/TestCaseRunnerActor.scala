@@ -549,6 +549,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       case AnyOf(assertions) =>
         anyOf(connection, testSetName, testCaseName, compilationTime, executionTime)(assertions, actualResult)
 
+      case Not(Some(assertion)) =>
+        not(connection, testSetName, testCaseName, compilationTime, executionTime)(assertion, actualResult)
+
       case Assert(xpath) =>
         assert(connection, testSetName, testCaseName, compilationTime, executionTime)(xpath, actualResult)
 
@@ -592,7 +595,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         FailureResult(testSetName, testCaseName, compilationTime, executionTime, s"error: expected='$expected', but no error was raised")
 
       case _ =>
-        ErrorResult(testSetName, testCaseName, compilationTime, executionTime, new IllegalStateException("Unknown defined result assertion"))
+        ErrorResult(testSetName, testCaseName, compilationTime, executionTime, new IllegalStateException(s"Unknown defined result assertion: ${expectedResult}"))
     }
   }
 
@@ -678,6 +681,32 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       .leftMap(errors => FailureResult(testSetName, testCaseName, compilationTime, executionTime, s"anyOf: expected='$assertions', actual='${connection.sequenceToStringAdaptive(actual)}', results=('${errors.map(_.fold(_.t.getMessage, _.reason)).mkString("', '")}')"))
       .leftMap(_.asInstanceOf[TestResult])
       .merge
+  }
+
+  /**
+    * Handles the XQTS {@code not} assertion.
+    *
+    * @param connection a connection to an eXist-db server.
+    * @param testSetName the name of the test-set of which the test-case is a part.
+    * @param testCaseName the name of the test-case which was executed.
+    * @param compilationTime the time taken to compile the XQuery.
+    * @param executionTime the time taken to execute the XQuery.
+    *
+    * @param assertion the assertion to negate from within the {@code not} assertion.
+    * @param actual the actual result from executing the XQuery.
+    *
+    * @return the test result from processing the assertion.
+    */
+  private def not(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(assertion: XQTSParserActor.Result, actual: ExistServer.QueryResult): TestResult = {
+    val result = processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime)(assertion, actual)
+    result match {
+      case PassResult(_, _, _, _) =>
+        FailureResult(testSetName, testCaseName, compilationTime, executionTime, s"not assertion negated a pass result for: $assertion on result: $actual")
+      case FailureResult(_, _, _, _, _) =>
+        PassResult(testSetName, testCaseName, compilationTime, executionTime)
+      case otherResult =>
+        otherResult
+    }
   }
 
   /**

@@ -423,6 +423,9 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
         case START_ELEMENT if(asyncReader.getLocalName == ELEM_ANY_OF) =>
           currentResult = currentResult.map(addAssertion(_)(AnyOf(List.empty)))
 
+        case START_ELEMENT if(asyncReader.getLocalName == ELEM_NOT) =>
+          currentResult = currentResult.map(addAssertion(_)(Not()))
+
         case START_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_STRING_VALUE) =>
           currentNormalizeSpace = asyncReader.getAttributeValueOptNE(ATTR_NORMALIZE_SPACE).map(_.toBoolean)
           captureText = true
@@ -570,6 +573,9 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
         case END_ELEMENT if(asyncReader.getLocalName == ELEM_ALL_OF || asyncReader.getLocalName == ELEM_ANY_OF) =>
           currentResult = currentResult.map(stepOutAssertions)
 
+        case END_ELEMENT if(asyncReader.getLocalName == ELEM_ALL_OF || asyncReader.getLocalName == ELEM_NOT) =>
+          currentResult = currentResult.map(stepOutAssertions)
+
         case START_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ERROR) =>
           val code = asyncReader.getAttributeValue(ATTR_CODE)
           val assertion = Error(code)
@@ -651,6 +657,10 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
         case Some(head) if (head.isInstanceOf[Assertions] && !assertion.isInstanceOf[Assertions]) =>
           // head of the stack is itself a list of assertions, and the assertion to add is not a list of assertions
           currentAssertions.replace(head.asInstanceOf[Assertions] :+ assertion)
+
+        case Some(Not(None)) =>
+          // head of the stack is a Not assertion which is empty, so wrap this assertion in the Not assertion
+          currentAssertions.replace(Not(Some(assertion)))
 
         case Some(_) =>
             currentAssertions.push(assertion)

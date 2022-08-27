@@ -113,6 +113,7 @@ object XQTSParserActor {
   case class AnyOf(assertions: List[Result]) extends Assertions {
     override def :+(assertion: Result) : AnyOf = this.copy(assertions = this.assertions :+ assertion)
   }
+  case class Not(assertion: Option[Result] = None) extends Assertion
   sealed trait ValueAssertion[T] extends Assertion {
     def expected: T
   }

@@ -108,10 +108,10 @@ object XQTSParserActor {
     def :+(assertion: Result) : Assertions
   }
   case class AllOf(assertions: List[Result]) extends Assertions {
-    override def :+(assertion: Result) : AllOf = this.copy(assertions = assertion +: this.assertions)
+    override def :+(assertion: Result) : AllOf = this.copy(assertions = this.assertions :+ assertion)
   }
   case class AnyOf(assertions: List[Result]) extends Assertions {
-    override def :+(assertion: Result) : AnyOf = this.copy(assertions = assertion +: this.assertions)
+    override def :+(assertion: Result) : AnyOf = this.copy(assertions = this.assertions :+ assertion)
   }
   sealed trait ValueAssertion[T] extends Assertion {
     def expected: T

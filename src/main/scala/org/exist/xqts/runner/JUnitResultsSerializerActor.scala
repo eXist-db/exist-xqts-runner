@@ -69,20 +69,20 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
 
     case FinalizeSerialization =>
       val start = System.currentTimeMillis()
-      logger.info(s"Aggregating results report...")
-      val aggregateIO: IO[Option[Throwable]] = dataDir
-        .flatMap(dd => htmlDir.map(hd => (dd, hd)))
-        .flatMap { case (dataDir, htmlDir) => aggregateJUnitReports(dataDir, htmlDir) }
-        .map(_ => None)
-        .handleErrorWith(t => IO.pure { Some(t) })
+      val aggregateIO: IO[Either[Throwable, Path]] = dataDir
+        .flatTap(dd => IO { logger.info(s"Aggregating results report from: ${dd.toAbsolutePath}...") })
+        .product(htmlDir)
+        .flatTap { case (dataDir, htmlDir) => aggregateJUnitReports(dataDir, htmlDir) }
+        .map { case (_, htmlDir) => htmlDir }
+        .attempt
 
       implicit val runtime = IORuntime.global
 
       aggregateIO.unsafeRunSync() match {
-        case None =>
-          logger.info(s"Aggregated results report OK (${System.currentTimeMillis() - start} ms).")
+        case Right(htmlDir) =>
+          logger.info(s"Aggregated results report to: ${htmlDir.toAbsolutePath} (${System.currentTimeMillis() - start} ms).")
 
-        case Some(t) =>
+        case Left(t) =>
           logger.error(s"Could not aggregate results report. ${t.getMessage}", t)
       }
 

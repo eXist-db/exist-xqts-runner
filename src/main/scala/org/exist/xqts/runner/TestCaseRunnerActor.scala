@@ -550,7 +550,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         anyOf(connection, testSetName, testCaseName, compilationTime, executionTime)(assertions, actualResult)
 
       case Assert(xpath) =>
-        assertXpath(connection, testSetName, testCaseName, compilationTime, executionTime)(xpath, actualResult)
+        assert(connection, testSetName, testCaseName, compilationTime, executionTime)(xpath, actualResult)
 
       case AssertCount(expectedCount) =>
         assertCount(testSetName, testCaseName, compilationTime, executionTime)(expectedCount, actualResult)
@@ -681,7 +681,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-xpath} assertion.
+    * Handles the XQTS {@code assert} assertion.
     *
     * @param connection a connection to an eXist-db server.
     * @param testSetName the name of the test-set of which the test-case is a part.
@@ -694,7 +694,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     *
     * @return the test result from processing the assertion.
     */
-  private def assertXpath(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(xpath: String, actual: ExistServer.QueryResult): TestResult = {
+  private def assert(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(xpath: String, actual: ExistServer.QueryResult): TestResult = {
     executeQueryWith$Result(connection, xpath, true, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
@@ -705,9 +705,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
         val totalExecutionTime = executionTime + resExecutionTime
-        if (actualQueryResult.getItemCount == 1
-          && actualQueryResult.itemAt(0).isInstanceOf[BooleanValue]
-          && actualQueryResult.itemAt(0).asInstanceOf[BooleanValue].effectiveBooleanValue()) {
+        if (actualQueryResult.effectiveBooleanValue()) {
           PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
         } else {
           FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert: expected='$xpath', actual='${connection.sequenceToStringAdaptive(actual)}'")

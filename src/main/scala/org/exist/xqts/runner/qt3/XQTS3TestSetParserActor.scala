@@ -178,7 +178,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
                 case env @ Some(_) =>
                   currentTestCase = currentTestCase.map(testCase => testCase.copy(environment = env))
                 case None =>
-                  throw new XQTSParseException(s"Environment '$ref' was referenced, but not defined. Test set '${testSetRef.name}'${currentTestCase.map(testCase => s" for test case '${testCase.name}'").getOrElse("")}")
+                  throw XQTSParseException(s"Environment '$ref' was referenced, but not defined. Test set '${testSetRef.name}'${currentTestCase.map(testCase => s" for test case '${testCase.name}'").getOrElse("")}")
               }
           }
 
@@ -377,7 +377,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
             // environment specific to the test case
             currentTestCase.flatMap(_.environment) match {
               case Some(_) =>
-                throw new XQTSParseException(s"Environment was defined for test case, but test case already has an environment: '${testSetRef.name}'${currentTestCase.map(testCase => s" for test case '${testCase.name}'").getOrElse("")}")
+                throw XQTSParseException(s"Environment was defined for test case, but test case already has an environment: '${testSetRef.name}'${currentTestCase.map(testCase => s" for test case '${testCase.name}'").getOrElse("")}")
               case None =>
                 currentTestCase = currentTestCase.map(_.copy(environment = currentEnv))
             }
@@ -464,7 +464,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               val assertion = Assert(text)
               currentResult = currentResult.map(addAssertion(_)(assertion))
             case None =>
-              throw new XQTSParseException(s"No text captured for element: $ELEM_ASSERT")
+              throw XQTSParseException(s"No text captured for element: $ELEM_ASSERT")
           }
           currentText = None
           captureText = false
@@ -475,7 +475,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               val assertion = AssertCount(text.trim.toInt)
               currentResult = currentResult.map(addAssertion(_)(assertion))
             case None =>
-              throw new XQTSParseException(s"No text captured for element: $ELEM_ASSERT_COUNT")
+              throw XQTSParseException(s"No text captured for element: $ELEM_ASSERT_COUNT")
           }
           currentText = None
           captureText = false
@@ -486,7 +486,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               val assertion = AssertDeepEquals(text)
               currentResult = currentResult.map(addAssertion(_)(assertion))
             case None =>
-              throw new XQTSParseException(s"No text captured for element: $ELEM_ASSERT_DEEP_EQ")
+              throw XQTSParseException(s"No text captured for element: $ELEM_ASSERT_DEEP_EQ")
           }
           currentText = None
           captureText = false
@@ -497,7 +497,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               val assertion = AssertEq(text)
               currentResult = currentResult.map(addAssertion(_)(assertion))
             case None =>
-              throw new XQTSParseException(s"No text captured for element: $ELEM_ASSERT_EQ")
+              throw XQTSParseException(s"No text captured for element: $ELEM_ASSERT_EQ")
           }
           currentText = None
           captureText = false
@@ -508,7 +508,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               val assertion = AssertPermutation(text)
               currentResult = currentResult.map(addAssertion(_)(assertion))
             case None =>
-              throw new XQTSParseException(s"No text captured for element: $ELEM_ASSERT_PERMUTATION")
+              throw XQTSParseException(s"No text captured for element: $ELEM_ASSERT_PERMUTATION")
           }
           currentText = None
           captureText = false
@@ -526,7 +526,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               val assertion = AssertType(text)
               currentResult = currentResult.map(addAssertion(_)(assertion))
             case None =>
-              throw new XQTSParseException(s"No text captured for element: $ELEM_ASSERT_TYPE")
+              throw XQTSParseException(s"No text captured for element: $ELEM_ASSERT_TYPE")
           }
           currentText = None
           captureText = false
@@ -539,7 +539,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
             case Some(assertXml) =>
               currentResult = currentResult.map(addAssertion(_)(assertXml))
             case None =>
-              throw new XQTSParseException(s"No text captured for element: $ELEM_ASSERT_XML")
+              throw XQTSParseException(s"No text captured for element: $ELEM_ASSERT_XML")
           }
           currentFile = None
           currentIgnorePrefixes = None
@@ -554,7 +554,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
             case Some(serializationMatched) =>
               currentResult = currentResult.map(addAssertion(_)(serializationMatched))
             case None =>
-              throw new XQTSParseException(s"No text captured for element: $ELEM_SERIALIZATION_MATCHES")
+              throw XQTSParseException(s"No text captured for element: $ELEM_SERIALIZATION_MATCHES")
           }
           currentFile = None
           currentFlags = None
@@ -602,11 +602,11 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
                   manager ! RanTestCase(testSetRef, AssumptionFailedResult(testSetRef.name, testCase.name, 0, 0, s"Test's dependencies were not satisfiable. Missing: [${missingDeps.mkString(", ")}]"))
                 }
               } else {
-                throw new XQTSParseException("SHOULD BE FILTERED ON START_ELEMENT")
+                throw XQTSParseException("SHOULD BE FILTERED ON START_ELEMENT")
               }
               currentTestCase = None
             case None =>
-              //throw new XQTSParseException(s"Encountered end of element: $ELEM_TEST_CASE, but no test case was captured")
+              //throw XQTSParseException(s"Encountered end of element: $ELEM_TEST_CASE, but no test case was captured")
           }
 
         case CHARACTERS if (captureText) =>
@@ -673,15 +673,15 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
     def stepOutAssertions(currentAssertions: Stack[Result]) : Stack[Result] = {
       if (currentAssertions.size >= 2) {
         if (currentAssertions.peek.isInstanceOf[Assertions]) {
-          val(prevHead, stack) = currentAssertions.pop()
+          val (prevHead, stack) = currentAssertions.pop()
           val head = stack.peek
           if (head.isInstanceOf[Assertions]) {
             stack.replace(head.asInstanceOf[Assertions] :+ prevHead)
           } else {
-            throw new XQTSParseException("Unable to associate assertions object to non-assertions object")
+            throw XQTSParseException("Unable to associate assertions object to non-assertions object")
           }
         } else {
-          throw new XQTSParseException("Unable to associate non-assertions object")
+          throw XQTSParseException("Unable to associate non-assertions object")
         }
       } else {
         currentAssertions

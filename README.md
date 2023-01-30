@@ -59,10 +59,9 @@ Given the standalone application, you can execute it by running either:
 
 
 ## Publishing to Maven Central / Evolved Binary Snapshots
-```bash
-sbt clean compile package assembly
-sbt publishSigned
-```
+1. Run `sbt clean release`
+2. Answer the questions
+3. Login to https://oss.sonatype.org/ then Close, and Release the Staging Repository
 
 ## XQTS Results
 The results of executing the XQTS will be formatted as JUnit test output.

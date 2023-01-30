@@ -1,8 +1,8 @@
+import ReleaseTransformations._
+
 name := "exist-xqts-runner"
 
 organization := "org.exist-db"
-
-version := "1.2.0-SNAPSHOT"
 
 scalaVersion := "2.13.8"
 
@@ -71,19 +71,14 @@ excludeDependencies ++= Seq(
   ExclusionRule("org.hamcrest", "hamcrest-library")
 )
 
-resolvers +=
-  Resolver.mavenLocal
-
-resolvers +=
-  "eXist-db Releases" at "https://repo.evolvedbinary.com/repository/exist-db/"
-
-resolvers +=
-  "eXist-db Snapshots" at "https://repo.evolvedbinary.com/repository/exist-db-snapshots/"
-
-resolvers +=
+resolvers ++= Seq(
+  Resolver.mavenLocal,
+  "eXist-db Releases" at "https://repo.evolvedbinary.com/repository/exist-db/",
+  "eXist-db Snapshots" at "https://repo.evolvedbinary.com/repository/exist-db-snapshots/",
   "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
+)
 
-scalacOptions ++= Seq("-deprecation", "-feature", "-Ywarn-unused")
+scalacOptions ++= Seq("-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused")
 
 // Fancy up the Assembly JAR
 Compile / packageBin / packageOptions +=  {
@@ -153,3 +148,23 @@ publishTo := {
 }
 
 Test / publishArtifact := false
+
+releaseCrossBuild := false
+
+releaseVersionBump := sbtrelease.Version.Bump.Minor
+
+releaseIgnoreUntrackedFiles := true
+
+releaseProcess := Seq[ReleaseStep](
+  checkSnapshotDependencies,
+  inquireVersions,
+  runClean,
+  runTest,
+  setReleaseVersion,
+  commitReleaseVersion,
+  tagRelease,
+  releaseStepCommand("publishSigned"),
+  setNextVersion,
+  commitNextVersion,
+  pushChanges
+)

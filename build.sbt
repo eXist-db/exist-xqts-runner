@@ -42,23 +42,24 @@ developers := List(
 versionScheme := Some("semver-spec")
 
 libraryDependencies ++= {
-  val existV = "6.0.1"
+  val existV = "6.1.0"
 
   Seq(
-    "com.typesafe.akka" %% "akka-actor" % "2.6.19",
+    "com.typesafe.akka" %% "akka-actor" % "2.6.20",
     "com.github.scopt" %% "scopt" % "4.0.1",
-    "org.typelevel" %% "cats-effect" % "3.3.12",
+    "org.typelevel" %% "cats-effect" % "3.4.5",
     //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
-    "org.parboiled" %% "parboiled" % "2.4.0",
-    "org.clapper" %% "grizzled-slf4j" % "1.3.4",
-    "org.apache.ant" % "ant-junit" % "1.10.12",   // used for formatting junit style report
+    "org.parboiled" %% "parboiled" % "2.4.1",
+    "org.clapper" %% "grizzled-slf4j" % "1.3.4" exclude("org.slf4j", "slf4j-api"),
+    "org.apache.ant" % "ant-junit" % "1.10.13",   // used for formatting junit style report
 
-    "net.sf.saxon" % "Saxon-HE" % "9.9.1-7",
+    "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
     "org.exist-db" % "exist-core" % existV,
-    "org.xmlunit" % "xmlunit-core" % "2.9.0",
+    "org.xmlunit" % "xmlunit-core" % "2.9.1",
 
-    "org.apache.logging.log4j" % "log4j-slf4j-impl" % "2.17.2" % "runtime"
+    "org.slf4j" % "slf4j-api" % "2.0.6" % "runtime",
+    "org.apache.logging.log4j" % "log4j-slf4j2-impl" % "2.19.0" % "runtime"
   )
 }
 

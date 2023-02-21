@@ -51,14 +51,13 @@ libraryDependencies ++= {
     //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
     "org.parboiled" %% "parboiled" % "2.4.1",
-    "org.clapper" %% "grizzled-slf4j" % "1.3.4" exclude("org.slf4j", "slf4j-api"),
     "org.apache.ant" % "ant-junit" % "1.10.13",   // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
     "org.exist-db" % "exist-core" % existV exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
     "org.xmlunit" % "xmlunit-core" % "2.9.1",
 
-    "org.slf4j" % "slf4j-api" % "2.0.6" % "runtime",
+    "org.slf4j" % "slf4j-api" % "2.0.6",
     "org.apache.logging.log4j" % "log4j-slf4j2-impl" % "2.19.0" % "runtime"
   )
 }

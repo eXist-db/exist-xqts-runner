@@ -24,7 +24,6 @@ import java.util.regex.Pattern
 
 import akka.actor.{ActorSystem, Props}
 import com.typesafe.config.ConfigFactory
-import grizzled.slf4j.Logger
 import org.exist.xqts.runner.Checksum.SHA256
 import org.exist.xqts.runner.XQTSRunner.CmdConfig
 import org.exist.xqts.runner.XQTSRunnerActor.RunXQTS

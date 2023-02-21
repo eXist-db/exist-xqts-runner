@@ -26,12 +26,11 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import com.fasterxml.aalto.AsyncXMLStreamReader.EVENT_INCOMPLETE
 import com.fasterxml.aalto.{AsyncByteBufferFeeder, AsyncXMLStreamReader}
-import grizzled.slf4j.Logger
 
 import javax.xml.namespace.{NamespaceContext, QName}
 import javax.xml.stream.XMLStreamConstants.{CDATA, CHARACTERS, END_DOCUMENT, END_ELEMENT, START_ELEMENT}
 import net.sf.saxon.value.AnyURIValue
-import org.exist.xqts.runner.{Stack, XQTSParseException}
+import org.exist.xqts.runner.{Logger, Stack, XQTSParseException}
 import org.exist.xqts.runner.TestCaseRunnerActor.{AssumptionFailedResult, RunTestCase}
 import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
 import org.exist.xqts.runner.XQTSParserActor.Spec.Spec

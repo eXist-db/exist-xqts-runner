@@ -22,7 +22,6 @@ import java.util.regex.Pattern
 import akka.actor.{Actor, Props, Timers}
 import XQTSRunnerActor._
 import akka.routing.FromConfig
-import grizzled.slf4j.Logger
 import org.exist.xqts.runner.TestCaseRunnerActor.TestResult
 import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
 import org.exist.xqts.runner.XQTSParserActor.Spec.Spec
@@ -72,7 +71,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       started = System.currentTimeMillis()
       logger.info(s"Running XQTS: ${XQTSVersion.label(xqtsVersion)}")
 
-      if (logger.isDebugEnabled) {
+      if (logger.isDebugEnabled()) {
         // prints stats about the state of this actor (i.e. test set progress)
         import scala.concurrent.duration._
         timers.startTimerAtFixedRate(TimerStatsKey, TimerPrintStats, 5.seconds)
@@ -159,7 +158,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   }
 
   private def shutdown(): Unit = {
-    if (logger.isDebugEnabled) {
+    if (logger.isDebugEnabled()) {
       timers.cancel(TimerStatsKey)
     }
     context.stop(self)

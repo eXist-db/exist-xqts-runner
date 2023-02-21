@@ -22,7 +22,6 @@ import cats.effect.unsafe.IORuntime
 import java.io.{BufferedOutputStream, OutputStream}
 import java.nio.file.{Files, Path}
 import cats.effect.{IO, Resource}
-import grizzled.slf4j.Logger
 import junit.framework.{AssertionFailedError, Test => JUTest, TestResult => JUTestResult}
 import net.sf.saxon.TransformerFactoryImpl
 import org.apache.tools.ant.Project

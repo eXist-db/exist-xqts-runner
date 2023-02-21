@@ -32,7 +32,6 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.{Clock, IO, Resource}
 import cats.syntax.all._
 import com.evolvedbinary.j8fu.function.{QuadFunctionE, TriFunctionE}
-import grizzled.slf4j.Logger
 
 import javax.xml.namespace.QName
 import javax.xml.transform.OutputKeys

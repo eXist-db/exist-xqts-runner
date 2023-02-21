@@ -47,7 +47,7 @@ libraryDependencies ++= {
   Seq(
     "com.typesafe.akka" %% "akka-actor" % "2.6.20",
     "com.github.scopt" %% "scopt" % "4.0.1",
-    "org.typelevel" %% "cats-effect" % "3.4.5",
+    "org.typelevel" %% "cats-effect" % "3.4.6",
     //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
     "org.parboiled" %% "parboiled" % "2.4.1",

@@ -33,7 +33,6 @@ import java.util.regex.Pattern
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.syntax.either._
-import grizzled.slf4j.Logger
 import org.exist.dom.memtree.DocumentImpl
 import org.exist.xqts.runner.AssertTypeParser.TypeNode.{ExistTypeDescription, ExplicitExistTypeDescription, WildcardExistTypeDescription}
 import org.exist.xqts.runner.CommonResourceCacheActor.{CachedResource, GetResource, ResourceGetError}

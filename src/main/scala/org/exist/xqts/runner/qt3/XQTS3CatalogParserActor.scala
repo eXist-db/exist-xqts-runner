@@ -27,7 +27,6 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import com.fasterxml.aalto.AsyncXMLStreamReader.EVENT_INCOMPLETE
 import com.fasterxml.aalto.{AsyncByteBufferFeeder, AsyncXMLStreamReader}
-import grizzled.slf4j.Logger
 
 import javax.xml.stream.XMLStreamConstants.{CHARACTERS, END_DOCUMENT, END_ELEMENT, START_ELEMENT}
 import net.sf.saxon.value.AnyURIValue
@@ -35,7 +34,7 @@ import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
 import org.exist.xqts.runner.XQTSParserActor.Spec.Spec
 import org.exist.xqts.runner.XQTSParserActor.XmlVersion.XmlVersion
 import org.exist.xqts.runner.XQTSParserActor.XsdVersion.XsdVersion
-import org.exist.xqts.runner.{XQTSParseException, XQTSParserActor, XQTSVersion}
+import org.exist.xqts.runner.{Logger, XQTSParseException, XQTSParserActor, XQTSVersion}
 import org.exist.xqts.runner.XQTSParserActor._
 import org.exist.xqts.runner.qt3.XQTS3CatalogParserActor._
 import org.exist.xqts.runner.qt3.XQTS3TestSetParserActor.ParseTestSet

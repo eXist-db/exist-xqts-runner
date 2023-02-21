@@ -21,7 +21,6 @@ import java.io.IOException
 import java.nio.file.Path
 
 import akka.actor.{Actor, ActorRef}
-import grizzled.slf4j.Logger
 import org.exist.xqts.runner.CommonResourceCacheActor._
 import org.exist.xqts.runner.ReadFileActor.{FileContent, FileReadError, ReadFile}
 

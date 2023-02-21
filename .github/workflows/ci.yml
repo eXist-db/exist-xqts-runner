@@ -9,15 +9,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        jdk: [8, 11]
+        jdk: [17]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup Scala
-        uses: olafurpg/setup-scala@v12
+        uses: olafurpg/setup-scala@v14
         with:
-          java-version: "adopt@1.${{ matrix.jdk }}"
+          java-version: "openjdk@1.${{ matrix.jdk }}"
       - name: Coursier cache
         uses: coursier/cache-action@v6
       - name: Build

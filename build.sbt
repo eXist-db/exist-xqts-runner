@@ -42,7 +42,7 @@ developers := List(
 versionScheme := Some("semver-spec")
 
 libraryDependencies ++= {
-  val existV = "6.1.0"
+  val existV = "7.0.0-SNAPSHOT"
 
   Seq(
     "com.typesafe.akka" %% "akka-actor" % "2.6.20",
@@ -55,7 +55,7 @@ libraryDependencies ++= {
     "org.apache.ant" % "ant-junit" % "1.10.13",   // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
-    "org.exist-db" % "exist-core" % existV,
+    "org.exist-db" % "exist-core" % existV exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
     "org.xmlunit" % "xmlunit-core" % "2.9.1",
 
     "org.slf4j" % "slf4j-api" % "2.0.6" % "runtime",
@@ -78,7 +78,9 @@ resolvers ++= Seq(
   "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
 )
 
-scalacOptions ++= Seq("-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused")
+javacOptions ++= Seq("-source", "17", "-target", "17")
+
+scalacOptions ++= Seq("-target:jvm-17", "-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused")
 
 // Fancy up the Assembly JAR
 Compile / packageBin / packageOptions +=  {
@@ -91,6 +93,7 @@ Compile / packageBin / packageOptions +=  {
   val gitTag = s"git name-rev --tags --name-only $gitCommit".!!.trim
 
   val additional = Map(
+    "Multi-Release" -> "true",  /* Required by log4j2 on JDK 11 and newer */
     "Build-Timestamp" -> new SimpleDateFormat("yyyyMMddHHmmss").format(Calendar.getInstance.getTime),
     "Built-By" -> sys.props("user.name"),
     "Build-Tag" -> gitTag,

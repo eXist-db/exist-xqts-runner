@@ -153,6 +153,8 @@ releaseCrossBuild := false
 
 releaseVersionBump := sbtrelease.Version.Bump.Minor
 
+releaseTagName := s"${if (releaseUseGlobalVersion.value) (ThisBuild / version).value else version.value}"
+
 releaseIgnoreUntrackedFiles := true
 
 releaseProcess := Seq[ReleaseStep](

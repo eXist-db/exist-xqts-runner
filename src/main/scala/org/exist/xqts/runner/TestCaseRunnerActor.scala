@@ -1333,7 +1333,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         val expectedQuery = s"""
                                | declare variable $$result external;
                                |
-                               | fn:matches($$result, "$expectedRegexStr", "${flags.getOrElse("")}")
+                               | fn:matches($$result, ``[$expectedRegexStr]``, "${flags.getOrElse("")}")
                                |""".stripMargin
         val actualStr = connection.sequenceToString(actual)
         executeQueryWith$Result(connection, expectedQuery, true, None, new StringValue(actualStr)) match {

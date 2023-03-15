@@ -131,9 +131,11 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       }
 
     case RunningTestCase(testSetRef, testCase) =>
+      logger.info(s"Starting execution of Test Case: ${testSetRef.name}/${testCase}...")
       testCases = addTestCase(testCases, testSetRef, testCase)
 
     case RanTestCase(testSetRef, testResult) =>
+      logger.info(s"Finished execution of Test Case: ${testSetRef.name}/${testResult.testCase}.")
       completedTestCases = mergeTestCases(completedTestCases, testSetRef, testResult)
 
       // have we completed testing an entire TestSet?

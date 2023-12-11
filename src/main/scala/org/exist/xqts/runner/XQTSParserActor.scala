@@ -313,10 +313,10 @@ object XQTSParserActor {
     }
   }
 
-  type Missing = Seq[String]
+  type Unmet = Seq[String]
 
   /**
-    * Checks for missing dependencies.
+    * Checks for unsatisfied dependencies.
     *
     * @param required The required dependencies.
     * @param enabledFeatures The features which are enabled.
@@ -327,18 +327,27 @@ object XQTSParserActor {
     * @return A list of all missing dependencies, or an empty list
     *         if there are no missing depdencies.
     */
-  def missingDependencies(required: Seq[Dependency], enabledFeatures: Set[Feature], enabledSpecs: Set[Spec], enabledXmlVersions: Set[XmlVersion], enabledXsdVersions: Set[XsdVersion]) : Missing = {
-    type Missed = Option[String]
+  def unmetDependencies(required: Seq[Dependency], configuredFeatures: Set[Feature], enabledSpecs: Set[Spec], enabledXmlVersions: Set[XmlVersion], enabledXsdVersions: Set[XsdVersion]) : Unmet = {
+    type Missed = Option[Dependency]
 
-    def hasEnabledFeature(requiredFeature: String) : Missed = {
-      if (enabledFeatures.map(_.xqtsName).contains(requiredFeature)) {
-        None
+
+    def hasUnsatisfiedFeature(unsatisfiedFeature: Dependency): Missed = {
+      if (configuredFeatures.map(_.xqtsName).contains(unsatisfiedFeature.value)) {
+        Some(unsatisfiedFeature)
       } else {
-       Some(requiredFeature)
+        None
       }
     }
 
-    def hasEnabledSpec(requiredSpec: String) : Missed = {
+    def hasSatisfiedFeature(satisfiedFeature: Dependency): Missed = {
+      if (configuredFeatures.map(_.xqtsName).contains(satisfiedFeature.value)) {
+        None
+      } else {
+        Some(satisfiedFeature)
+      }
+    }
+
+    def hasEnabledSpec(requiredSpec: Dependency) : Missed = {
       def lookupSpecs(specStr: String) : Set[Spec] = {
         if (specStr.endsWith("+")) {
           Spec.atLeast(Spec.withName(specStr.substring(0, specStr.length - 1)))
@@ -346,7 +355,7 @@ object XQTSParserActor {
           Set(Spec.withName(specStr))
         }
       }
-      val anyRequiredSpecs : Set[Spec] = requiredSpec.split(' ').toSet.flatMap(lookupSpecs)
+      val anyRequiredSpecs : Set[Spec] = requiredSpec.value.split(' ').toSet.flatMap(lookupSpecs)
       if (anyRequiredSpecs.find(enabledSpecs.contains(_)).nonEmpty) {
         None
       } else {
@@ -354,18 +363,18 @@ object XQTSParserActor {
       }
     }
 
-    def hasEnabledXmlVersion(requiredXmlVersion: String) : Missed = {
+    def hasEnabledXmlVersion(requiredXmlVersion: Dependency) : Missed = {
       def check(version: String): Missed = {
         val compatibleVersions : Set[XmlVersion] = XmlVersion.compatible(XmlVersion.fromXqtsName(version))
         if (compatibleVersions.find(enabledXmlVersions.contains(_)).nonEmpty) {
           None
         } else {
-          Some(version)
+          Some(Dependency(requiredXmlVersion.`type`, version, requiredXmlVersion.satisfied))
         }
       }
 
-      val requiredXmlVersions = requiredXmlVersion.split(' ')
-      requiredXmlVersions.foldLeft(Option.empty[String]){(accum, x) =>
+      val requiredXmlVersions = requiredXmlVersion.value.split(' ')
+      requiredXmlVersions.foldLeft(Option.empty[Dependency]){(accum, x) =>
        accum match {
          case missing @ Some(_) => missing
          case None =>
@@ -374,41 +383,35 @@ object XQTSParserActor {
       }
     }
 
-    def hasEnabledXsdVersion(requiredXsdVersion: String) : Missed = {
-      if (enabledXsdVersions.map(_.xqtsName).contains(requiredXsdVersion)) {
+    def hasEnabledXsdVersion(requiredXsdVersion: Dependency) : Missed = {
+      if (enabledXsdVersions.map(_.xqtsName).contains(requiredXsdVersion.value)) {
         None
       } else {
         Some(requiredXsdVersion)
       }
     }
 
-    @unused
-    def firstMissing(test: String => Missed, required: Seq[Dependency]) : Missed = {
-      required.foldLeft(Option.empty[String]) { case (accum, x) =>
-        accum.orElse(test(x.value))
-      }
-    }
-
-    def allMissing(test: String => Missed, required: Seq[Dependency]) : Missing = {
+    def allMissing(test: Dependency => Missed, required: Seq[Dependency]) : Unmet = {
       required.foldLeft(Seq.empty[String]) { case (accum, x) =>
-        test(x.value)
-          .filter(_ => x.satisfied)
-          .map(missed => s"${x.`type`.xqtsName}=${missed}")
+        test(x)
+          .map(missed => s"${x.`type`.xqtsName}=${missed.value},satisfied=${x.satisfied}")
           .map(_ +: accum)
           .getOrElse(accum)
       }
     }
 
     //TODO(AR) implement further dependency types
-    val requiredFeatures = required.filter(_.`type` == DependencyType.Feature)
+    val satisfiedFeatures = required.filter(_.`type` == DependencyType.Feature).filter(_.`satisfied` == true)
+    val unsatisfiedFeatures = required.filter(_.`type` == DependencyType.Feature).filter(_.`satisfied` == false)
     val requiredSpecs = required.filter(_.`type` == DependencyType.Spec)
     val requiredXmlVersions = required.filter(_.`type` == DependencyType.XmlVersion)
     val requiredXsdVersions = required.filter(_.`type` == DependencyType.XsdVersion)
 
-    allMissing(hasEnabledFeature, requiredFeatures) ++
-      allMissing(hasEnabledSpec, requiredSpecs) ++
-        allMissing(hasEnabledXmlVersion, requiredXmlVersions) ++
-          allMissing(hasEnabledXsdVersion, requiredXsdVersions)
+    allMissing(hasSatisfiedFeature, satisfiedFeatures) ++
+      allMissing(hasUnsatisfiedFeature, unsatisfiedFeatures) ++
+        allMissing(hasEnabledSpec, requiredSpecs) ++
+          allMissing(hasEnabledXmlVersion, requiredXmlVersions) ++
+            allMissing(hasEnabledXsdVersion, requiredXsdVersions)
   }
 }
 

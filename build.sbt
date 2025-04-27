@@ -4,7 +4,7 @@ name := "exist-xqts-runner"
 
 organization := "org.exist-db"
 
-scalaVersion := "2.13.8"
+scalaVersion := "2.13.16"
 
 semanticdbEnabled := true
 
@@ -77,9 +77,9 @@ resolvers ++= Seq(
   "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
 )
 
-javacOptions ++= Seq("-source", "17", "-target", "17")
+javacOptions ++= Seq("-source", "21", "-target", "21")
 
-scalacOptions ++= Seq("-target:jvm-17", "-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused")
+scalacOptions ++= Seq("-target:jvm-21", "-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused")
 
 // Fancy up the Assembly JAR
 Compile / packageBin / packageOptions +=  {

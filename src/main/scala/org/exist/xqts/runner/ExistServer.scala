@@ -25,6 +25,7 @@ import org.exist.storage.{DBBroker, XQueryPool}
 import org.exist.test.ExistEmbeddedServer
 import org.exist.util.serializer.XQuerySerializer
 import org.exist.xquery.{CompiledXQuery, Function, XPathException, XQuery, XQueryContext}
+import org.exist.xquery.value.AnyURIValue
 
 import scala.util.{Failure, Success, Try}
 import ExistServer.{CompilationTime, _}
@@ -424,7 +425,8 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
 
       for (module <- modules) {
         val fileUri : XmldbURI = XmldbURI.createInternal(module.file.toAbsolutePath.toUri.toString)
-        context.mapModule(module.uri.getStringValue, fileUri)
+        val locations : Array[AnyURIValue] = Array(new AnyURIValue(fileUri))
+        context.importModule(module.uri.getStringValue, null, locations)
       }
 
       context

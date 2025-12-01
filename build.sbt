@@ -72,8 +72,8 @@ excludeDependencies ++= Seq(
 
 resolvers ++= Seq(
   Resolver.mavenLocal,
-  "eXist-db Releases" at "https://repo.evolvedbinary.com/repository/exist-db/",
-  "eXist-db Snapshots" at "https://repo.evolvedbinary.com/repository/exist-db-snapshots/",
+  "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
+  "eXist-db Snapshots" at "https://repo.exist-db.org/repository/exist-db-snapshots/",
   "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
 )
 
@@ -114,6 +114,7 @@ Compile / packageBin / packageOptions +=  {
 
 // assembly merge strategy for duplicate files from dependencies
 assembly / assemblyMergeStrategy := {
+  case PathList("META-INF", _*) => MergeStrategy.discard
   case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql")       => MergeStrategy.first
   case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class")    => MergeStrategy.discard
   case x =>

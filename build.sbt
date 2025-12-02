@@ -79,13 +79,13 @@ excludeDependencies ++= Seq(
 resolvers ++= Seq(
   Resolver.mavenLocal,
   "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
-  "eXist-db Snapshots" at "https://repo.exist-db.org/repository/exist-db-snapshots/",
-  "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
+  "eXist-db Snapshots on Github" at "https://maven.pkg.github.com/exist/existdb/",
+  "eXist-db Snapshots" at "https://repo.exist-db.org/repository/exist-db-snapshots/"
 )
 
 javacOptions ++= Seq("-source", "21", "-target", "21")
 
-scalacOptions ++= Seq("-target:jvm-21", "-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused")
+scalacOptions ++= Seq("-target:jvm-21", "-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused", "-Xlint")
 
 // Fancy up the Assembly JAR
 Compile / packageBin / packageOptions +=  {

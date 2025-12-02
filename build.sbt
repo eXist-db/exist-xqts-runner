@@ -36,6 +36,12 @@ developers := List(
     name  = "Adam Retter",
     email = "adam@evolvedbinary.com",
     url   = url("https://www.evolvedbinary.com")
+  ),
+  Developer(
+    id    = "line0",
+    name  = "Juri Leino",
+    email = "juri@existsolutions.com",
+    url   = url("http://existsolutions.com")
   )
 )
 

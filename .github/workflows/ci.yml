@@ -19,7 +19,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.jdk }}
-          cache: sbt
+          # cache: sbt
       - uses: sbt/setup-sbt@v1
       - name: Build
         shell: bash

@@ -25,6 +25,8 @@ jobs:
           sbt-runner-version: '1.10.11'
       - name: Build
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: sbt -v assembly
       - name: Test
         shell: bash

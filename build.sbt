@@ -80,7 +80,7 @@ resolvers ++= Seq(
   Resolver.mavenLocal,
   "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
   "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
-  "eXist-db Snapshots" at "https://repo.exist-db.org/repository/exist-db-snapshots/"
+  // "eXist-db Snapshots" at "https://repo.exist-db.org/repository/exist-db-snapshots/"
 )
 
 javacOptions ++= Seq("-source", "21", "-target", "21")
@@ -121,8 +121,8 @@ Compile / packageBin / packageOptions +=  {
 // assembly merge strategy for duplicate files from dependencies
 assembly / assemblyMergeStrategy := {
   case PathList("META-INF", _*) => MergeStrategy.discard
-  case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql")       => MergeStrategy.first
-  case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class")    => MergeStrategy.discard
+  case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql") => MergeStrategy.first
+  case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class") => MergeStrategy.discard
   case x =>
     val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)

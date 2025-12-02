@@ -60,7 +60,7 @@ libraryDependencies ++= {
     "org.apache.ant" % "ant-junit" % "1.10.13",   // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
-    "org.exist-db" % "exist-core" % existV exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
+    "org.exist-db" % "exist-core" % existV changing() exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
     "org.xmlunit" % "xmlunit-core" % "2.9.1",
 
     "org.slf4j" % "slf4j-api" % "2.0.6",

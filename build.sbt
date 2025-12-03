@@ -116,10 +116,10 @@ Compile / packageBin / packageOptions +=  {
     attributes.putValue(k, v)
   Package.JarManifest(manifest)
 }
-
 // assembly merge strategy for duplicate files from dependencies
 assembly / assemblyMergeStrategy := {
   case PathList("META-INF", "versions", "9" ,"OSGI-INF", "MANIFEST.MF") => MergeStrategy.discard
+  case PathList("META-INF", "versions", "9" ,"module-info.class") => MergeStrategy.discard
   case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql") => MergeStrategy.first
   case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class") => MergeStrategy.discard
   case x =>

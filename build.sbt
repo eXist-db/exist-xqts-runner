@@ -51,20 +51,20 @@ libraryDependencies ++= {
   val existV = "7.0.0-SNAPSHOT"
 
   Seq(
-    "com.typesafe.akka" %% "akka-actor" % "2.6.20",
-    "com.github.scopt" %% "scopt" % "4.0.1",
-    "org.typelevel" %% "cats-effect" % "3.4.6",
-    //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
+    "com.typesafe.akka" %% "akka-actor" % "2.8.1-M1",
+    "com.github.scopt" %% "scopt" % "4.1.0",
+    "org.typelevel" %% "cats-effect" % "3.6.3",
+    // "com.fasterxml" %	"aalto-xml" % "1.3.4",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
-    "org.parboiled" %% "parboiled" % "2.4.1",
-    "org.apache.ant" % "ant-junit" % "1.10.13",   // used for formatting junit style report
+    "org.parboiled" %% "parboiled" % "2.5.1",
+    "org.apache.ant" % "ant-junit" % "1.10.15",   // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
     "org.exist-db" % "exist-core" % existV changing() exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
-    "org.xmlunit" % "xmlunit-core" % "2.9.1",
+    "org.xmlunit" % "xmlunit-core" % "2.11.0",
 
-    "org.slf4j" % "slf4j-api" % "2.0.6",
-    "org.apache.logging.log4j" % "log4j-slf4j2-impl" % "2.19.0" % "runtime"
+    "org.slf4j" % "slf4j-api" % "2.0.17",
+    "org.apache.logging.log4j" % "log4j-slf4j2-impl" % "2.25.2" % "runtime",
   )
 }
 
@@ -80,7 +80,6 @@ resolvers ++= Seq(
   Resolver.mavenLocal,
   "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
   "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
-  // "eXist-db Snapshots" at "https://repo.exist-db.org/repository/exist-db-snapshots/"
 )
 
 javacOptions ++= Seq("-source", "21", "-target", "21")
@@ -120,7 +119,7 @@ Compile / packageBin / packageOptions +=  {
 
 // assembly merge strategy for duplicate files from dependencies
 assembly / assemblyMergeStrategy := {
-  case PathList("META-INF", _*) => MergeStrategy.discard
+  case PathList("META-INF", "versions", "9" ,"OSGI-INF", "MANIFEST.MF") => MergeStrategy.discard
   case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql") => MergeStrategy.first
   case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class") => MergeStrategy.discard
   case x =>

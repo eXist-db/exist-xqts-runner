@@ -21,65 +21,89 @@ import org.slf4j.{Logger => SLF4JLogger, LoggerFactory => SLF4JLoggerFactory}
 
 final class Logger(val logger: SLF4JLogger) {
 
-  @inline final def isInfoEnabled(): Boolean = logger.isInfoEnabled()
+  @inline def isInfoEnabled(): Boolean = logger.isInfoEnabled()
 
-  @inline final def isWarnEnabled(): Boolean = logger.isWarnEnabled()
+  @inline def isWarnEnabled(): Boolean = logger.isWarnEnabled()
 
-  @inline final def isErrorEnabled(): Boolean = logger.isErrorEnabled()
+  @inline def isErrorEnabled(): Boolean = logger.isErrorEnabled()
 
-  @inline final def isDebugEnabled(): Boolean = logger.isDebugEnabled()
+  @inline def isDebugEnabled(): Boolean = logger.isDebugEnabled()
 
   /**
-    * Log a message at INFO level.
-    *
-    * @param msg the message object on which `toString()` will be called.
-    */
-  @inline final def info(msg: => Any): Unit = {
+   * Log a message at INFO level.
+   *
+   * @param msg the message object on which `toString()` will be called.
+   */
+  @inline def info(msg: => Any): Unit = {
     if (isInfoEnabled()) {
       logger.info(msg.toString)
     }
   }
 
   /**
-    * Log a message with an exception at INFO level.
-    *
-    * @param msg the message object on which `toString()` will be called.
-    * @param t   the exception to include in the log.
-    */
-  @inline final def info(msg: => Any, t: => Throwable): Unit = {
+   * Log a message with an exception at INFO level.
+   *
+   * @param msg the message object on which `toString()` will be called.
+   * @param t   the exception to include in the log.
+   */
+  @inline def info(msg: => Any, t: => Throwable): Unit = {
     if (isInfoEnabled()) {
       logger.info(s"$msg", t)
     }
   }
 
   /**
-    * Log a message at WARN level.
-    *
-    * @param msg the message object on which `toString()` will be called.
-    */
-  @inline final def warn(msg: => Any): Unit = {
+   * Log a message at WARN level.
+   *
+   * @param msg the message object on which `toString()` will be called.
+   */
+  @inline def warn(msg: => Any): Unit = {
     if (isWarnEnabled()) {
       logger.warn(msg.toString)
     }
   }
 
   /**
-    * Log a message at ERROR level.
-    *
-    * @param msg the message object on which `toString()` will be called.
-    */
-  @inline final def error(msg: => Any): Unit = {
+   * Log a message with an exception at WARN level.
+   *
+   * @param msg the message object on which `toString()` will be called.
+   * @param t   the exception to include in the log.
+   */
+  @inline def warn(msg: => Any, t: => Throwable): Unit = {
+    if (isInfoEnabled()) {
+      logger.warn(s"$msg", t)
+    }
+  }
+
+  /**
+   * Log a message at ERROR level.
+   *
+   * @param msg the message object on which `toString()` will be called.
+   */
+  @inline def error(msg: => Any): Unit = {
     if (isErrorEnabled()) {
       logger.error(msg.toString)
     }
   }
 
   /**
-    * Log a message at DEBUG level.
-    *
-    * @param msg the message object on which `toString()` will be called.
-    */
-  @inline final def debug(msg: => Any): Unit = {
+   * Log a message with an exception at ERROR level.
+   *
+   * @param msg the message object on which `toString()` will be called.
+   * @param t   the exception to include in the log.
+   */
+  @inline def error(msg: => Any, t: => Throwable): Unit = {
+    if (isInfoEnabled()) {
+      logger.error(s"$msg", t)
+    }
+  }
+
+  /**
+   * Log a message at DEBUG level.
+   *
+   * @param msg the message object on which `toString()` will be called.
+   */
+  @inline def debug(msg: => Any): Unit = {
     if (isDebugEnabled()) {
       logger.debug(msg.toString)
     }
@@ -89,10 +113,10 @@ final class Logger(val logger: SLF4JLogger) {
 object Logger {
 
   /** Get the logger for the specified class.
-    *
-    * @param clazz  the class
-    *
-    * @return the `Logger`.
-    */
+   *
+   * @param clazz  the class
+   *
+   * @return the `Logger`.
+   */
   def apply(clazz: Class[_]): Logger = new Logger(SLF4JLoggerFactory.getLogger(clazz))
 }

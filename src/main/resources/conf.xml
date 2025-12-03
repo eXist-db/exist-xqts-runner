@@ -12,8 +12,8 @@
                 startup
                     triggers
                 pool
+                query-pool
                 recovery
-                security
                 watchdog
             lock-manager
             repository
@@ -25,6 +25,8 @@
             serializer
             transformer
             validation
+                entity-resolver
+                grammar-cache
             xquery
                 builtin-modules
                     module
@@ -192,10 +194,10 @@
         <startup>
             <triggers>
 
-		<!--
-		    Trigger for registering the GNU Crypto JCE Provider with Java
-		-->
-		<trigger class="org.exist.security.BouncyCastleJceProviderStartupTrigger"/>
+        <!--
+            Trigger for registering the GNU Crypto JCE Provider with Java
+        -->
+        <trigger class="org.exist.security.BouncyCastleJceProviderStartupTrigger"/>
 
                 <!--
                     Trigger for registering eXists XML:DB URL handler with Java
@@ -247,10 +249,7 @@
                 - size:                                                                  
                     number of copies of the same query kept in the query-pool.           
                     Value "-1" effectively disables caching. Queries cannot be shared     
-                    by threads, each thread needs a private copy of a query.             
-                                                                                         
-                - timeout:                                                               
-                    amount of time that a query will be cached in the query-pool in milliseconds.
+                    by threads, each thread needs a private copy of a query.
             -->
         <query-pool max-stack-size="64" size="128" timeout="120000"/>
 
@@ -372,10 +371,26 @@
 
             This can also be set via the Java System Properties `org.exist.lock-manager.warn-wait-on-read-for-write`,
                 or (legacy) `exist.lockmanager.warn.waitonreadforwrite`.
+
+        - paths-multi-writer
+            Set to true to enable Multi-Writer/Multi-Reader semantics for
+            the database Collection/Document Hierarchy as opposed to the default (false)
+            for Single-Writer/Multi-Reader.
+
+            NOTE: Whilst enabling Multiple-Writers on the Collection and Document Hierarchy can improve concurrent
+            through-put for write-heavy workloads, it can also can lead to deadlocks unless the User's
+            Collection Hierarchy is carefully designed to isolate query/database writes between Collection combs.
+            It is highly recommended that users leave this as the default setting. For more information, see:
+            "Locking and Cache Improvements for eXist-db", 2018-02-05, Section "Attempt 6" Page 58 -
+            https://www.evolvedbinary.com/technical-reports/exist-db/locking-and-cache-improvements/
+
+            This can also be set via the Java System Properties `org.exist.lock-manager.paths-multiple-writers`,
+            or (legacy) `exist.lockmanager.paths-multiwriter`.
     -->
     <lock-manager
             upgrade-check="false"
-            warn-wait-on-read-for-write="false">
+            warn-wait-on-read-for-write="false"
+            paths-multi-writer="false">
 
         <!--
             Settings for the Lock Table
@@ -403,39 +418,20 @@
         <lock-table disabled="false" trace-stack-depth="0"/>
 
 
-        <!--
-            Settings for Collection Locking
-
-            - multiple-writers
-                Set to true to enable Multi-Writer/Multi-Reader semantics for
-                the Collection Hierarchy as opposed to the default (false) for Single-Writer/Multi-Reader.
-
-                NOTE: Whilst enabling Multiple-Writers on the Collection Hierarchy can improve concurrent
-                through-put for write-heavy workloads, it can also can lead to deadlocks unless the User's
-                Collection Hierarchy is carefully designed to isolate query/database writes between Collection combs.
-                It is highly recommended that users leave this as the default setting. For more information, see:
-                "Locking and Cache Improvements for eXist-db", 2018-02-05, Section "Attempt 6" Page 58 -
-                https://www.evolvedbinary.com/technical-reports/exist-db/locking-and-cache-improvements/
-
-                This can also be set via the Java System Properties `org.exist.lock-manager.collection.multiple-writers`,
-                or (legacy) `exist.lockmanager.collections.multiwriter`.
-        -->
-        <collection multiple-writers="false"/>
-
-
         <!-- Settings for Document Locking
 
-            - multi-lock
-                Set to true to use the "Fast Multi-Level locks" implementation
-                (uk.ac.ic.doc.slurp.multilock.MultiLock) for locking documents, instead of the default of Java's
-                Reentrant Read Write Lock implementation (java.util.concurrent.locks.ReentrantReadWriteLock).
+            - use-path-locks
+                Set to true to have documents participate in the same hierarchical
+                path based locking strategy as Collections.
 
-                NOTE: At present changing this option has little effect.
+                This has a performance and concurrency impact, but will ensure
+                that you cannot have deadlocks between Collections and Documents.
 
-                This can also be set via the Java System Properties `org.exist.lock-manager.document.multi-lock`,
-                or (legacy) `exist.lockmanager.documents.multilock`.
+                NOTE: in future this will likely be set to `true` by default.
+
+                This can also be set via the Java System Property `org.exist.lock-manager.document.use-path-locks`.
         -->
-        <document multi-lock="false"/>
+        <document use-path-locks="false"/>
 
     </lock-manager>
 
@@ -648,7 +644,7 @@
                 perhaps the best way to do this is to place it into $EXIST_HOME/lib/user
 
                 Examples include:
-                    - org.cyberneko.html.parsers.SAXParser
+                    - org.codelibs.nekohtml.parsers.SAXParser
                         The Cyber NekoHTML parser from https://sourceforge.net/projects/nekohtml/
 
                     - org.ccil.cowan.tagsoup.Parser
@@ -676,11 +672,7 @@
     <parser>
 
         <xml>
-
             <features>
-
-                <!-- NOTE: the following feature flags should likely be set in production to ensure a secure environment -->
-
                 <!--
                 <feature name="http://xml.org/sax/features/external-general-entities" value="false"/>
                 <feature name="http://xml.org/sax/features/external-parameter-entities" value="false"/>
@@ -693,7 +685,7 @@
 
         <!-- html-to-xml class="org.ccil.cowan.tagsoup.Parser"/ -->
 
-        <html-to-xml class="org.cyberneko.html.parsers.SAXParser">
+        <html-to-xml class="org.codelibs.nekohtml.parsers.SAXParser">
             <properties>
                 <property name="http://cyberneko.org/html/properties/names/elems" value="match"/>
                 <property name="http://cyberneko.org/html/properties/names/attrs" value="no-change"/>
@@ -719,7 +711,19 @@
            Remember to add a statement like this to your client code:
            service.setProperty("compress-output", "yes");
            to uncompress the retrieved result in the client too.
-        
+
+        - omit-xml-declaration:
+            should the XML Declaration for a document be serialized
+            if it is present?
+
+        - omit-original-xml-declaration:
+            should the original persisted XML Declaration for a document be serialized
+            if it is present?
+
+        - output-doctype:
+            should the Doctype Declaration for a document be serialized
+            if it is present?
+
         - enable-xinclude: 
             should the database expand XInclude tags by default?
         
@@ -745,7 +749,8 @@
 
     -->
     <serializer add-exist-id="none" compress-output="no" enable-xinclude="yes"
-                enable-xsl="no" indent="yes" match-tagging-attributes="no" 
+                omit-xml-declaration="yes" omit-original-xml-declaration="no"
+                output-doctype="yes" enable-xsl="no" indent="yes" match-tagging-attributes="no" 
                 match-tagging-elements="no">
         <!--
             You may add as many custom-filters as you want, they will be executed
@@ -825,6 +830,22 @@
         <entity-resolver>
             <catalog uri="${WEBAPP_HOME}/WEB-INF/catalog.xml"/>
         </entity-resolver>
+
+        <!--
+            Configure XML parser grammar cache. The grammar cache contains
+            compiled versions of XSD and DTD files.
+
+            - size
+                Specifies the maximum number of entries the cache may contain.
+                Value  0: grammars will be evicted immediately after being loaded into the cache.
+                Value -1: no maximum for the number of cached grammars.
+
+            - expire
+                The time (in seconds) after which an unused grammar should expire and be removed
+                from the grammar pool.
+                Value -1: grammars will not be removed over time.
+        -->
+        <grammar-cache size="500" expire="3600"/>
     </validation>
 
     <!-- 
@@ -864,7 +885,6 @@
             raise-error-on-failed-retrieval="no">
         
         <builtin-modules>
-
             <module uri="http://www.w3.org/2005/xpath-functions/map"  class="org.exist.xquery.functions.map.MapModule" />
             <module uri="http://www.w3.org/2005/xpath-functions/math" class="org.exist.xquery.functions.math.MathModule" />
             <module uri="http://www.w3.org/2005/xpath-functions/array" class="org.exist.xquery.functions.array.ArrayModule" />

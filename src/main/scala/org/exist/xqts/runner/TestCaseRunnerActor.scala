@@ -448,7 +448,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
           case Some(selectExpr) =>
             `type` match {
-              case Type.EMPTY =>
+              case Type.EMPTY_SEQUENCE =>
               Right(Sequence.EMPTY_SEQUENCE)
 
               case _ =>
@@ -1169,7 +1169,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
       // query result returned an empty sequence
       case Right(Success(expectedType)) if (actual.isEmpty) =>
-        if (expectedType == WildcardExistTypeDescription || expectedType.asInstanceOf[ExplicitExistTypeDescription].base == Type.EMPTY) {
+        if (expectedType == WildcardExistTypeDescription || expectedType.asInstanceOf[ExplicitExistTypeDescription].base == Type.EMPTY_SEQUENCE) {
           // OK, we expected empty
           PassResult(testSetName, testCaseName, compilationTime, executionTime)
         } else {

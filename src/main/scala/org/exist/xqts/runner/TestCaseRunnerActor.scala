@@ -237,7 +237,20 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
             getDynamicContextAvailableCollections(connection)(testCase, resolvedEnvironment).flatMap(availableCollections =>
               getDynamicContextAvailableTextResources(connection)(testCase, resolvedEnvironment).flatMap(availableTextResources =>
                 getVariableDeclarations(connection)(testCase, resolvedEnvironment).flatMap(variableDeclarations =>
-                  connection.executeQuery(queryString, false, baseUri, contextSequence, availableDocuments, availableCollections, availableTextResources, testCase.environment.map(_.namespaces).getOrElse(List.empty), variableDeclarations, testCase.environment.map(_.decimalFormats).getOrElse(List.empty), testCase.modules, testCase.dependencies.filter(_.`type` == DependencyType.Feature).headOption.nonEmpty)
+                  connection.executeQuery(
+                    queryString, 
+                    false,
+                    baseUri,
+                    contextSequence,
+                    availableDocuments,
+                    availableCollections,
+                    availableTextResources,
+                    testCase.environment.map(_.namespaces).getOrElse(List.empty),
+                    variableDeclarations,
+                    testCase.environment.map(_.decimalFormats).getOrElse(List.empty),
+                    testCase.modules,
+                    testCase.dependencies.filter(_.`type` == DependencyType.Feature).headOption.nonEmpty
+                  )
                 )
               )
             )
@@ -458,7 +471,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
       }
 
-    val initAccum : Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
+      val initAccum : Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
 
       testCase.environment
         .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))

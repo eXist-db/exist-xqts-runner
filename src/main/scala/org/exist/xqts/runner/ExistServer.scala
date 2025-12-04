@@ -133,7 +133,7 @@ private object ExistConnection {
   * Represents a connection
   * to an eXist-db server, i.e. a {@link org.exist.storage.DBBroker}
   *
-  * @param broker the eXist-db broker to wrap.
+  * @param brokerRes the eXist-db broker to wrap.
   */
 class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
 
@@ -147,12 +147,29 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     * @param availableDocuments Any dynamically available Documents that should be available to the XQuery.
     * @param availableCollections Any dynamically available Collections that should be available to the XQuery.
     * @param availableTextResources Any dynamically available Text Resources that should be available to the XQuery.
+    * @param namespaces Any static namespaces that should be available to the XQuery.
     * @param externalVariables Any external variables that should be bound for the XQuery.
     * @param decimalFormats Any changes to the `unnamed` decimal format.
+    * @param modules Any modules that should be imported for the XQuery.
+    * @param xpath1Compatibility whether XPath 1.0 backwards compatibility should be enabled.
     *
     * @return the result or executing the query, or an exception.
     */
-  def executeQuery(query: String, cacheCompiled: Boolean, staticBaseUri: Option[String], contextSequence: Option[Sequence], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false) : Either[ExistServerException, Result] = {
+  def executeQuery(
+    query: String,
+    cacheCompiled: Boolean,
+    staticBaseUri: Option[String],
+    contextSequence: Option[Sequence],
+    availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty,
+    availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty,
+    availableTextResources: Seq[(String, Charset, String)] = Seq.empty,
+    namespaces: Seq[Namespace] = Seq.empty,
+    externalVariables: Seq[(String, Sequence)] = Seq.empty,
+    decimalFormats: Seq[DecimalFormat] = Seq.empty,
+    modules: Seq[Module] = Seq.empty,
+    xpath1Compatibility : Boolean = false
+  ) : Either[ExistServerException, Result] = {
+
     /**
       * Gets the XQuery Pool.
       *
@@ -200,7 +217,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
         for {
           startCompilationTime <- Clock[IO].realTime.map(_.toMillis)
           maybeCompiledXQuery <- IO.delay(Option(xqueryPool.borrowCompiledXQuery(broker, source)))
-//            .flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Borrow"))  // enable for debugging
+          //            .flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Borrow"))  // enable for debugging
           maybeCompiledXQueryContext <- IO.delay(maybeCompiledXQuery.map(compiledXQuery => fnConfigureContext(compiledXQuery.getContext)))
           endCompilationTime <- Clock[IO].realTime.map(_.toMillis)
         } yield maybeCompiledXQuery.zip(maybeCompiledXQueryContext).map{ case (compiledXQuery, compiledXQueryContext) => CompiledQuery(compiledXQuery, compiledXQueryContext, endCompilationTime - startCompilationTime)}
@@ -211,7 +228,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
             for {
               _ <- IO.delay(compiledQuery.xqueryContext.runCleanupTasks())
               _ <- IO.delay(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery))
-//                .flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Return"))  // enable for debugging
+            //                .flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Return"))  // enable for debugging
             } yield IO.unit
           case None =>
             IO.unit
@@ -233,12 +250,12 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       val xqueryContextRes = Resource.make {
         // build
         IO.delay(fnConfigureContext(new XQueryContext(broker.getBrokerPool())))
-//          .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Build"))  // enable for debugging
+        //          .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Build"))  // enable for debugging
       } {
         // release
         xqueryContext =>
           IO.delay(xqueryContext.runCleanupTasks())
-//            .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Release"))  // enable for debugging
+          //            .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Release"))  // enable for debugging
       }
 
       xqueryContextRes.flatMap { xqueryContext =>
@@ -309,8 +326,18 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       *
       * @return the result of the query, or an exception.
       */
-    def executeCompiledQuery(broker: DBBroker, xqueryService: XQuery, compiledQuery: CompiledQuery, contextSequence: Option[Sequence]): IO[Either[ExistServerException, Result]] = {
-      def execute(broker: DBBroker, compiledQuery: CompiledQuery, executionStartTime: ExecutionTime, contextSequence: Option[Sequence]) : IO[Either[ExistServerException, Result]] = {
+    def executeCompiledQuery(
+      broker: DBBroker,
+      xqueryService: XQuery,
+      compiledQuery: CompiledQuery,
+      contextSequence: Option[Sequence]
+    ): IO[Either[ExistServerException, Result]] = {
+      def execute(
+        broker: DBBroker,
+        compiledQuery: CompiledQuery,
+        executionStartTime: ExecutionTime,
+        contextSequence: Option[Sequence]
+      ) : IO[Either[ExistServerException, Result]] = {
         IO.delay {
           try {
             val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.orNull)
@@ -321,7 +348,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
               Left(ExistServerException(e, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime))
           }
         }
-//          .flatTap(_ => IOUtil.printlnExecutionContext("ExecuteQuery"))  // enable for debugging
+        //          .flatTap(_ => IOUtil.printlnExecutionContext("ExecuteQuery"))  // enable for debugging
       }
 
       for {
@@ -360,7 +387,17 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       *
       * @param context The XQuery Context to configure
       */
-    def setupContext(context: XQueryContext)(staticBaseUri: Option[String], availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty, availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty, availableTextResources: Seq[(String, Charset, String)] = Seq.empty, namespaces: Seq[Namespace] = Seq.empty, externalVariables: Seq[(String, Sequence)] = Seq.empty, decimalFormats: Seq[DecimalFormat] = Seq.empty, modules: Seq[Module] = Seq.empty, xpath1Compatibility : Boolean = false): XQueryContext = {
+    def setupContext(context: XQueryContext)(
+      staticBaseUri: Option[String],
+      availableDocuments: Seq[(String, DocumentImpl)],
+      availableCollections: Seq[(String, List[DocumentImpl])],
+      availableTextResources: Seq[(String, Charset, String)],
+      namespaces: Seq[Namespace],
+      externalVariables: Seq[(String, Sequence)],
+      decimalFormats: Seq[DecimalFormat],
+      modules: Seq[Module],
+      xpath1Compatibility : Boolean
+    ): XQueryContext = {
 
       // Turn on/off XPath 1.0 backwards compatibility.
       context.setBackwardsCompatibility(xpath1Compatibility)

@@ -146,7 +146,7 @@ publishMavenStyle := true
 
 // Use GitHub Packages if GITHUB_TOKEN is set, otherwise use local connection in credentials file
 credentials += {
-  (sys.env.get("GITHUB_TOKEN")) match {
+  sys.env.get("GITHUB_TOKEN") match {
     case Some(token) => Credentials("GitHub Package Registry", "maven.pkg.github.com", "_", token)
     case _ => Credentials(Path.userHome / ".ivy2" / ".credentials")
   }

@@ -20,7 +20,7 @@ package org.exist.xqts.runner
 import java.io.IOException
 import java.nio.charset.Charset
 import java.nio.file.{Files, Path}
-import akka.actor.{Actor, ActorRef}
+import org.apache.pekko.actor.{Actor, ActorRef}
 import org.exist.xqts.runner.TestCaseRunnerActor.RunTestCase
 import org.exist.xqts.runner.XQTSParserActor._
 import TestCaseRunnerActor._

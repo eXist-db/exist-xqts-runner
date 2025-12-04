@@ -22,7 +22,7 @@ import java.net.{URI, URL}
 import java.nio.file.{Files, Path, Paths}
 import java.util.regex.Pattern
 
-import akka.actor.{ActorSystem, Props}
+import org.apache.pekko.actor.{ActorSystem, Props}
 import com.typesafe.config.ConfigFactory
 import org.exist.xqts.runner.Checksum.SHA256
 import org.exist.xqts.runner.XQTSRunner.CmdConfig

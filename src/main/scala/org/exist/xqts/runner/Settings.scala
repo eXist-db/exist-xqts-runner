@@ -17,7 +17,7 @@
 
 package org.exist.xqts.runner
 
-import akka.actor.{ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
+import org.apache.pekko.actor.{ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
 import com.typesafe.config.Config
 import scala.jdk.CollectionConverters._;
 

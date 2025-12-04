@@ -4,7 +4,7 @@ name := "exist-xqts-runner"
 
 organization := "org.exist-db"
 
-scalaVersion := "2.13.16"
+scalaVersion := "2.13.17"
 
 semanticdbEnabled := true
 
@@ -51,7 +51,7 @@ libraryDependencies ++= {
   val existV = "7.0.0-SNAPSHOT"
 
   Seq(
-    "com.typesafe.akka" %% "akka-actor" % "2.8.1-M1",
+    "org.apache.pekko" %% "pekko-actor" % "1.3.0",
     "com.github.scopt" %% "scopt" % "4.1.0",
     "org.typelevel" %% "cats-effect" % "3.6.3",
     // "com.fasterxml" %	"aalto-xml" % "1.3.4",

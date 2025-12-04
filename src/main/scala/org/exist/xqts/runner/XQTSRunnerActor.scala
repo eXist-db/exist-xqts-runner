@@ -19,9 +19,9 @@ package org.exist.xqts.runner
 
 import java.nio.file.Path
 import java.util.regex.Pattern
-import akka.actor.{Actor, Props, Timers}
+import org.apache.pekko.actor.{Actor, Props, Timers}
 import XQTSRunnerActor._
-import akka.routing.FromConfig
+import org.apache.pekko.routing.FromConfig
 import org.exist.xqts.runner.TestCaseRunnerActor.TestResult
 import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
 import org.exist.xqts.runner.XQTSParserActor.Spec.Spec

@@ -72,9 +72,8 @@ excludeDependencies ++= Seq(
 
 resolvers ++= Seq(
   Resolver.mavenLocal,
-  "eXist-db Releases" at "https://repo.evolvedbinary.com/repository/exist-db/",
-  "eXist-db Snapshots" at "https://repo.evolvedbinary.com/repository/exist-db-snapshots/",
-  "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
+  "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
+  "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
 )
 
 javacOptions ++= Seq("-source", "21", "-target", "21")
@@ -137,15 +136,19 @@ Compile / assembly / artifact := {
 addArtifact(Compile / assembly / artifact, assembly)
 
 // Publish to Maven Repo
-
 publishMavenStyle := true
 
-credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
+// Use GitHub Packages if GITHUB_TOKEN is set, otherwise use local connection in credentials file
+credentials += {
+  sys.env.get("GITHUB_TOKEN") match {
+    case Some(token) => Credentials("GitHub Package Registry", "maven.pkg.github.com", "_", token)
+    case _ => Credentials(Path.userHome / ".ivy2" / ".credentials")
+  }
+}
 
 publishTo := {
-  val eb = "https://repo.evolvedbinary.com/"
   if (isSnapshot.value)
-    Some("snapshots" at eb + "repository/exist-db-snapshots/")
+    Some("snapshots" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
   else
     Some(Opts.resolver.sonatypeStaging)
 }

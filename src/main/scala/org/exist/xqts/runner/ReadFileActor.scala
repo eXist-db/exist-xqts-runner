@@ -26,11 +26,11 @@ import cats.syntax.either._
 import org.exist.xqts.runner.ReadFileActor.{FileContent, FileReadError, ReadFile}
 
 /**
-  * Actor which reads the entire
-  * content of a file from the filesystem.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Actor which reads the entire
+ * content of a file from the filesystem.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 class ReadFileActor extends Actor {
   override def receive: Receive = {
     case ReadFile(path) =>
@@ -42,7 +42,7 @@ class ReadFileActor extends Actor {
       }
   }
 
-  private def readFile(path: Path) : Either[IOException, Array[Byte]] = {
+  private def readFile(path: Path): Either[IOException, Array[Byte]] = {
     val fileIO = IO.blocking {
       Either.catchOnly[IOException](Files.readAllBytes(path))
     }
@@ -54,6 +54,8 @@ class ReadFileActor extends Actor {
 
 object ReadFileActor {
   case class ReadFile(path: Path)
+
   case class FileContent(path: Path, data: Array[Byte])
+
   case class FileReadError(path: Path, error: IOException)
 }

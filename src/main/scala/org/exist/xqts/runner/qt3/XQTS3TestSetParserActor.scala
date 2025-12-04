@@ -44,19 +44,18 @@ import java.util.regex.Pattern
 import scala.annotation.tailrec
 
 /**
-  * Parser an XQTS 3.1 test-set XML file.
-  *
-  * For each test-case parsed from the test-set,
-  * an execution request of {@link RunTestCase} will be sent
-  * to a {@link TestCaseRunnerActor}.
-  *
-  * @param xmlParserBufferSize the maximum buffer size to use for each XML
-  *                            document from the XQTS which we parse.
-  * @param testCaseRunnerActor a reference to an actor which can execute
-  *                            an XQTS test-case.
-  *
-  * @author Adam Retter <adam@evolvedinary.com>
-  */
+ * Parser an XQTS 3.1 test-set XML file.
+ *
+ * For each test-case parsed from the test-set,
+ * an execution request of [[RunTestCase]] will be sent
+ * to a [[org.exist.xqts.runner.TestCaseRunnerActor]].
+ *
+ * @param xmlParserBufferSize the maximum buffer size to use for each XML
+ *                            document from the XQTS which we parse.
+ * @param testCaseRunnerActor a reference to an actor which can execute
+ *                            an XQTS test-case.
+ * @author Adam Retter <adam@evolvedinary.com>
+ */
 class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: ActorRef) extends Actor {
 
   private val logger = Logger(classOf[XQTS3TestSetParserActor])
@@ -98,38 +97,37 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
   }
 
   /**
-    * Parses an XQTS test-set XML file.
-    *
-    * @param testSetRef a reference to the test-set.
-    * @param testCases the test-cases to parse, or an empty set to parse all.
-    * @param features the enabled XQTS features to support.
-    * @param specs the enabled XQTS specs to support.
-    * @param xmlVersions the enabled XQTS XML versions to support.
-    * @param xsdVersions the enabled XQTS XSD versions to support.
-    * @param excludeTestCases the names of any test cases to exclude from the parse.
-    * @param globalEnvironments any environemnts which were defined globally in the XQTS catalog.
-    * @param manager the supervising manager actor.
-    *
-    * @return Some of the parsed test-set, or None.
-    */
-  private def parseTestSet(testSetRef: TestSetRef, testCases: Either[Set[String], Pattern], features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], excludeTestCases: Set[String], globalEnvironments: Map[String, Environment], manager: ActorRef) : Option[TestSet] = {
+   * Parses an XQTS test-set XML file.
+   *
+   * @param testSetRef         a reference to the test-set.
+   * @param testCases          the test-cases to parse, or an empty set to parse all.
+   * @param features           the enabled XQTS features to support.
+   * @param specs              the enabled XQTS specs to support.
+   * @param xmlVersions        the enabled XQTS XML versions to support.
+   * @param xsdVersions        the enabled XQTS XSD versions to support.
+   * @param excludeTestCases   the names of any test cases to exclude from the parse.
+   * @param globalEnvironments any environemnts which were defined globally in the XQTS catalog.
+   * @param manager            the supervising manager actor.
+   * @return Some of the parsed test-set, or None.
+   */
+  private def parseTestSet(testSetRef: TestSetRef, testCases: Either[Set[String], Pattern], features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], excludeTestCases: Set[String], globalEnvironments: Map[String, Environment], manager: ActorRef): Option[TestSet] = {
 
     /**
-      * Get's an environment.
-      *
-      * First searches the environments of the test set,
-      * and the falls-back and searches the environments
-      * of the catalog.
-      *
-      * @param ref The reference to the environment.
-      * @return The environment if known.
-      */
-    def getEnvironment(ref: String) : Option[Environment] = {
+     * Get's an environment.
+     *
+     * First searches the environments of the test set,
+     * and the falls-back and searches the environments
+     * of the catalog.
+     *
+     * @param ref The reference to the environment.
+     * @return The environment if known.
+     */
+    def getEnvironment(ref: String): Option[Environment] = {
       environments.get(ref)
         .orElse(globalEnvironments.get(ref))
     }
 
-    def matchesTestCases(testCaseName: String) : Boolean = {
+    def matchesTestCases(testCaseName: String): Boolean = {
       if (excludeTestCases.contains(testCaseName)) {
         return false
       }
@@ -144,25 +142,23 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
     }
 
     /**
-      * The asynchronous STaX parsing loop,
-      * implemented as a recursive function.
-      *
-      * @param event the current STaX event.
-      * @param asyncReader the asynchronous XML stream reader.
-      * @param testSetDir the path to the directory containing the test-set.
-      * @param channel the file channel for the {@code asyncReader}.
-      * @param buf the buffer for the {@code asyncReader}.
-      *
-      * @return Some of the parsed test-set, or None.
-      *
-      * @throws XQTSParseException if an error happens during parsing.
-      */
+     * The asynchronous STaX parsing loop,
+     * implemented as a recursive function.
+     *
+     * @param event       the current STaX event.
+     * @param asyncReader the asynchronous XML stream reader.
+     * @param testSetDir  the path to the directory containing the test-set.
+     * @param channel     the file channel for the  <pre>asyncReader</pre> .
+     * @param buf         the buffer for the  <pre>asyncReader</pre> .
+     * @return Some of the parsed test-set, or None.
+     * @throws XQTSParseException if an error happens during parsing.
+     */
     @tailrec
     @throws[XQTSParseException]
-    def parseAll(event: Int, asyncReader: AsyncXMLStreamReader[AsyncByteBufferFeeder], testSetDir: Path, channel: SeekableByteChannel, buf: ByteBuffer) : Option[TestSet] = {
+    def parseAll(event: Int, asyncReader: AsyncXMLStreamReader[AsyncByteBufferFeeder], testSetDir: Path, channel: SeekableByteChannel, buf: ByteBuffer): Option[TestSet] = {
       event match {
         case END_DOCUMENT =>
-          return currentTestSet  // exit parse
+          return currentTestSet // exit parse
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_ENVIRONMENT) =>
           asyncReader.getAttributeValueOptNE(ATTR_REF) match {
@@ -174,7 +170,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
             case Some(ref) =>
               // Reference to an (already) defined environment
               getEnvironment(ref) match {
-                case env @ Some(_) =>
+                case env@Some(_) =>
                   currentTestCase = currentTestCase.map(testCase => testCase.copy(environment = env))
                 case None =>
                   throw XQTSParseException(s"Environment '$ref' was referenced, but not defined. Test set '${testSetRef.name}'${currentTestCase.map(testCase => s" for test case '${testCase.name}'").getOrElse("")}")
@@ -237,9 +233,9 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentDependency = Some(Dependency(DependencyType.fromXqtsName(`type`), value, satisfied))
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_DEPENDENCY) =>
-          if(currentTestCase.nonEmpty) {
+          if (currentTestCase.nonEmpty) {
             currentTestCase = currentDependency.map(dependency => currentTestCase.map(testCase => testCase.copy(dependencies = dependency +: testCase.dependencies))).getOrElse(currentTestCase)
-          } else if(currentTestSet.nonEmpty && !parsingTestCases) {
+          } else if (currentTestSet.nonEmpty && !parsingTestCases) {
             currentTestSet = currentDependency.map(dependency => currentTestSet.map(testSet => testSet.copy(dependencies = dependency +: testSet.dependencies))).getOrElse(currentTestSet)
           }
           currentDependency = None
@@ -250,7 +246,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentCreated = Some(Created(by, on))
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_CREATED) =>
-          if(currentTestCase.nonEmpty) {
+          if (currentTestCase.nonEmpty) {
             currentTestCase = currentTestCase.map(testCase => testCase.copy(created = currentCreated))
           } else if (currentSchema.nonEmpty) {
             currentSchema = currentSchema.map(schema => schema.copy(created = currentCreated))
@@ -268,7 +264,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentModified = Some(Modified(by, on, change))
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_MODIFIED) =>
-          if(currentTestCase.nonEmpty) {
+          if (currentTestCase.nonEmpty) {
             currentTestCase = currentModified.map(modified => currentTestCase.map(testCase => testCase.copy(modifications = modified +: testCase.modifications))).getOrElse(currentTestCase)
           } else if (currentSchema.nonEmpty) {
             currentSchema = currentModified.flatMap(modified => currentSchema.map(schema => schema.copy(modifications = modified +: schema.modifications)))
@@ -280,7 +276,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentModified = None
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_SCHEMA && currentEnv.nonEmpty) =>
-          currentEnv = currentSchema.map(schema => currentEnv.map(env => env.copy(schemas =  schema +: env.schemas)))
+          currentEnv = currentSchema.map(schema => currentEnv.map(env => env.copy(schemas = schema +: env.schemas)))
             .getOrElse(currentEnv)
           currentSchema = None
 
@@ -334,7 +330,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           val select = asyncReader.getAttributeValueOptNE(ATTR_SELECT)
           currentEnv = currentEnv.map(_.copy(contextItem = select))
 
-        case START_ELEMENT if(asyncReader.getLocalName == ELEM_DECIMAL_FORMAT && currentEnv.nonEmpty) =>
+        case START_ELEMENT if (asyncReader.getLocalName == ELEM_DECIMAL_FORMAT && currentEnv.nonEmpty) =>
           val name = asyncReader.getAttributeValueOptNE(ATTR_NAME).map(toQName(_, asyncReader.getNamespaceContext))
           val decimalSeparator = asyncReader.getAttributeValueOptNE(ATTR_DECIMAL_SEPARATOR).map(_.codePointAt(0))
           val exponentSeparator = asyncReader.getAttributeValueOptNE(ATTR_EXPONENT_SEPARATOR).map(_.codePointAt(0))
@@ -390,7 +386,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_TEST_SET) =>
           parsingTestCases = false
-          // there is nothing more we need to do here, although in future we could add further logging here
+        // there is nothing more we need to do here, although in future we could add further logging here
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_TEST_CASE) =>
           parsingTestCases = true
@@ -413,36 +409,36 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentText = None
           captureText = false
 
-        case START_ELEMENT if(currentTestCase.nonEmpty && asyncReader.getLocalName == ELEM_RESULT) =>
+        case START_ELEMENT if (currentTestCase.nonEmpty && asyncReader.getLocalName == ELEM_RESULT) =>
           currentResult = Some(Stack.empty)
 
-        case START_ELEMENT if(asyncReader.getLocalName == ELEM_ALL_OF) =>
+        case START_ELEMENT if (asyncReader.getLocalName == ELEM_ALL_OF) =>
           currentResult = currentResult.map(addAssertion(_)(AllOf(List.empty)))
 
-        case START_ELEMENT if(asyncReader.getLocalName == ELEM_ANY_OF) =>
+        case START_ELEMENT if (asyncReader.getLocalName == ELEM_ANY_OF) =>
           currentResult = currentResult.map(addAssertion(_)(AnyOf(List.empty)))
 
-        case START_ELEMENT if(asyncReader.getLocalName == ELEM_NOT) =>
+        case START_ELEMENT if (asyncReader.getLocalName == ELEM_NOT) =>
           currentResult = currentResult.map(addAssertion(_)(Not()))
 
-        case START_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_STRING_VALUE) =>
+        case START_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_STRING_VALUE) =>
           currentNormalizeSpace = asyncReader.getAttributeValueOptNE(ATTR_NORMALIZE_SPACE).map(_.toBoolean)
           captureText = true
 
-        case START_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_XML) =>
+        case START_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_XML) =>
           val attrFile = asyncReader.getAttributeValueOptNE(ATTR_FILE)
           currentFile = attrFile.map(file => testSetRef.file.resolveSibling(file))
           currentIgnorePrefixes = asyncReader.getAttributeValueOptNE(ATTR_IGNORE_PREFIXES).map(_.toBoolean)
           captureText = true
 
-        case START_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_SERIALIZATION_MATCHES) =>
+        case START_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_SERIALIZATION_MATCHES) =>
           val attrFile = asyncReader.getAttributeValueOptNE(ATTR_FILE)
           currentFile = attrFile.map(file => testSetRef.file.resolveSibling(file))
           currentFlags = asyncReader.getAttributeValueOptNE(ATTR_FLAGS)
           captureText = true
 
         // assertions where we just need their text()
-        case START_ELEMENT if(currentResult.nonEmpty && (
+        case START_ELEMENT if (currentResult.nonEmpty && (
           asyncReader.getLocalName == ELEM_ASSERT
             || asyncReader.getLocalName == ELEM_ASSERT_COUNT
             || asyncReader.getLocalName == ELEM_ASSERT_DEEP_EQ
@@ -452,12 +448,12 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           )) =>
           captureText = true
 
-        case START_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_SERIALIZATION_ERROR) =>
+        case START_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_SERIALIZATION_ERROR) =>
           val code = asyncReader.getAttributeValue(ATTR_CODE)
           val assertion = AssertSerializationError(code)
           currentResult = currentResult.map(addAssertion(_)(assertion))
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT) =>
           currentText match {
             case Some(text) =>
               val assertion = Assert(text)
@@ -468,7 +464,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentText = None
           captureText = false
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_COUNT) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_COUNT) =>
           currentText match {
             case Some(text) =>
               val assertion = AssertCount(text.trim.toInt)
@@ -479,7 +475,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentText = None
           captureText = false
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_DEEP_EQ) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_DEEP_EQ) =>
           currentText match {
             case Some(text) =>
               val assertion = AssertDeepEquals(text)
@@ -490,7 +486,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentText = None
           captureText = false
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_EQ) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_EQ) =>
           currentText match {
             case Some(text) =>
               val assertion = AssertEq(text)
@@ -501,7 +497,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentText = None
           captureText = false
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_PERMUTATION) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_PERMUTATION) =>
           currentText match {
             case Some(text) =>
               val assertion = AssertPermutation(text)
@@ -512,14 +508,14 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentText = None
           captureText = false
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_STRING_VALUE) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_STRING_VALUE) =>
           val assertion = AssertStringValue(currentText.getOrElse(""), currentNormalizeSpace.getOrElse(false))
           currentResult = currentResult.map(addAssertion(_)(assertion))
           currentNormalizeSpace = None
           currentText = None
           captureText = false
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_TYPE) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_TYPE) =>
           currentText match {
             case Some(text) =>
               val assertion = AssertType(text)
@@ -530,11 +526,11 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentText = None
           captureText = false
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_XML) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ASSERT_XML) =>
           currentText
-              .flatMap(text => Some(Left(text)))
-              .orElse(currentFile.map(Right(_)))
-              .map(AssertXml(_, currentIgnorePrefixes.getOrElse(false))) match {
+            .flatMap(text => Some(Left(text)))
+            .orElse(currentFile.map(Right(_)))
+            .map(AssertXml(_, currentIgnorePrefixes.getOrElse(false))) match {
             case Some(assertXml) =>
               currentResult = currentResult.map(addAssertion(_)(assertXml))
             case None =>
@@ -545,7 +541,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentText = None
           captureText = false
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_SERIALIZATION_MATCHES) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_SERIALIZATION_MATCHES) =>
           currentText
             .flatMap(text => Some(Left(text)))
             .orElse(currentFile.map(Right(_)))
@@ -560,27 +556,27 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentText = None
           captureText = false
 
-        case END_ELEMENT if(asyncReader.getLocalName == ELEM_ASSERT_EMPTY) =>
+        case END_ELEMENT if (asyncReader.getLocalName == ELEM_ASSERT_EMPTY) =>
           currentResult = currentResult.map(addAssertion(_)(AssertEmpty))
 
-        case END_ELEMENT if(asyncReader.getLocalName == ELEM_ASSERT_FALSE) =>
+        case END_ELEMENT if (asyncReader.getLocalName == ELEM_ASSERT_FALSE) =>
           currentResult = currentResult.map(addAssertion(_)(AssertFalse))
 
-        case END_ELEMENT if(asyncReader.getLocalName == ELEM_ASSERT_TRUE) =>
+        case END_ELEMENT if (asyncReader.getLocalName == ELEM_ASSERT_TRUE) =>
           currentResult = currentResult.map(addAssertion(_)(AssertTrue))
 
-        case END_ELEMENT if(asyncReader.getLocalName == ELEM_ALL_OF || asyncReader.getLocalName == ELEM_ANY_OF) =>
+        case END_ELEMENT if (asyncReader.getLocalName == ELEM_ALL_OF || asyncReader.getLocalName == ELEM_ANY_OF) =>
           currentResult = currentResult.map(stepOutAssertions)
 
-        case END_ELEMENT if(asyncReader.getLocalName == ELEM_ALL_OF || asyncReader.getLocalName == ELEM_NOT) =>
+        case END_ELEMENT if (asyncReader.getLocalName == ELEM_ALL_OF || asyncReader.getLocalName == ELEM_NOT) =>
           currentResult = currentResult.map(stepOutAssertions)
 
-        case START_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ERROR) =>
+        case START_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ERROR) =>
           val code = asyncReader.getAttributeValue(ATTR_CODE)
           val assertion = Error(code)
           currentResult = currentResult.map(addAssertion(_)(assertion))
 
-        case END_ELEMENT if(currentResult.nonEmpty && asyncReader.getLocalName == ELEM_RESULT) =>
+        case END_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_RESULT) =>
           currentTestCase = currentTestCase.map(_.copy(result = currentResult.flatMap(_.peekOption)))
           currentResult = None
 
@@ -590,7 +586,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
             case Some(testCase) =>
               if (matchesTestCases(testCase.name)) {
                 currentTestSet = currentTestSet.map(testSet => testSet.copy(testCases = testCase +: testSet.testCases))
-                val allDependencies : Seq[Dependency] = currentTestSet.map(testSet => (testSet.dependencies.toSet ++ testCase.dependencies.toSet).toSeq).getOrElse(testCase.dependencies)
+                val allDependencies: Seq[Dependency] = currentTestSet.map(testSet => (testSet.dependencies.toSet ++ testCase.dependencies.toSet).toSeq).getOrElse(testCase.dependencies)
                 val missingDeps: Missing = missingDependencies(allDependencies, features, specs, xmlVersions, xsdVersions)
                 if (missingDeps.isEmpty) {
                   testCaseRunnerActor ! RunTestCase(testSetRef.copy(name = currentTestSet.map(_.name).getOrElse("<UNKNOWN>")), testCase, manager)
@@ -605,14 +601,14 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               }
               currentTestCase = None
             case None =>
-              //throw XQTSParseException(s"Encountered end of element: $ELEM_TEST_CASE, but no test case was captured")
+            //throw XQTSParseException(s"Encountered end of element: $ELEM_TEST_CASE, but no test case was captured")
           }
 
         case CHARACTERS if (captureText) =>
           val characters: String = asyncReader.getText
           currentText = currentText.map(_ ++ characters).orElse(Some(characters))
 
-        case CDATA if(captureText) =>
+        case CDATA if (captureText) =>
           val characters: String = asyncReader.getText
           currentText = currentText.map(_ ++ characters).orElse(Some(characters))
 
@@ -639,19 +635,19 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
         val localPart = s.substring(idx + 1)
 
         Option(namespaceContext.getNamespaceURI(prefix))
-            .orElse(currentEnv
-              .map(_.namespaces).getOrElse(List.empty)
-              .filter(_.prefix.equals(prefix))
-              .map(_.uri.toString)
-              .headOption)
-            .map(ns => new QName(ns, localPart, prefix))
-            .getOrElse(QName.valueOf(s))
+          .orElse(currentEnv
+            .map(_.namespaces).getOrElse(List.empty)
+            .filter(_.prefix.equals(prefix))
+            .map(_.uri.toString)
+            .headOption)
+          .map(ns => new QName(ns, localPart, prefix))
+          .getOrElse(QName.valueOf(s))
       } else {
         QName.valueOf(s)
       }
     }
 
-    def addAssertion(currentAssertions: Stack[Result])(assertion: Result) : Stack[Result] = {
+    def addAssertion(currentAssertions: Stack[Result])(assertion: Result): Stack[Result] = {
       currentAssertions.peekOption match {
         case Some(head) if (head.isInstanceOf[Assertions] && !assertion.isInstanceOf[Assertions]) =>
           // head of the stack is itself a list of assertions, and the assertion to add is not a list of assertions
@@ -662,14 +658,14 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           currentAssertions.replace(Not(Some(assertion)))
 
         case Some(_) =>
-            currentAssertions.push(assertion)
+          currentAssertions.push(assertion)
 
         case None =>
           Stack(assertion)
       }
     }
 
-    def stepOutAssertions(currentAssertions: Stack[Result]) : Stack[Result] = {
+    def stepOutAssertions(currentAssertions: Stack[Result]): Stack[Result] = {
       if (currentAssertions.size >= 2) {
         if (currentAssertions.peek.isInstanceOf[Assertions]) {
           val (prevHead, stack) = currentAssertions.pop()
@@ -687,9 +683,21 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
       }
     }
 
-    val bufIO = cats.effect.Resource.make(IO { ByteBuffer.allocate(xmlParserBufferSize) })(buf => IO { buf.clear() })
-    val fileIO = cats.effect.Resource.make(IO { Files.newByteChannel(testSetRef.file) })(channel => IO {channel.close() })
-    val asyncParserIO = cats.effect.Resource.make(IO { PARSER_FACTORY.createAsyncForByteBuffer() } )(asyncReader => IO { asyncReader.close() })
+    val bufIO = cats.effect.Resource.make(IO {
+      ByteBuffer.allocate(xmlParserBufferSize)
+    })(buf => IO {
+      buf.clear()
+    })
+    val fileIO = cats.effect.Resource.make(IO {
+      Files.newByteChannel(testSetRef.file)
+    })(channel => IO {
+      channel.close()
+    })
+    val asyncParserIO = cats.effect.Resource.make(IO {
+      PARSER_FACTORY.createAsyncForByteBuffer()
+    })(asyncReader => IO {
+      asyncReader.close()
+    })
     val parseIO = bufIO.use(buf =>
       fileIO.use(channel =>
         asyncParserIO.use(asyncReader =>

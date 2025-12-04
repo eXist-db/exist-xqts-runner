@@ -42,18 +42,17 @@ import org.exist.xqts.runner.qt3.XQTS3TestSetParserActor.ParseTestSet
 import scala.annotation.tailrec
 
 /**
-  * Parser an XQTS 3.1 catalog.xml file.
-  *
-  * For each reference to a test-set file parsed from the catalog,
-  * a parse request of {@link ParseTestSet} will be sent
-  * to a {@link XQTS3TestSetParserActor}.
-  *
-  * @param xmlParserBufferSize the maximum buffer size to use for each XML
-  *                            document from the XQTS which we parse.
-  * @param testSetParserRouter a router to a pool of test-set parsers.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Parser an XQTS 3.1 catalog.xml file.
+ *
+ * For each reference to a test-set file parsed from the catalog,
+ * a parse request of [[ParseTestSet]] will be sent
+ * to a [[XQTS3TestSetParserActor]].
+ *
+ * @param xmlParserBufferSize the maximum buffer size to use for each XML
+ *                            document from the XQTS which we parse.
+ * @param testSetParserRouter a router to a pool of test-set parsers.
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: ActorRef) extends XQTSParserActor {
 
   private val logger = Logger(classOf[XQTS3CatalogParserActor])
@@ -79,45 +78,42 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
       logger.info("Parsed XQTS Catalog OK.")
       sender ! ParseComplete(xqtsVersion, xqtsPath, matchedTestSets)
 
-      context.stop(self)  // we are no longer needed
+      context.stop(self) // we are no longer needed
   }
 
   /**
-    * Parses a XQTS catalog.xml file.
-    *
-    * Each test-set which is not excluded from the parse
-    * will be dispatched to a {@link XQTS3TestSetParserActor}.
-    *
-    * @param xqtsRunner a reference to the XQTSRunnerActor
-    * @param xqtsVersion the version of the XQTS.
-    * @param xqtsPath the path to the XQTS.
-    * @param features the enabled XQTS features to support.
-    * @param specs the enabled XQTS specs to support.
-    * @param xmlVersions the enabled XQTS XML versions to support.
-    * @param xsdVersions the enabled XQTS XSD versions to support.
-    * @param testSets the test-sets to parse, or an empty set to parse all.
-    * @param testCases the test-cases to parse, or an empty set to parse all.
-    * @param excludeTestSets the names of any test sets to exclude from the parse.
-    * @param excludeTestCases the names of any test cases to exclude from the parse.
-    *
-    * @return the number of test sets that were matched in the catalog and dispatched to the testSetParserRouter.
-    */
-  private def parseCatalog(xqtsRunner: ActorRef, xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Either[Set[String], Pattern], testCases: Either[Set[String], Pattern], excludeTestSets: Set[String], excludeTestCases: Set[String]) : Int = {
+   * Parses a XQTS catalog.xml file.
+   *
+   * Each test-set which is not excluded from the parse
+   * will be dispatched to a [[XQTS3TestSetParserActor]].
+   *
+   * @param xqtsRunner       a reference to the XQTSRunnerActor
+   * @param xqtsVersion      the version of the XQTS.
+   * @param xqtsPath         the path to the XQTS.
+   * @param features         the enabled XQTS features to support.
+   * @param specs            the enabled XQTS specs to support.
+   * @param xmlVersions      the enabled XQTS XML versions to support.
+   * @param xsdVersions      the enabled XQTS XSD versions to support.
+   * @param testSets         the test-sets to parse, or an empty set to parse all.
+   * @param testCases        the test-cases to parse, or an empty set to parse all.
+   * @param excludeTestSets  the names of any test sets to exclude from the parse.
+   * @param excludeTestCases the names of any test cases to exclude from the parse.
+   * @return the number of test sets that were matched in the catalog and dispatched to the testSetParserRouter.
+   */
+  private def parseCatalog(xqtsRunner: ActorRef, xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Either[Set[String], Pattern], testCases: Either[Set[String], Pattern], excludeTestSets: Set[String], excludeTestCases: Set[String]): Int = {
 
     /**
-      * The asynchronous STaX parsing loop,
-      * implemented as a recursive function.
-      *
-      * @param event the current STaX event.
-      * @param asyncReader the asynchronous XML stream reader.
-      * @param xqtsPath the path to the directory containing the catalog.xml.
-      * @param channel the file channel for the {@code asyncReader}.
-      * @param buf the buffer for the {@code asyncReader}.
-      *
-      * @return the number of test sets that were matched in the catalog and dispatched to the testSetParserRouter.
-      *
-      * @throws XQTSParseException if an error happens during parsing.
-      */
+     * The asynchronous STaX parsing loop,
+     * implemented as a recursive function.
+     *
+     * @param event       the current STaX event.
+     * @param asyncReader the asynchronous XML stream reader.
+     * @param xqtsPath    the path to the directory containing the catalog.xml.
+     * @param channel     the file channel for the  <pre>asyncReader</pre> .
+     * @param buf         the buffer for the  <pre>asyncReader</pre> .
+     * @return the number of test sets that were matched in the catalog and dispatched to the testSetParserRouter.
+     * @throws XQTSParseException if an error happens during parsing.
+     */
     @tailrec
     @throws[XQTSParseException]
     def parseAll(event: Int, asyncReader: AsyncXMLStreamReader[AsyncByteBufferFeeder], xqtsPath: Path, channel: SeekableByteChannel, buf: ByteBuffer, matchedTestSets: Int = 0): Int = {
@@ -125,7 +121,7 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
 
       event match {
         case END_DOCUMENT =>
-          return matchedTestSets  // exit parse
+          return matchedTestSets // exit parse
 
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_ENVIRONMENT) =>
           val name = asyncReader.getAttributeValue(ATTR_NAME)
@@ -248,16 +244,28 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
           }
 
         case _ =>
-          // we can ignore anything else
+        // we can ignore anything else
       }
 
-      val updatedMatchedTestSets : Int = if (matchedTestSet) matchedTestSets + 1 else matchedTestSets
+      val updatedMatchedTestSets: Int = if (matchedTestSet) matchedTestSets + 1 else matchedTestSets
       parseAll(asyncReader.next(), asyncReader, xqtsPath, channel, buf, updatedMatchedTestSets)
     }
 
-    val bufIO = cats.effect.Resource.make(IO { ByteBuffer.allocate(xmlParserBufferSize) })(buf => IO { buf.clear() })
-    val fileIO = cats.effect.Resource.make(IO { Files.newByteChannel(xqtsPath.resolve(CATALOG_FILE)) })(channel => IO {channel.close() })
-    val asyncParserIO = cats.effect.Resource.make(IO { PARSER_FACTORY.createAsyncForByteBuffer() } )(asyncReader => IO { asyncReader.close() })
+    val bufIO = cats.effect.Resource.make(IO {
+      ByteBuffer.allocate(xmlParserBufferSize)
+    })(buf => IO {
+      buf.clear()
+    })
+    val fileIO = cats.effect.Resource.make(IO {
+      Files.newByteChannel(xqtsPath.resolve(CATALOG_FILE))
+    })(channel => IO {
+      channel.close()
+    })
+    val asyncParserIO = cats.effect.Resource.make(IO {
+      PARSER_FACTORY.createAsyncForByteBuffer()
+    })(asyncReader => IO {
+      asyncReader.close()
+    })
     val parseIO = bufIO.use(buf =>
       fileIO.use(channel =>
         asyncParserIO.use(asyncReader =>
@@ -278,7 +286,7 @@ class XQTS3CatalogParserActor(xmlParserBufferSize: Int, testSetParserRouter: Act
 
 object XQTS3CatalogParserActor {
   /**
-    * Name of the XQTS 3.1 Catalog file
-    */
+   * Name of the XQTS 3.1 Catalog file
+   */
   private val CATALOG_FILE = "catalog.xml"
 }

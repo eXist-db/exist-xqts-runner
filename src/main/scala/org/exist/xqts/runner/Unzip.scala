@@ -27,20 +27,19 @@ import cats.effect.{IO, Resource}
 import scala.annotation.tailrec
 
 /**
-  * Small functions for unzipping data.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Small functions for unzipping data.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 object Unzip {
 
   /**
-    * Unzip a file to a directory.
-    *
-    * @param src the zip file.
-    * @param dir the directory to unzip the {@code src} file into.
-    *
-    * @throws IOException if an error occurs whilst unzipping the {@code src} file.
-    */
+   * Unzip a file to a directory.
+   *
+   * @param src the zip file.
+   * @param dir the directory to unzip the {@code src} file into.
+   * @throws IOException if an error occurs whilst unzipping the {@code src} file.
+   */
   @throws[IOException]
   def unzip(src: Path, dir: Path): Unit = {
 
@@ -54,7 +53,7 @@ object Unzip {
         val buffer = new Array[Byte](4096)
         copy(buffer)(zipInputStream, os.get)
       } finally {
-          os.map(_.close())
+        os.map(_.close())
       }
     }
 
@@ -85,11 +84,19 @@ object Unzip {
     }
 
 
-    val unzipIO : IO[Unit] =
+    val unzipIO: IO[Unit] =
       Resource
-        .make(IO { Files.newInputStream(src)} )(fis => IO { fis.close() })
+        .make(IO {
+          Files.newInputStream(src)
+        })(fis => IO {
+          fis.close()
+        })
         .use { fis =>
-          Resource.make(IO { new ZipInputStream(fis) })(zis => IO { zis.close() })
+          Resource.make(IO {
+              new ZipInputStream(fis)
+            })(zis => IO {
+              zis.close()
+            })
             .use { zis =>
               IO {
                 processEntries(zis)(writeZipEntry(zis, _))

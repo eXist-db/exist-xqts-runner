@@ -46,15 +46,14 @@ import scala.annotation.unused
 import scala.util.{Failure, Success}
 
 /**
-  * Actor that executes an XQTS test-case
-  * and checks the results against the
-  * assertions specified in the test-case.
-  *
-  * @param existServer The eXist-db server to execute the test case against.
-  * @param commonResourceCacheActor An actor for retrieving common resources.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Actor that executes an XQTS test-case
+ * and checks the results against the
+ * assertions specified in the test-case.
+ *
+ * @param existServer              The eXist-db server to execute the test case against.
+ * @param commonResourceCacheActor An actor for retrieving common resources.
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: ActorRef) extends Actor {
 
   private val logger = Logger(classOf[TestCaseRunnerActor])
@@ -190,36 +189,34 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Execute an XQTS test-case against eXist-db.
-    *
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCase the test-case to execute.
-    * @param resolvedEnvironment the environment resources for the test-case.
-    *
-    * @return the result of executing the XQTS test-case.
-    */
-  private def runTestCaseWithExist(testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : TestResult = {
-      try {
-        runTestCase(existServer.getConnection(), testSetName, testCase, resolvedEnvironment)
-      } catch {
-        case e: java.lang.OutOfMemoryError =>
-          System.err.println(s"OutOfMemoryError: $testSetName ${testCase.name}")
-          throw e
-      }
+   * Execute an XQTS test-case against eXist-db.
+   *
+   * @param testSetName         the name of the test-set of which the test-case is a part.
+   * @param testCase            the test-case to execute.
+   * @param resolvedEnvironment the environment resources for the test-case.
+   * @return the result of executing the XQTS test-case.
+   */
+  private def runTestCaseWithExist(testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
+    try {
+      runTestCase(existServer.getConnection(), testSetName, testCase, resolvedEnvironment)
+    } catch {
+      case e: java.lang.OutOfMemoryError =>
+        System.err.println(s"OutOfMemoryError: $testSetName ${testCase.name}")
+        throw e
+    }
   }
 
   /**
-    * Run's an XQTS test-case against eXist-db.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCase the test-case to execute.
-    * @param resolvedEnvironment the environment resources for the test-case.
-    *
-    * @return the result of executing the XQTS test-case.
-    */
-    @throws(classOf[OutOfMemoryError])
-  private def runTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : TestResult = {
+   * Run's an XQTS test-case against eXist-db.
+   *
+   * @param connection          a connection to an eXist-db server.
+   * @param testSetName         the name of the test-set of which the test-case is a part.
+   * @param testCase            the test-case to execute.
+   * @param resolvedEnvironment the environment resources for the test-case.
+   * @return the result of executing the XQTS test-case.
+   */
+  @throws(classOf[OutOfMemoryError])
+  private def runTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
     testCase.test match {
       case Some(test) =>
 
@@ -238,7 +235,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
               getDynamicContextAvailableTextResources(connection)(testCase, resolvedEnvironment).flatMap(availableTextResources =>
                 getVariableDeclarations(connection)(testCase, resolvedEnvironment).flatMap(variableDeclarations =>
                   connection.executeQuery(
-                    queryString, 
+                    queryString,
                     false,
                     baseUri,
                     contextSequence,
@@ -269,9 +266,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                 testCase.result match {
                   case Some(expectedResult) =>
                     expectedResult match {
-                      case Error(expectedError) if(expectedError == queryError.errorCode) =>
+                      case Error(expectedError) if (expectedError == queryError.errorCode) =>
                         PassResult(testSetName, testCase.name, compilationTime, executionTime)
-                      case anyOf @ AnyOf(_) if(anyOfContainsError(anyOf, queryError.errorCode)) =>
+                      case anyOf@AnyOf(_) if (anyOfContainsError(anyOf, queryError.errorCode)) =>
                         PassResult(testSetName, testCase.name, compilationTime, executionTime)
                       case _ =>
                         FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(expectedResult, queryError))
@@ -281,12 +278,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                 }
 
               // executing query returned a result
-              case Right(queryResult) if(queryResult == null) =>
+              case Right(queryResult) if (queryResult == null) =>
                 ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("eXist-db returned null from the query, this should never happen!"))
 
               case Right(queryResult) =>
                 testCase.result match {
-                  case (Some(expectedError: Error)) =>  // expected an error, but got a query result
+                  case (Some(expectedError: Error)) => // expected an error, but got a query result
                     FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(connection)(expectedError, queryResult))
 
                   case (Some(expectedResult)) =>
@@ -304,16 +301,14 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Get the context sequence for the XQuery.
-    *
-    * @param connection a connection to an eXist-db server.
-    *
-    * @param testCase a test-case which describes the context sequence.
-    * @param resolvedEnvironment the environment resources for the test-case.
-    *
-    * @return the context sequence if present, or an exception
-    */
-  private def getContextSequence(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, Option[Sequence]] = {
+   * Get the context sequence for the XQuery.
+   *
+   * @param connection          a connection to an eXist-db server.
+   * @param testCase            a test-case which describes the context sequence.
+   * @param resolvedEnvironment the environment resources for the test-case.
+   * @return the context sequence if present, or an exception
+   */
+  private def getContextSequence(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): Either[ExistServerException, Option[Sequence]] = {
     testCase.environment match {
       case Some(env) if (env.name == "empty") =>
         Right(None)
@@ -329,13 +324,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Resolves a source from the environment.
-    *
-    * @param resolvedEnvironment the environment resources for the test-case.
-    * @param source the source to resolve from the environment.
-    *
-    * @return the resolved source, or an exception.
-    */
+   * Resolves a source from the environment.
+   *
+   * @param resolvedEnvironment the environment resources for the test-case.
+   * @param source              the source to resolve from the environment.
+   * @return the resolved source, or an exception.
+   */
   private def resolveSource(resolvedEnvironment: ResolvedEnvironment, source: Source): Either[ExistServerException, ResolvedSource] = {
     resolvedEnvironment.resolvedSources.find(_.path == source.file)
       .map(Right[ExistServerException, ResolvedSource](_))
@@ -343,28 +337,26 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Get the dynamically available collections for the XQuery Context.
-    *
-    * @param connection a connection to an eXist-db server.
-    *
-    * @param testCase a test-case which describes the dynamically available collections.
-    * @param resolvedEnvironment the environment resources for the test-case.
-    *
-    * @return the dynamically available collections, or an exception
-    */
-  private def getDynamicContextAvailableCollections(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, List[(String, List[DocumentImpl])]] = {
+   * Get the dynamically available collections for the XQuery Context.
+   *
+   * @param connection          a connection to an eXist-db server.
+   * @param testCase            a test-case which describes the dynamically available collections.
+   * @param resolvedEnvironment the environment resources for the test-case.
+   * @return the dynamically available collections, or an exception
+   */
+  private def getDynamicContextAvailableCollections(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): Either[ExistServerException, List[(String, List[DocumentImpl])]] = {
     val initAccum: Either[ExistServerException, List[(String, List[DocumentImpl])]] = Right(List.empty)
     testCase.environment
       .map(env => env.collections)
       .getOrElse(List.empty)
       .foldLeft(initAccum) { case (accum, x) =>
         accum match {
-          case error@ Left(_) => error
+          case error@Left(_) => error
           case Right(results) =>
-            val initInnerAccum : Either[ExistServerException, List[DocumentImpl]] = Right(List.empty)
+            val initInnerAccum: Either[ExistServerException, List[DocumentImpl]] = Right(List.empty)
             x.sources.foldLeft(initInnerAccum) { case (innerAccum, y) =>
                 innerAccum match {
-                  case resolveError@ Left(_) => resolveError
+                  case resolveError@Left(_) => resolveError
                   case Right(resolvedSources) =>
                     resolveSource(resolvedEnvironment, y)
                       .flatMap(resolveSource => SAXParser.parseXml(resolveSource.data))
@@ -379,23 +371,21 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Get the dynamically available documents for the XQuery Context.
-    *
-    * @param connection a connection to an eXist-db server.
-    *
-    * @param testCase a test-case which describes the dynamically available documents.
-    * @param resolvedEnvironment the environment resources for the test-case.
-    *
-    * @return the dynamically available documents, or an exception
-    */
-  private def getDynamicContextAvailableDocuments(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, List[(String, DocumentImpl)]] = {
+   * Get the dynamically available documents for the XQuery Context.
+   *
+   * @param connection          a connection to an eXist-db server.
+   * @param testCase            a test-case which describes the dynamically available documents.
+   * @param resolvedEnvironment the environment resources for the test-case.
+   * @return the dynamically available documents, or an exception
+   */
+  private def getDynamicContextAvailableDocuments(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): Either[ExistServerException, List[(String, DocumentImpl)]] = {
     val initAccum: Either[ExistServerException, List[(String, DocumentImpl)]] = Right(List.empty)
     testCase.environment
       .map(env => env.sources.filter(source => (source.role.isEmpty || source.role.filter(Role.isContextItem(_)).nonEmpty) && source.uri.nonEmpty))
       .getOrElse(List.empty)
       .foldLeft(initAccum) { case (accum, x) =>
         accum match {
-          case error@ Left(_) => error
+          case error@Left(_) => error
           case Right(results) =>
             x.uri
               .flatMap(uri => resolvedEnvironment.resolvedSources.find(_.path == x.file)
@@ -409,17 +399,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Get the dynamically available text resources for the XQuery Context.
-    *
-    * @param connection a connection to an eXist-db server.
-    *
-    * @param testCase a test-case which describes the dynamically text resources.
-    * @param resolvedEnvironment the environment resources for the test-case.
-    *
-    * @return the dynamically available text resources, or an exception
-    */
-  private def getDynamicContextAvailableTextResources(@unused connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment) : Either[ExistServerException, List[(String, Charset, String)]] = {
-    def toString(data: Array[Byte], encoding: Option[String]) : Either[ExistServerException, (Charset, String)] = {
+   * Get the dynamically available text resources for the XQuery Context.
+   *
+   * @param connection          a connection to an eXist-db server.
+   * @param testCase            a test-case which describes the dynamically text resources.
+   * @param resolvedEnvironment the environment resources for the test-case.
+   * @return the dynamically available text resources, or an exception
+   */
+  private def getDynamicContextAvailableTextResources(@unused connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): Either[ExistServerException, List[(String, Charset, String)]] = {
+    def toString(data: Array[Byte], encoding: Option[String]): Either[ExistServerException, (Charset, String)] = {
       Either.catchNonFatal(encoding.map(Charset.forName).getOrElse(UTF_8))
         .map(charset => (charset, new String(data, charset)))
         .leftMap(ExistServerException(_))
@@ -431,38 +419,36 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       .getOrElse(List.empty)
       .foldLeft(initAccum) { case (accum, x) =>
         accum match {
-          case error@ Left(_) => error
+          case error@Left(_) => error
           case Right(results) =>
-              resolvedEnvironment.resolvedResources.find(_.path == x.file)
-                .map(resolvedResource => toString(resolvedResource.data, x.encoding).map{ case (charset, string) => (x.uri, charset, string) })
-                .map(_.map(result => result +: results))
-                .getOrElse(Left(ExistServerException(new IllegalStateException(s"Could not resolve resource ${x.file} with encoding ${x.encoding.getOrElse("UTF-8")}"))))
+            resolvedEnvironment.resolvedResources.find(_.path == x.file)
+              .map(resolvedResource => toString(resolvedResource.data, x.encoding).map { case (charset, string) => (x.uri, charset, string) })
+              .map(_.map(result => result +: results))
+              .getOrElse(Left(ExistServerException(new IllegalStateException(s"Could not resolve resource ${x.file} with encoding ${x.encoding.getOrElse("UTF-8")}"))))
         }
       }
   }
 
   /**
-    * Get the external variable declarations for the XQuery Context.
-    *
-    * @param connection a connection to an eXist-db server.
-    *
-    * @param testCase a test-case which describes the external variable declarations.
-    * @param resolvedEnvironment the environment resources for the test-case.
-    *
-    * @return the external variable declarations, or an exception
-    */
+   * Get the external variable declarations for the XQuery Context.
+   *
+   * @param connection          a connection to an eXist-db server.
+   * @param testCase            a test-case which describes the external variable declarations.
+   * @param resolvedEnvironment the environment resources for the test-case.
+   * @return the external variable declarations, or an exception
+   */
   private def getVariableDeclarations(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): Either[ExistServerException, List[(String, Sequence)]] = {
 
-    def getParams() : Either[ExistServerException, List[(String, Sequence)]] = {
+    def getParams(): Either[ExistServerException, List[(String, Sequence)]] = {
       def variableSelectToSequence(`type`: Int, select: Option[String]): Either[ExistServerException, Sequence] = {
         select match {
           case None =>
-          Right(Sequence.EMPTY_SEQUENCE)
+            Right(Sequence.EMPTY_SEQUENCE)
 
           case Some(selectExpr) =>
             `type` match {
               case Type.EMPTY_SEQUENCE =>
-              Right(Sequence.EMPTY_SEQUENCE)
+                Right(Sequence.EMPTY_SEQUENCE)
 
               case _ =>
                 connection.executeQuery(selectExpr, false, None, None)
@@ -471,15 +457,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
       }
 
-      val initAccum : Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
+      val initAccum: Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
 
       testCase.environment
         .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))
         .getOrElse(List.empty)
         .foldLeft(initAccum) { case (accum, (name, typ, select)) =>
           accum match {
-          case error@ Left(_) => error
-          case Right(results) =>
+            case error@Left(_) => error
+            case Right(results) =>
               variableSelectToSequence(typ, select)
                 .map(seq => (name, seq))
                 .map(result => result +: results)
@@ -487,14 +473,14 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
     }
 
-    def getDocuments() : Either[ExistServerException, List[(String, Sequence)]] = {
+    def getDocuments(): Either[ExistServerException, List[(String, Sequence)]] = {
       val initAccum: Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
       testCase.environment
         .map(env => env.sources.filter(source => source.role.filter(_.isInstanceOf[ExternalVariableRole]).nonEmpty))
         .getOrElse(List.empty)
         .foldLeft(initAccum) { case (accum, x) =>
           accum match {
-            case error@ Left(_) => error
+            case error@Left(_) => error
             case Right(results) =>
               x.role
                 .flatMap(role => resolvedEnvironment.resolvedSources.find(_.path == x.file)
@@ -503,7 +489,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                     doc.setDocumentURI(path.toUri().toString())
                     (role.asInstanceOf[ExternalVariableRole].name, doc)
                   }
-                  ) }
+                  )
+                  }
                 )
                 .map(_.map(result => result +: results))
                 .getOrElse(Left(ExistServerException(new IllegalStateException(s"Could not resolve source ${x.file}"))))
@@ -515,15 +502,14 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Checks if an XQTS any-of assertion contains a specific error assertion.
-    *
-    * @param anyOf the any-of assertion.
-    * @param expectedError the error to search for in the any-of
-    *
-    * @return true if the any-of contains the error, false otherwise.
-    */
-  private def anyOfContainsError(anyOf: AnyOf, expectedError: String) : Boolean = {
-    def expand(result: XQTSParserActor.Result) : List[XQTSParserActor.Result] = {
+   * Checks if an XQTS any-of assertion contains a specific error assertion.
+   *
+   * @param anyOf         the any-of assertion.
+   * @param expectedError the error to search for in the any-of
+   * @return true if the any-of contains the error, false otherwise.
+   */
+  private def anyOfContainsError(anyOf: AnyOf, expectedError: String): Boolean = {
+    def expand(result: XQTSParserActor.Result): List[XQTSParserActor.Result] = {
       Some(result)
         .filter(_.isInstanceOf[Assertions])
         .map(_.asInstanceOf[Assertions])
@@ -539,21 +525,19 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Processes an expected XQTS assertion to compare
-    * it against the actual result of executing an XQuery.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expectedResult the assertion which describes the expected result(s).
-    * @param actualResult the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
-  private def processAssertion(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expectedResult: XQTSParserActor.Result, actualResult: ExistServer.QueryResult) : TestResult = {
+   * Processes an expected XQTS assertion to compare
+   * it against the actual result of executing an XQuery.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expectedResult  the assertion which describes the expected result(s).
+   * @param actualResult    the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
+  private def processAssertion(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expectedResult: XQTSParserActor.Result, actualResult: ExistServer.QueryResult): TestResult = {
     expectedResult match {
       case AllOf(assertions) =>
         allOf(connection, testSetName, testCaseName, compilationTime, executionTime)(assertions, actualResult)
@@ -612,35 +596,33 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code all-of} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param assertions the assertions that make up the {@code all-of} assertion.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code all-of} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param assertions      the assertions that make up the {@code all-of} assertion.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def allOf(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(assertions: List[XQTSParserActor.Result], actual: ExistServer.QueryResult): TestResult = {
-    val problem : Option[Either[ErrorResult, FailureResult]] = assertions.foldLeft(Option.empty[Either[ErrorResult, FailureResult]]) { case (failed, assertion) =>
-        if(failed.nonEmpty) {
-          failed
-        } else {
-          processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime)(assertion, actual) match {
-            case error: ErrorResult =>
-              Some(Left(error))
-            case failure: FailureResult =>
-              Some(Right(failure))
-            case _: PassResult =>
-              None
-            case _: AssumptionFailedResult =>
-              throw new IllegalStateException("Assumption should have already been evaluated")
-          }
+    val problem: Option[Either[ErrorResult, FailureResult]] = assertions.foldLeft(Option.empty[Either[ErrorResult, FailureResult]]) { case (failed, assertion) =>
+      if (failed.nonEmpty) {
+        failed
+      } else {
+        processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime)(assertion, actual) match {
+          case error: ErrorResult =>
+            Some(Left(error))
+          case failure: FailureResult =>
+            Some(Right(failure))
+          case _: PassResult =>
+            None
+          case _: AssumptionFailedResult =>
+            throw new IllegalStateException("Assumption should have already been evaluated")
         }
+      }
     }
 
     problem.map(e => e.fold(_.asInstanceOf[TestResult], _.asInstanceOf[TestResult]))
@@ -648,28 +630,26 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code any-of} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param assertions the assertions that make up the {@code any-of} assertion.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code any-of} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param assertions      the assertions that make up the {@code any-of} assertion.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def anyOf(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(assertions: List[XQTSParserActor.Result], actual: ExistServer.QueryResult): TestResult = {
-    def passOrFails() : Either[Seq[Either[ErrorResult, FailureResult]], PassResult] = {
+    def passOrFails(): Either[Seq[Either[ErrorResult, FailureResult]], PassResult] = {
       val accum = Either.left[Seq[Either[ErrorResult, FailureResult]], PassResult](Seq.empty[Either[ErrorResult, FailureResult]])
       assertions.foldLeft(accum) { case (results, assertion) =>
         results match {
-          case passed @ Right(_) =>
-            passed  // if we have passed one, we don't need to evaluate any more assertions
+          case passed@Right(_) =>
+            passed // if we have passed one, we don't need to evaluate any more assertions
 
-          case errors @ Left(_) =>
+          case errors@Left(_) =>
             // evaluate the next assertion
             processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime)(assertion, actual) match {
               case pass: PassResult =>
@@ -696,19 +676,17 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code not} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param assertion the assertion to negate from within the {@code not} assertion.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code not} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param assertion       the assertion to negate from within the {@code not} assertion.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def not(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(assertion: XQTSParserActor.Result, actual: ExistServer.QueryResult): TestResult = {
     val result = processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime)(assertion, actual)
     result match {
@@ -722,19 +700,17 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param xpath the xpath to assert.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param xpath           the xpath to assert.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assert(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(xpath: String, actual: ExistServer.QueryResult): TestResult = {
     executeQueryWith$Result(connection, xpath, true, None, actual) match {
       case Left(existServerException) =>
@@ -755,18 +731,16 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-count} assertion.
-    *
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expected the expected count of results.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-count} assertion.
+   *
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expected        the expected count of results.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertCount(testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: Int, actual: ExistServer.QueryResult): TestResult = {
     val actualCount = actual.getItemCount
     if (expected == actualCount) {
@@ -777,25 +751,24 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-deep-eq} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expected the expected sequence of results to assert.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-deep-eq} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expected        the expected sequence of results to assert.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertDeepEquals(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    val deepEqualQuery = s"""
-                         | declare variable $$result external;
-                         |
-                         | deep-equal(($expected), $$result)
-                         |""".stripMargin
+    val deepEqualQuery =
+      s"""
+         | declare variable $$result external;
+         |
+         | deep-equal(($expected), $$result)
+         |""".stripMargin
     executeQueryWith$Result(connection, deepEqualQuery, true, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
@@ -817,25 +790,24 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-eq} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expected an XPath which describes that expected result is {@code eq} to the actual result.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-eq} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expected        an XPath which describes that expected result is {@code eq} to the actual result.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertEq(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    val eqQuery = s"""
-                  | declare variable $$result external;
-                  |
-                  | $expected eq $$result
-                  |""".stripMargin
+    val eqQuery =
+      s"""
+         | declare variable $$result external;
+         |
+         | $expected eq $$result
+         |""".stripMargin
     executeQueryWith$Result(connection, eqQuery, false, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
@@ -847,8 +819,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         val totalCompilationTime = compilationTime + resCompilationTime
         val totalExecutionTime = executionTime + resExecutionTime
         if (actualQueryResult.getItemCount == 1
-            && actualQueryResult.itemAt(0).isInstanceOf[BooleanValue]
-            && actualQueryResult.itemAt(0).asInstanceOf[BooleanValue].getValue) {
+          && actualQueryResult.itemAt(0).isInstanceOf[BooleanValue]
+          && actualQueryResult.itemAt(0).asInstanceOf[BooleanValue].getValue) {
           PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
         } else {
           FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-eq: expected='$expected', actual='${connection.sequenceToStringAdaptive(actual)}'")
@@ -857,90 +829,89 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-permutation} assertion.
-    *
-    * This is very similar to {@code assert-deep-eq},
-    * but we sort both the expected and actual results
-    * into the same order first, so that we can
-    * ignore permutations.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expected the expected sequence of results to assert.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-permutation} assertion.
+   *
+   * This is very similar to {@code assert-deep-eq},
+   * but we sort both the expected and actual results
+   * into the same order first, so that we can
+   * ignore permutations.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expected        the expected sequence of results to assert.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertPermutation(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    val expectedQuery = s"""
-                        | declare variable $$result external;
-                        |
-                        | declare function local:xdm-type($$value as item()?) as xs:QName? {
-                        |   typeswitch($$value)
-                        |     case array(*) return xs:QName("array")
-                        |     case map(*) return xs:QName("map")
-                        |     case function(*) return xs:QName("function")
-                        |     case document-node() return xs:QName("document")
-                        |     case element() return xs:QName("element")
-                        |     case attribute() return xs:QName("attribute")
-                        |     case comment() return xs:QName("comment")
-                        |     case processing-instruction() return xs:QName("processing-instruction")
-                        |     case text() return xs:QName("text")
-                        |     case xs:untypedAtomic return xs:QName('xs:untypedAtomic')
-                        |     case xs:anyURI return xs:QName('xs:anyURI')
-                        |     case xs:ENTITY return xs:QName('xs:ENTITY')
-                        |     case xs:ID return xs:QName('xs:ID')
-                        |     case xs:NMTOKEN return xs:QName('xs:NMTOKEN')
-                        |     case xs:language return xs:QName('xs:language')
-                        |     case xs:NCName return xs:QName('xs:NCName')
-                        |     case xs:Name return xs:QName('xs:Name')
-                        |     case xs:token return xs:QName('xs:token')
-                        |     case xs:normalizedString return xs:QName('xs:normalizedString')
-                        |     case xs:string return xs:QName('xs:string')
-                        |     case xs:QName return xs:QName('xs:QName')
-                        |     case xs:boolean return xs:QName('xs:boolean')
-                        |     case xs:base64Binary return xs:QName('xs:base64Binary')
-                        |     case xs:hexBinary return xs:QName('xs:hexBinary')
-                        |     case xs:byte return xs:QName('xs:byte')
-                        |     case xs:short return xs:QName('xs:short')
-                        |     case xs:int return xs:QName('xs:int')
-                        |     case xs:long return xs:QName('xs:long')
-                        |     case xs:unsignedByte return xs:QName('xs:unsignedByte')
-                        |     case xs:unsignedShort return xs:QName('xs:unsignedShort')
-                        |     case xs:unsignedInt return xs:QName('xs:unsignedInt')
-                        |     case xs:unsignedLong return xs:QName('xs:unsignedLong')
-                        |     case xs:positiveInteger return xs:QName('xs:positiveInteger')
-                        |     case xs:nonNegativeInteger return xs:QName('xs:nonNegativeInteger')
-                        |     case xs:negativeInteger return xs:QName('xs:negativeInteger')
-                        |     case xs:nonPositiveInteger return xs:QName('xs:nonPositiveInteger')
-                        |     case xs:integer return xs:QName('xs:integer')
-                        |     case xs:decimal return xs:QName('xs:decimal')
-                        |     case xs:float return xs:QName('xs:float')
-                        |     case xs:double return xs:QName('xs:double')
-                        |     case xs:date return xs:QName('xs:date')
-                        |     case xs:time return xs:QName('xs:time')
-                        |     case xs:dateTime return xs:QName('xs:dateTime')
-                        |     case xs:dayTimeDuration return xs:QName('xs:dayTimeDuration')
-                        |     case xs:yearMonthDuration return xs:QName('xs:yearMonthDuration')
-                        |     case xs:duration return xs:QName('xs:duration')
-                        |     case xs:gMonth return xs:QName('xs:gMonth')
-                        |     case xs:gYear return xs:QName('xs:gYear')
-                        |     case xs:gYearMonth return xs:QName('xs:gYearMonth')
-                        |     case xs:gDay return xs:QName('xs:gDay')
-                        |     case xs:gMonthDay return xs:QName('xs:gMonthDay')
-                        |     default return ()
-                        | };
-                        |
-                        | let $$sort-key-fun := function($$key) {
-                        |   local:xdm-type($$key) || "::" || fn:data($$key)
-                        | }
-                        | return
-                        |   fn:deep-equal(fn:sort(($expected), (), $$sort-key-fun), fn:sort($$result, (), $$sort-key-fun))
-                        |""".stripMargin
+    val expectedQuery =
+      s"""
+         | declare variable $$result external;
+         |
+         | declare function local:xdm-type($$value as item()?) as xs:QName? {
+         |   typeswitch($$value)
+         |     case array(*) return xs:QName("array")
+         |     case map(*) return xs:QName("map")
+         |     case function(*) return xs:QName("function")
+         |     case document-node() return xs:QName("document")
+         |     case element() return xs:QName("element")
+         |     case attribute() return xs:QName("attribute")
+         |     case comment() return xs:QName("comment")
+         |     case processing-instruction() return xs:QName("processing-instruction")
+         |     case text() return xs:QName("text")
+         |     case xs:untypedAtomic return xs:QName('xs:untypedAtomic')
+         |     case xs:anyURI return xs:QName('xs:anyURI')
+         |     case xs:ENTITY return xs:QName('xs:ENTITY')
+         |     case xs:ID return xs:QName('xs:ID')
+         |     case xs:NMTOKEN return xs:QName('xs:NMTOKEN')
+         |     case xs:language return xs:QName('xs:language')
+         |     case xs:NCName return xs:QName('xs:NCName')
+         |     case xs:Name return xs:QName('xs:Name')
+         |     case xs:token return xs:QName('xs:token')
+         |     case xs:normalizedString return xs:QName('xs:normalizedString')
+         |     case xs:string return xs:QName('xs:string')
+         |     case xs:QName return xs:QName('xs:QName')
+         |     case xs:boolean return xs:QName('xs:boolean')
+         |     case xs:base64Binary return xs:QName('xs:base64Binary')
+         |     case xs:hexBinary return xs:QName('xs:hexBinary')
+         |     case xs:byte return xs:QName('xs:byte')
+         |     case xs:short return xs:QName('xs:short')
+         |     case xs:int return xs:QName('xs:int')
+         |     case xs:long return xs:QName('xs:long')
+         |     case xs:unsignedByte return xs:QName('xs:unsignedByte')
+         |     case xs:unsignedShort return xs:QName('xs:unsignedShort')
+         |     case xs:unsignedInt return xs:QName('xs:unsignedInt')
+         |     case xs:unsignedLong return xs:QName('xs:unsignedLong')
+         |     case xs:positiveInteger return xs:QName('xs:positiveInteger')
+         |     case xs:nonNegativeInteger return xs:QName('xs:nonNegativeInteger')
+         |     case xs:negativeInteger return xs:QName('xs:negativeInteger')
+         |     case xs:nonPositiveInteger return xs:QName('xs:nonPositiveInteger')
+         |     case xs:integer return xs:QName('xs:integer')
+         |     case xs:decimal return xs:QName('xs:decimal')
+         |     case xs:float return xs:QName('xs:float')
+         |     case xs:double return xs:QName('xs:double')
+         |     case xs:date return xs:QName('xs:date')
+         |     case xs:time return xs:QName('xs:time')
+         |     case xs:dateTime return xs:QName('xs:dateTime')
+         |     case xs:dayTimeDuration return xs:QName('xs:dayTimeDuration')
+         |     case xs:yearMonthDuration return xs:QName('xs:yearMonthDuration')
+         |     case xs:duration return xs:QName('xs:duration')
+         |     case xs:gMonth return xs:QName('xs:gMonth')
+         |     case xs:gYear return xs:QName('xs:gYear')
+         |     case xs:gYearMonth return xs:QName('xs:gYearMonth')
+         |     case xs:gDay return xs:QName('xs:gDay')
+         |     case xs:gMonthDay return xs:QName('xs:gMonthDay')
+         |     default return ()
+         | };
+         |
+         | let $$sort-key-fun := function($$key) {
+         |   local:xdm-type($$key) || "::" || fn:data($$key)
+         | }
+         | return
+         |   fn:deep-equal(fn:sort(($expected), (), $$sort-key-fun), fn:sort($$result, (), $$sort-key-fun))
+         |""".stripMargin
     executeQueryWith$Result(connection, expectedQuery, true, None, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
@@ -962,19 +933,17 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-serialization-error} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expected the expected XQuery Error code.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-serialization-error} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expected        the expected XQuery Error code.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertSerializationError(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, actual: ExistServer.QueryResult): TestResult = {
     executeQueryWith$Result(connection, QUERY_ASSERT_XML_SERIALIZATION, true, None, actual) match {
       case Left(existServerException) =>
@@ -992,18 +961,16 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-empty} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-empty} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertEmpty(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(actual: ExistServer.QueryResult): TestResult = {
     if (actual.isEmpty) {
       PassResult(testSetName, testCaseName, compilationTime, executionTime)
@@ -1013,21 +980,19 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-false} assertion.
-    *
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-false} assertion.
+   *
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertFalse(testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(actual: ExistServer.QueryResult): TestResult = {
     if (actual.getItemCount == 1
-        && actual.itemAt(0).getType == Type.BOOLEAN
-        && actual.itemAt(0).asInstanceOf[BooleanValue].getValue == false) {
+      && actual.itemAt(0).getType == Type.BOOLEAN
+      && actual.itemAt(0).asInstanceOf[BooleanValue].getValue == false) {
       PassResult(testSetName, testCaseName, compilationTime, executionTime)
     } else {
       FailureResult(testSetName, testCaseName, compilationTime, executionTime, s"assert-false: actual='$actual'")
@@ -1035,17 +1000,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-true} assertion.
-    *
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-true} assertion.
+   *
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertTrue(testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(actual: ExistServer.QueryResult): TestResult = {
     if (actual.getItemCount == 1
       && actual.itemAt(0).getType == Type.BOOLEAN
@@ -1057,96 +1020,92 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-string-value} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expected the expected string value result of the XQuery.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-string-value} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expected        the expected string value result of the XQuery.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertStringValue(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: String, normalizeSpace: Boolean, actual: ExistServer.QueryResult): TestResult = {
-      if (normalizeSpace) {
-        // normalize the expected
-        executeQueryWith$Result(connection, QUERY_NORMALIZED_SPACE, true, None, new StringValue(expected)) match {
-          case Left(existServerException) =>
-            ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
+    if (normalizeSpace) {
+      // normalize the expected
+      executeQueryWith$Result(connection, QUERY_NORMALIZED_SPACE, true, None, new StringValue(expected)) match {
+        case Left(existServerException) =>
+          ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
-          case Right(Result(Left(queryError), errExpectedCompilationTime, errExpectedExecutionTime)) =>
-            ErrorResult(testSetName, testCaseName, compilationTime + errExpectedCompilationTime, executionTime + errExpectedExecutionTime, new IllegalStateException(s"Error whilst normalizing expected value: ${queryError.errorCode}: ${queryError.message}"))
+        case Right(Result(Left(queryError), errExpectedCompilationTime, errExpectedExecutionTime)) =>
+          ErrorResult(testSetName, testCaseName, compilationTime + errExpectedCompilationTime, executionTime + errExpectedExecutionTime, new IllegalStateException(s"Error whilst normalizing expected value: ${queryError.errorCode}: ${queryError.message}"))
 
-          case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) =>
-            // get the actual string value and normalize
-            executeQueryWith$Result(connection, QUERY_ASSERT_STRING_VALUE_NORMALIZED_SPACE, true, None, actual) match {
-              case Left(existServerException) =>
-                ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + existServerException.compilationTime, executionTime + expectedQueryExecutionTime + existServerException.executionTime, existServerException)
+        case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) =>
+          // get the actual string value and normalize
+          executeQueryWith$Result(connection, QUERY_ASSERT_STRING_VALUE_NORMALIZED_SPACE, true, None, actual) match {
+            case Left(existServerException) =>
+              ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + existServerException.compilationTime, executionTime + expectedQueryExecutionTime + existServerException.executionTime, existServerException)
 
-              case Right(Result(Left(queryError), errActualCompilationTime, errActualExecutionTime)) =>
-                ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + errActualCompilationTime, executionTime + expectedQueryExecutionTime + errActualExecutionTime, new IllegalStateException(s"Error whilst processing and normalizing actual value: ${queryError.errorCode}: ${queryError.message}"))
+            case Right(Result(Left(queryError), errActualCompilationTime, errActualExecutionTime)) =>
+              ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + errActualCompilationTime, executionTime + expectedQueryExecutionTime + errActualExecutionTime, new IllegalStateException(s"Error whilst processing and normalizing actual value: ${queryError.errorCode}: ${queryError.message}"))
 
-              case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
+            case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
 
-                val stringExpected : String = expectedQueryResult.asInstanceOf[StringValue].getStringValue()
-                val stringActual : String = actualQueryResult.asInstanceOf[StringValue].getStringValue()
-                val totalCompilationTime = compilationTime + expectedQueryCompilationTime + actualQueryCompilationTime
-                val totalExecutionTime = executionTime + expectedQueryExecutionTime + actualQueryExecutionTime
+              val stringExpected: String = expectedQueryResult.asInstanceOf[StringValue].getStringValue()
+              val stringActual: String = actualQueryResult.asInstanceOf[StringValue].getStringValue()
+              val totalCompilationTime = compilationTime + expectedQueryCompilationTime + actualQueryCompilationTime
+              val totalExecutionTime = executionTime + expectedQueryExecutionTime + actualQueryExecutionTime
 
-                if (stringActual == stringExpected) {
-                  PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
-                } else {
-                  FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-string-value: expected='$stringExpected', actual='$stringActual'")
-                }
-            }
-        }
-
-      } else {
-        // get the actual string value
-        executeQueryWith$Result(connection, QUERY_ASSERT_STRING_VALUE, true, None, actual) match {
-          case Left(existServerException) =>
-            ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
-
-          case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-            ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst processing and normalizing actual value: ${queryError.errorCode}: ${queryError.message}"))
-
-          case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
-            val stringActual : String = actualQueryResult.asInstanceOf[StringValue].getStringValue()
-            val totalCompilationTime = compilationTime + actualQueryCompilationTime
-            val totalExecutionTime = executionTime + actualQueryExecutionTime
-
-            if (stringActual == expected) {
-              PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
-            } else {
-              FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-string-value: expected='$expected', actual='$stringActual'")
-            }
-        }
+              if (stringActual == stringExpected) {
+                PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
+              } else {
+                FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-string-value: expected='$stringExpected', actual='$stringActual'")
+              }
+          }
       }
+
+    } else {
+      // get the actual string value
+      executeQueryWith$Result(connection, QUERY_ASSERT_STRING_VALUE, true, None, actual) match {
+        case Left(existServerException) =>
+          ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
+
+        case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
+          ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst processing and normalizing actual value: ${queryError.errorCode}: ${queryError.message}"))
+
+        case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
+          val stringActual: String = actualQueryResult.asInstanceOf[StringValue].getStringValue()
+          val totalCompilationTime = compilationTime + actualQueryCompilationTime
+          val totalExecutionTime = executionTime + actualQueryExecutionTime
+
+          if (stringActual == expected) {
+            PassResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime)
+          } else {
+            FailureResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, s"assert-string-value: expected='$expected', actual='$stringActual'")
+          }
+      }
+    }
   }
 
   /**
-    * Handles the XQTS {@code assert-type} assertion.
-    *
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expectedType the XQTS description of the expected XDM type.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-type} assertion.
+   *
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expectedType    the XQTS description of the expected XDM type.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertType(testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expectedType: String, actual: ExistServer.QueryResult): TestResult = {
     def getTypes(seq: Sequence): Seq[Int] = {
       for (i <- (0 until seq.getItemCount))
         yield seq.itemAt(i).getType
     }
 
-    def matchCardinality(expectedType: ExistTypeDescription, count: Int) : Boolean = {
+    def matchCardinality(expectedType: ExistTypeDescription, count: Int): Boolean = {
       expectedType match {
         case WildcardExistTypeDescription =>
           true
@@ -1164,7 +1123,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       }
     }
 
-    def matchType(expectedType: ExistTypeDescription, actualTypes: Seq[Int]) : Boolean = {
+    def matchType(expectedType: ExistTypeDescription, actualTypes: Seq[Int]): Boolean = {
       if (expectedType.hasParameterTypes) {
         logger.warn("assert-type has parameter types, but eXist-db does not correctly support parameter types. Ignoring parameter types. NOTE: this may lead to false positives in test results!")
       }
@@ -1209,19 +1168,17 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Handles the XQTS {@code assert-xml} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expectedXml the XML that is expected as the result of the XQuery.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code assert-xml} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expectedXml     the XML that is expected as the result of the XQuery.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def assertXml(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expectedXml: Either[String, Path], @unused ignorePrefixes: Boolean, actual: ExistServer.QueryResult): TestResult = {
     expectedXml.map(readTextFile(_)).fold(Right(_), r => r) match {
       case Left(t) =>
@@ -1238,13 +1195,14 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
             We first have to serialize the expectedXml just as XQuery would do with
             serialization parameters: method="xml" indent="no" omit-xml-declaration="yes"
             */
-            val expectedQuery = s"""
-                                   | $QUERY_DEFAULT_SERIALIZATION
-                                   |
-                                   | declare variable $$expected as document-node(element($IGNORABLE_WRAPPER_ELEM_NAME)) external;
-                                   |
-                                   | fn:serialize($$expected/$IGNORABLE_WRAPPER_ELEM_NAME/child::node(), $$local:default-serialization)
-                                   |""".stripMargin
+            val expectedQuery =
+              s"""
+                 | $QUERY_DEFAULT_SERIALIZATION
+                 |
+                 | declare variable $$expected as document-node(element($IGNORABLE_WRAPPER_ELEM_NAME)) external;
+                 |
+                 | fn:serialize($$expected/$IGNORABLE_WRAPPER_ELEM_NAME/child::node(), $$local:default-serialization)
+                 |""".stripMargin
 
             connection.executeQuery(expectedQuery, true, None, None, Seq.empty, Seq.empty, Seq.empty, Seq.empty, externalVariables = Seq(EXPECTED_VARIABLE_NAME -> expectedXmlDoc)) match {
               case Left(existServerException) =>
@@ -1253,7 +1211,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
               case Right(Result(Left(queryError), errExpectedCompilationTime, errExpectedExecutionTime)) =>
                 ErrorResult(testSetName, testCaseName, compilationTime + errExpectedCompilationTime, executionTime + errExpectedExecutionTime, new IllegalStateException(s"Error whilst executing XQuery for serializing expected value: ${queryError.errorCode}: ${queryError.message}"))
 
-              case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) if(!allAreStrings(expectedQueryResult)) =>
+              case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) if (!allAreStrings(expectedQueryResult)) =>
                 ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime, executionTime + expectedQueryExecutionTime, new IllegalStateException(s"Test case did not define nodes in assert-xml, expected (after serialization) was: ${connection.sequenceToStringAdaptive(expectedQueryResult)}"))
 
               case Right(Result(Right(expectedQueryResult), expectedQueryCompilationTime, expectedQueryExecutionTime)) =>
@@ -1267,7 +1225,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                   case Right(Result(Left(queryError), errActualCompilationTime, errActualExecutionTime)) =>
                     ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + errActualCompilationTime, executionTime + expectedQueryExecutionTime + errActualExecutionTime, new IllegalStateException(s"Error whilst XQuery serializing actual value: ${queryError.errorCode}: ${queryError.message}"))
 
-                  case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) if(!allAreStrings(actualQueryResult)) =>
+                  case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) if (!allAreStrings(actualQueryResult)) =>
                     ErrorResult(testSetName, testCaseName, compilationTime + expectedQueryCompilationTime + actualQueryCompilationTime, expectedQueryExecutionTime + actualQueryExecutionTime, new IllegalStateException(s"Test case did not produce nodes in assert-xml, actual (after serialization) was: ${connection.sequenceToStringAdaptive(actualQueryResult)}"))
 
                   case Right(Result(Right(actualQueryResult), actualQueryCompilationTime, actualQueryExecutionTime)) =>
@@ -1277,14 +1235,14 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                     try {
                       val strActualResult = actualQueryResult.itemAt(0).asInstanceOf[StringValue].getStringValue();
 
-                      val itemIdxs =  (0 until expectedQueryResult.getItemCount)
-                      val differences : Either[XMLUnitException, Seq[String]] = itemIdxs.foldLeft(Either.right[XMLUnitException, Seq[String]](Seq.empty[String]))((accum, itemIdx) => {
+                      val itemIdxs = (0 until expectedQueryResult.getItemCount)
+                      val differences: Either[XMLUnitException, Seq[String]] = itemIdxs.foldLeft(Either.right[XMLUnitException, Seq[String]](Seq.empty[String]))((accum, itemIdx) => {
                         accum match {
-                            // if we have an error don't process anything else, just perpetuate the error
-                          case error @ Left(_) =>
+                          // if we have an error don't process anything else, just perpetuate the error
+                          case error@Left(_) =>
                             error
 
-                          case current @ Right(results) =>
+                          case current@Right(results) =>
                             val strExpectedResult = expectedQueryResult.itemAt(itemIdx).asInstanceOf[StringValue].getStringValue
                             val differences = findDifferences(strExpectedResult, strActualResult)
                             differences match {
@@ -1313,40 +1271,39 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                       }
                     } catch {
                       // TODO(AR) temp try/catch for NPE due to a problem with XmlDiff and eXist-db's DOM(s)?
-                      case npe : NullPointerException =>
+                      case npe: NullPointerException =>
                         ErrorResult(testSetName, testCaseName, totalCompilationTime, totalExecutionTime, npe)
                     }
                 }
             }
-          }
+        }
     }
   }
 
   /**
-    * Handles the XQTS {@code serialization-matches} assertion.
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param testSetName the name of the test-set of which the test-case is a part.
-    * @param testCaseName the name of the test-case which was executed.
-    * @param compilationTime the time taken to compile the XQuery.
-    * @param executionTime the time taken to execute the XQuery.
-    *
-    * @param expected the regular expression that should match the serialialized result of the XQuery.
-    * @param actual the actual result from executing the XQuery.
-    *
-    * @return the test result from processing the assertion.
-    */
+   * Handles the XQTS {@code serialization-matches} assertion.
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param testSetName     the name of the test-set of which the test-case is a part.
+   * @param testCaseName    the name of the test-case which was executed.
+   * @param compilationTime the time taken to compile the XQuery.
+   * @param executionTime   the time taken to execute the XQuery.
+   * @param expected        the regular expression that should match the serialialized result of the XQuery.
+   * @param actual          the actual result from executing the XQuery.
+   * @return the test result from processing the assertion.
+   */
   private def serializationMatches(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(expected: Either[String, Path], flags: Option[String], actual: ExistServer.QueryResult): TestResult = {
     expected.map(readTextFile(_)).fold(Right(_), r => r) match {
       case Left(t) =>
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
 
       case Right(expectedRegexStr) =>
-        val expectedQuery = s"""
-                               | declare variable $$result external;
-                               |
-                               | fn:matches($$result, ``[$expectedRegexStr]``, "${flags.getOrElse("")}")
-                               |""".stripMargin
+        val expectedQuery =
+          s"""
+             | declare variable $$result external;
+             |
+             | fn:matches($$result, ``[$expectedRegexStr]``, "${flags.getOrElse("")}")
+             |""".stripMargin
         val actualStr = connection.sequenceToString(actual)
         executeQueryWith$Result(connection, expectedQuery, true, None, new StringValue(actualStr)) match {
           case Left(existServerException) =>
@@ -1370,14 +1327,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Finds the differences between two XML documents
-    *
-    * @param expected the expected XML document.
-    * @param actual the actual XML document.
-    *
-    * @return Some string describing the differences, or None of there are no differences.
-    */
-  private def findDifferences(expected : String, actual: String) : Either[XMLUnitException, Option[String]] = {
+   * Finds the differences between two XML documents
+   *
+   * @param expected the expected XML document.
+   * @param actual   the actual XML document.
+   * @return Some string describing the differences, or None of there are no differences.
+   */
+  private def findDifferences(expected: String, actual: String): Either[XMLUnitException, Option[String]] = {
     try {
       val expectedSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expected</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
       val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
@@ -1400,46 +1356,43 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Returns true if all items in the sequence are Nodes.
-    *
-    * @param sequence the sequence to test.
-    *
-    * @return true if all sequence items are nodes, false otherwise.
-    */
+   * Returns true if all items in the sequence are Nodes.
+   *
+   * @param sequence the sequence to test.
+   * @return true if all sequence items are nodes, false otherwise.
+   */
   @unused
-  private def allAreNodes(sequence: Sequence) : Boolean = {
+  private def allAreNodes(sequence: Sequence): Boolean = {
     val types = for (i <- (0 until sequence.getItemCount))
       yield sequence.itemAt(i).getType
     types.filterNot(Type.subTypeOf(_, Type.NODE)).isEmpty
   }
 
   /**
-    * Returns true if all items in the sequence are Strings.
-    *
-    * @param sequence the sequence to test.
-    *
-    * @return true if all sequence items are strings, false otherwise.
-    */
-  private def allAreStrings(sequence: Sequence) : Boolean = {
+   * Returns true if all items in the sequence are Strings.
+   *
+   * @param sequence the sequence to test.
+   * @return true if all sequence items are strings, false otherwise.
+   */
+  private def allAreStrings(sequence: Sequence): Boolean = {
     val types = for (i <- (0 until sequence.getItemCount))
       yield sequence.itemAt(i).getType
     types.filterNot(Type.subTypeOf(_, Type.STRING)).isEmpty
   }
 
   /**
-    * Reads the content of a text file.
-    *
-    * NOTE: this function does not use any caching, and
-    * should only be used where resources will not be used
-    * repeatedly. If you want caching, you should instead
-    * use the {@link CommonResourceCacheActor}.
-    *
-    * @param path the path to the file.
-    * @param charset the character encoding of the file; Defaults to UTF-8.
-    *
-    * @return the content of the file as a string, or an exception.
-    */
-  private def readTextFile(path: Path, charset: Charset = UTF_8) : Either[IOException, String] = {
+   * Reads the content of a text file.
+   *
+   * NOTE: this function does not use any caching, and
+   * should only be used where resources will not be used
+   * repeatedly. If you want caching, you should instead
+   * use the [[CommonResourceCacheActor]].
+   *
+   * @param path    the path to the file.
+   * @param charset the character encoding of the file; Defaults to UTF-8.
+   * @return the content of the file as a string, or an exception.
+   */
+  private def readTextFile(path: Path, charset: Charset = UTF_8): Either[IOException, String] = {
     val fileIO = IO.blocking {
       Either.catchOnly[IOException](new String(Files.readAllBytes(path), charset))
     }
@@ -1449,50 +1402,47 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-    * Executes an XQuery where the external
-    * variable {@code $result} is bound to a provided
-    * sequence (typically the result of a previous
-    * query execution).
-    *
-    * @param connection a connection to an eXist-db server.
-    * @param query the XQuery to execute.
-    * @param cacheCompiled true if the compiled form of the XQuery should be cached.
-    * @param contextSequence an optional context sequence for the XQuery to operate on.
-    * @param $result the sequence to be bound to the {@code $result} variable.
-    *
-    * @return the result or executing the query, or an exception.
-    */
+   * Executes an XQuery where the external
+   * variable <pre>$result</pre> is bound to a provided
+   * sequence (typically the result of a previous
+   * query execution).
+   *
+   * @param connection      a connection to an eXist-db server.
+   * @param query           the XQuery to execute.
+   * @param cacheCompiled   true if the compiled form of the XQuery should be cached.
+   * @param contextSequence an optional context sequence for the XQuery to operate on.
+   * @param $result         the sequence to be bound to the  <pre>$result</pre>  variable.
+   * @return the result or executing the query, or an exception.
+   */
   private def executeQueryWith$Result(connection: ExistConnection, query: String, cacheCompiled: Boolean, contextSequence: Option[Sequence], $result: Sequence) = {
     connection.executeQuery(query, cacheCompiled, None, contextSequence, Seq.empty, Seq.empty, Seq.empty, Seq.empty, Seq(RESULT_VARIABLE_NAME -> $result))
   }
 
   /**
-    * Formats a failure message.
-    *
-    * @param expectedResult the expected result.
-    * @param actual the actual result.
-    *
-    * @return the formatted failure message.
-    */
+   * Formats a failure message.
+   *
+   * @param expectedResult the expected result.
+   * @param actual         the actual result.
+   * @return the formatted failure message.
+   */
   private def failureMessage(expectedResult: XQTSParserActor.Result, actual: QueryError): String = {
     s"Expected: '$expectedResult', but query returned an error: $actual"
   }
 
   /**
-    * Formats a failure message.
-    *
-    * @param connection a connection to an eXist-db server; Used for serialization of the actual results.
-    * @param expectedResult the expected result.
-    * @param actual the actual result.
-    *
-    * @return the formatted failure message.
-    */
+   * Formats a failure message.
+   *
+   * @param connection     a connection to an eXist-db server; Used for serialization of the actual results.
+   * @param expectedResult the expected result.
+   * @param actual         the actual result.
+   * @return the formatted failure message.
+   */
   private def failureMessage(connection: ExistConnection)(expectedResult: XQTSParserActor.Result, actual: ExistServer.QueryResult): String = {
     try {
       s"Expected: '$expectedResult', but query returned: '${connection.sequenceToStringAdaptive(actual)}'"
     } catch {
       // TODO(AR) temp try/catch for NPE due to a problem with OrderedValueSequence.toString
-      case npe : NullPointerException =>
+      case npe: NullPointerException =>
         npe.toString
     }
   }
@@ -1504,55 +1454,67 @@ object TestCaseRunnerActor {
   private case class RunTestCaseInternal(runTestCase: RunTestCase, resolvedEnvironment: ResolvedEnvironment)
 
   /**
-    * The result of executing an XQTS test-case.
-    */
+   * The result of executing an XQTS test-case.
+   */
   sealed trait TestResult {
     def testSet: String
+
     def testCase: String
+
     def compilationTime: CompilationTime
+
     def executionTime: ExecutionTime
   }
+
   case class PassResult(testSet: String, testCase: String, compilationTime: CompilationTime, executionTime: ExecutionTime) extends TestResult
+
   case class AssumptionFailedResult(testSet: String, testCase: String, compilationTime: CompilationTime, executionTime: ExecutionTime, reason: String) extends TestResult
+
   case class FailureResult(testSet: String, testCase: String, compilationTime: CompilationTime, executionTime: ExecutionTime, reason: String) extends TestResult
+
   case class ErrorResult(testSet: String, testCase: String, compilationTime: CompilationTime, executionTime: ExecutionTime, t: Throwable) extends TestResult
 
   private val EXPECTED_VARIABLE_NAME = "expected"
   private val RESULT_VARIABLE_NAME = "result"
-  private val QUERY_NORMALIZED_SPACE = s"""
-                                       | declare variable $$result external;
-                                       |
-                                       | normalize-space($$result)
-                                       |""".stripMargin
-  private val QUERY_ASSERT_STRING_VALUE_NORMALIZED_SPACE = s"""
-                                                           | declare variable $$result external;
-                                                           |
-                                                           | normalize-space(string-join(for $$r in $$result return string($$r), " "))
-                                                           |""".stripMargin
-  private val QUERY_ASSERT_STRING_VALUE = s"""
-                                             | declare variable $$result external;
-                                             |
-                                             | string-join(for $$r in $$result return string($$r), " ")
-                                             |""".stripMargin
-  private val QUERY_DEFAULT_SERIALIZATION = """
-                                              |xquery version "3.1";
-                                              |declare namespace output = "http://www.w3.org/2010/xslt-xquery-serialization";
-                                              |
-                                              |declare variable $local:default-serialization :=
-                                              |  <output:serialization-parameters>
-                                              |    <output:method value="xml"/>
-                                              |    <output:indent value="no"/>
-                                              |    <output:omit-xml-declaration value="yes"/>
-                                              |  </output:serialization-parameters>;
-                                              |
-                                              |""".stripMargin
-  private val QUERY_ASSERT_XML_SERIALIZATION = s"""
-                                                  | $QUERY_DEFAULT_SERIALIZATION
-                                                  |
-                                                  | declare variable $$result external;
-                                                  |
-                                                  | fn:serialize($$result, $$local:default-serialization)
-                                                  |""".stripMargin
+  private val QUERY_NORMALIZED_SPACE =
+    s"""
+       | declare variable $$result external;
+       |
+       | normalize-space($$result)
+       |""".stripMargin
+  private val QUERY_ASSERT_STRING_VALUE_NORMALIZED_SPACE =
+    s"""
+       | declare variable $$result external;
+       |
+       | normalize-space(string-join(for $$r in $$result return string($$r), " "))
+       |""".stripMargin
+  private val QUERY_ASSERT_STRING_VALUE =
+    s"""
+       | declare variable $$result external;
+       |
+       | string-join(for $$r in $$result return string($$r), " ")
+       |""".stripMargin
+  private val QUERY_DEFAULT_SERIALIZATION =
+    """
+      |xquery version "3.1";
+      |declare namespace output = "http://www.w3.org/2010/xslt-xquery-serialization";
+      |
+      |declare variable $local:default-serialization :=
+      |  <output:serialization-parameters>
+      |    <output:method value="xml"/>
+      |    <output:indent value="no"/>
+      |    <output:omit-xml-declaration value="yes"/>
+      |  </output:serialization-parameters>;
+      |
+      |""".stripMargin
+  private val QUERY_ASSERT_XML_SERIALIZATION =
+    s"""
+       | $QUERY_DEFAULT_SERIALIZATION
+       |
+       | declare variable $$result external;
+       |
+       | fn:serialize($$result, $$local:default-serialization)
+       |""".stripMargin
 
   private lazy val ignorableWrapperComparisonFormatter = new IgnorableWrapperComparisonFormatter()
 
@@ -1560,22 +1522,26 @@ object TestCaseRunnerActor {
    Resolved Environment resources
    */
   case class ResolvedSchema(path: Path, data: Array[Byte])
+
   case class ResolvedSource(path: Path, data: Array[Byte])
+
   case class ResolvedResource(path: Path, data: Array[Byte])
+
   case class ResolvedEnvironment(resolvedSchemas: Seq[ResolvedSchema] = Seq.empty, resolvedSources: Seq[ResolvedSource] = Seq.empty, resolvedResources: Seq[ResolvedResource] = Seq.empty, resolvedQuery: Option[String] = None)
+
   case class PendingTestCase(runTestCase: RunTestCase, resolvedEnvironment: ResolvedEnvironment)
 
-  private def merge(existing: Map[Path, Seq[TestCaseId]])(id: TestCaseId, additions: List[() => Path]) : Map[Path, Seq[TestCaseId]] = {
-    additions.foldLeft(existing){(accum, x) =>
+  private def merge(existing: Map[Path, Seq[TestCaseId]])(id: TestCaseId, additions: List[() => Path]): Map[Path, Seq[TestCaseId]] = {
+    additions.foldLeft(existing) { (accum, x) =>
       accum + (x() -> (accum.get(x()).getOrElse(Seq.empty) :+ id))
     }
   }
 
-  private def merge1(existing: Map[Path, Seq[TestCaseId]])(id: TestCaseId, addition: Path) : Map[Path, Seq[TestCaseId]] = {
+  private def merge1(existing: Map[Path, Seq[TestCaseId]])(id: TestCaseId, addition: Path): Map[Path, Seq[TestCaseId]] = {
     existing + (addition -> (existing.get(addition).getOrElse(Seq.empty) :+ id))
   }
 
-  private def addIfNotPresent(existing: Map[TestCaseId, PendingTestCase])(runTestCase: RunTestCase) : Map[TestCaseId, PendingTestCase] = {
+  private def addIfNotPresent(existing: Map[TestCaseId, PendingTestCase])(runTestCase: RunTestCase): Map[TestCaseId, PendingTestCase] = {
     val testCaseId = (runTestCase.testSetRef.name, runTestCase.testCase.name)
     existing.get(testCaseId) match {
       case Some(_) => existing
@@ -1583,35 +1549,35 @@ object TestCaseRunnerActor {
     }
   }
 
-  private def addSchemas(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]) : Map[TestCaseId, PendingTestCase] = {
-    testCases.foldLeft(pending){(accum, x) =>
+  private def addSchemas(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]): Map[TestCaseId, PendingTestCase] = {
+    testCases.foldLeft(pending) { (accum, x) =>
       val pendingTestCase = accum(x)
       accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedSchemas = pendingTestCase.resolvedEnvironment.resolvedSchemas :+ ResolvedSchema(path, value))))
     }
   }
 
-  private def addSources(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]) : Map[TestCaseId, PendingTestCase] = {
-    testCases.foldLeft(pending){(accum, x) =>
+  private def addSources(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]): Map[TestCaseId, PendingTestCase] = {
+    testCases.foldLeft(pending) { (accum, x) =>
       val pendingTestCase = accum(x)
       accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedSources = pendingTestCase.resolvedEnvironment.resolvedSources :+ ResolvedSource(path, value))))
     }
   }
 
-  private def addResources(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]) : Map[TestCaseId, PendingTestCase] = {
-    testCases.foldLeft(pending){(accum, x) =>
+  private def addResources(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]): Map[TestCaseId, PendingTestCase] = {
+    testCases.foldLeft(pending) { (accum, x) =>
       val pendingTestCase = accum(x)
       accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedResources = pendingTestCase.resolvedEnvironment.resolvedResources :+ ResolvedResource(path, value))))
     }
   }
 
-  private def addQueryStrs(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], @unused path: Path, value: Array[Byte]) : Map[TestCaseId, PendingTestCase] = {
-    testCases.foldLeft(pending){(accum, x) =>
+  private def addQueryStrs(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], @unused path: Path, value: Array[Byte]): Map[TestCaseId, PendingTestCase] = {
+    testCases.foldLeft(pending) { (accum, x) =>
       val pendingTestCase = accum(x)
       accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedQuery = Some(new String(value, UTF_8)))))
     }
   }
 
-  private def notIn(existing: Map[Path, Seq[TestCaseId]])(testCase: TestCaseId) : Boolean = {
+  private def notIn(existing: Map[Path, Seq[TestCaseId]])(testCase: TestCaseId): Boolean = {
     !existing.values.flatten.toSeq.contains(testCase)
   }
 }
@@ -1622,12 +1588,12 @@ private object IgnorableWrapper {
 }
 
 /**
-  * Exactly the same as {@link DefaultComparisonFormatter#getDescription(Comparison)}
-  * except that we drop the leading "/ignorable-wrapper" from the XPath.
-  */
+ * Exactly the same as [[DefaultComparisonFormatter# getDescription ( Comparison )]]
+ * except that we drop the leading "/ignorable-wrapper" from the XPath.
+ */
 private class IgnorableWrapperComparisonFormatter extends DefaultComparisonFormatter {
 
-  private def abbridgeXPath(xpath: String) : String = {
+  private def abbridgeXPath(xpath: String): String = {
     val matcher = IGNORABLE_WRAPPER_XPATH_PREFIX.matcher(xpath)
     matcher.replaceFirst("") match {
       case empty if empty.isEmpty => "/"

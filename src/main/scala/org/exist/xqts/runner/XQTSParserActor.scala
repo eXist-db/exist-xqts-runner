@@ -33,21 +33,22 @@ import org.exist.xqts.runner.XQTSParserActor.XsdVersion.XsdVersion
 import scala.annotation.unused
 
 /**
-  * An initial Actor that parses
-  * an XQTS.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * An initial Actor that parses
+ * an XQTS.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 trait XQTSParserActor extends Actor {
 }
 
 /**
-  * Objects and Classes that are used for parsing an XQTS.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Objects and Classes that are used for parsing an XQTS.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 object XQTSParserActor {
   case class Parse(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], testSets: Either[Set[String], Pattern], testCases: Either[Set[String], Pattern], excludeTestSets: Set[String], excludeTestCases: Set[String])
+
   case class ParseComplete(xqtsVersion: XQTSVersion, xqtsPath: Path, matchedTestSets: Int)
 
   object Validation extends Enumeration {
@@ -56,7 +57,7 @@ object XQTSParserActor {
   }
 
   object Role {
-    def parse(role : String) : Role = {
+    def parse(role: String): Role = {
       role match {
         case "." => ContextItemRole
         case _ if role.charAt(0).equals('$') => ExternalVariableRole(role.substring(1))
@@ -68,22 +69,34 @@ object XQTSParserActor {
       role == ContextItemRole
     }
   }
+
   sealed abstract class Role
+
   case object ContextItemRole extends Role
+
   case class ExternalVariableRole(name: String) extends Role
 
 
   case class Environment(name: String, schemas: List[Schema] = List.empty, sources: List[Source] = List.empty, resources: List[Resource] = List.empty, params: List[Param] = List.empty, contextItem: Option[String] = None, decimalFormats: List[DecimalFormat] = List.empty, namespaces: List[Namespace] = List.empty, collections: List[Collection] = List.empty, staticBaseUri: Option[String] = None, collation: Option[Collation] = None)
+
   case class Schema(uri: Option[AnyURIValue], file: Option[Path], xsdVersion: Float = 1.0f, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
+
   case class Source(role: Option[Role], file: Path, uri: Option[String], validation: Option[Validation.Validation] = None, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
+
   case class Resource(file: Path, uri: String, mediaType: Option[String] = None, encoding: Option[String], description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
+
   case class Param(name: String, select: Option[String] = None, as: Option[String] = None, source: Option[String] = None, declared: Boolean = false)
+
   case class DecimalFormat(name: Option[QName] = None, decimalSeparator: Option[Int] = None, exponentSeparator: Option[Int] = None, groupingSeparator: Option[Int] = None, zeroDigit: Option[Int] = None, digit: Option[Int] = None, minusSign: Option[Int] = None, percent: Option[Int] = None, perMille: Option[Int] = None, patternSeparator: Option[Int] = None, infinity: Option[String] = None, notANumber: Option[String] = None)
+
   case class Namespace(prefix: String, uri: URI)
+
   case class Collection(uri: AnyURIValue, sources: List[Source] = List.empty)
+
   case class Collation(uri: URI, default: Boolean = false)
 
   case class Created(by: String, on: String)
+
   case class Modified(by: String, on: String, change: String)
 
   case class TestSetRef(xqtsVersion: XQTSVersion, name: String, file: Path)
@@ -93,57 +106,85 @@ object XQTSParserActor {
   type TestCaseId = (TestSetName, TestCaseName)
 
   case class TestSet(name: TestSetName, covers: String, description: Option[String] = None, links: Seq[Link] = List.empty, dependencies: Seq[Dependency] = Seq.empty, testCases: Seq[TestCase] = Seq.empty)
+
   case class Link(`type`: String, document: String, section: Option[String] = None)
+
   case class Module(uri: AnyURIValue, file: Path)
+
   case class Dependency(`type`: DependencyType, value: String, satisfied: Boolean)
+
   case class TestCase(file: Path, name: TestCaseName, covers: String, description: Option[String] = None, created: Option[Created] = None, modifications: Seq[Modified] = Seq.empty, environment: Option[Environment] = None, modules: Seq[Module] = Seq.empty, dependencies: Seq[Dependency] = Seq.empty, test: Option[Either[String, Path]] = None, result: Option[Result] = None)
+
   sealed trait Result
 
   /*
    XQTS Assertions
   */
   sealed trait Assertion extends Result
+
   sealed trait Assertions extends Result {
     def assertions: List[Result]
-    def :+(assertion: Result) : Assertions
+
+    def :+(assertion: Result): Assertions
   }
+
   case class AllOf(assertions: List[Result]) extends Assertions {
-    override def :+(assertion: Result) : AllOf = this.copy(assertions = this.assertions :+ assertion)
+    override def :+(assertion: Result): AllOf = this.copy(assertions = this.assertions :+ assertion)
   }
+
   case class AnyOf(assertions: List[Result]) extends Assertions {
-    override def :+(assertion: Result) : AnyOf = this.copy(assertions = this.assertions :+ assertion)
+    override def :+(assertion: Result): AnyOf = this.copy(assertions = this.assertions :+ assertion)
   }
+
   case class Not(assertion: Option[Result] = None) extends Assertion
+
   sealed trait ValueAssertion[T] extends Assertion {
     def expected: T
   }
+
   case class Assert(expected: String) extends ValueAssertion[String]
+
   case class AssertCount(expected: Int) extends ValueAssertion[Int]
+
   case class AssertDeepEquals(expected: String) extends ValueAssertion[String]
+
   case class AssertEq(expected: String) extends ValueAssertion[String]
+
   case class AssertPermutation(expected: String) extends ValueAssertion[String]
+
   case class AssertSerializationError(expected: String) extends ValueAssertion[String]
+
   case class AssertStringValue(value: String, normalizeSpace: Boolean) extends Assertion
+
   case class AssertType(expected: String) extends ValueAssertion[String]
+
   case class AssertXml(expected: Either[String, Path], ignorePrefixes: Boolean = false) extends ValueAssertion[Either[String, Path]]
+
   case class SerializationMatches(expected: Either[String, Path], flags: Option[String] = None) extends ValueAssertion[Either[String, Path]]
+
   case object AssertEmpty extends Assertion
+
   case object AssertTrue extends Assertion
+
   case object AssertFalse extends Assertion
+
   case class Error(expected: String) extends ValueAssertion[String]
 
   /**
-    * Enumeration of XQTS dependency types.
-    */
+   * Enumeration of XQTS dependency types.
+   */
   object DependencyType extends Enumeration {
+
     import scala.language.implicitConversions
 
     protected case class DependencyTypeVal(xqtsName: String) extends super.Val
+
     implicit def valueToDependencyTypeVal(x: Value): DependencyTypeVal = x.asInstanceOf[DependencyTypeVal]
+
     type DependencyType = DependencyTypeVal
 
     @throws[IllegalArgumentException]
-    def fromXqtsName(xqtsName: String) : DependencyType = {
+    def fromXqtsName(xqtsName: String): DependencyType = {
       this.values.find(_.xqtsName == xqtsName) match {
         case Some(dependencyType) => dependencyType
         case None => throw new IllegalArgumentException(s"No dependency type with XQTS name: $xqtsName")
@@ -167,30 +208,29 @@ object XQTSParserActor {
   }
 
   /**
-    * Enumeration of XQTS dependency spec values.
-    */
+   * Enumeration of XQTS dependency spec values.
+   */
   object Spec extends Enumeration {
     type Spec = Value
     val XP10, XP20, XP30, XP31, XQ10, XQ30, XQ31, XT30 = Value
 
     /**
-      * Returns all specs which implement at
-      * least {@code spec}.
-      *
-      * @param spec the least spec.
-      *
-      * @return all specs that implement at least {@code spec}.
-      */
-    def atLeast(spec: Spec) : Set[Spec] = {
+     * Returns all specs which implement at
+     * least {@code spec}.
+     *
+     * @param spec the least spec.
+     * @return all specs that implement at least {@code spec}.
+     */
+    def atLeast(spec: Spec): Set[Spec] = {
       spec match {
         case XP10 =>
           Set(XP10, XP20, XP30, XP31)
         case XP20 =>
           Set(XP20, XP30, XP31)
         case XP30 =>
-          Set (XP30, XP31)
+          Set(XP30, XP31)
         case XP31 =>
-          Set (XP31)
+          Set(XP31)
 
         case XQ10 =>
           Set(XQ10, XQ30, XQ31)
@@ -206,17 +246,20 @@ object XQTSParserActor {
   }
 
   /**
-    * Enumeration of XQTS dependency feature values.
-    */
+   * Enumeration of XQTS dependency feature values.
+   */
   object Feature extends Enumeration {
+
     import scala.language.implicitConversions
 
     protected case class FeatureVal(xqtsName: String) extends super.Val
+
     implicit def valueToFeatureVal(x: Value): FeatureVal = x.asInstanceOf[FeatureVal]
+
     type Feature = FeatureVal
 
     @throws[IllegalArgumentException]
-    def fromXqtsName(xqtsName: String) : Feature = {
+    def fromXqtsName(xqtsName: String): Feature = {
       this.values.find(_.xqtsName == xqtsName) match {
         case Some(feature) => feature
         case None => throw new IllegalArgumentException(s"No feature with XQTS name: $xqtsName")
@@ -242,13 +285,16 @@ object XQTSParserActor {
   }
 
   /**
-    * Enumeration of XQTS dependency xsd-version values.
-    */
+   * Enumeration of XQTS dependency xsd-version values.
+   */
   object XsdVersion extends Enumeration {
+
     import scala.language.implicitConversions
 
     protected case class XsdVersionVal(xqtsName: String) extends super.Val
+
     implicit def valueToXsdVersionVal(x: Value): XsdVersionVal = x.asInstanceOf[XsdVersionVal]
+
     type XsdVersion = XsdVersionVal
 
     @throws[IllegalArgumentException]
@@ -264,13 +310,16 @@ object XQTSParserActor {
   }
 
   /**
-    * Enumeration of XQTS dependency xml-version values.
-    */
+   * Enumeration of XQTS dependency xml-version values.
+   */
   object XmlVersion extends Enumeration {
+
     import scala.language.implicitConversions
 
     protected case class XmlVersionVal(xqtsName: String) extends super.Val
+
     implicit def valueToXmlVersionVal(x: Value): XmlVersionVal = x.asInstanceOf[XmlVersionVal]
+
     type XmlVersion = XmlVersionVal
 
     @throws[IllegalArgumentException]
@@ -287,13 +336,13 @@ object XQTSParserActor {
     val XML11 = XmlVersionVal("1.1")
 
     /**
-      * Given a base version,
-      * returns all compatible versions.
-      *
-      * @param base the base versions
-      * @return the compatible versions
-      */
-    def compatible(base: XmlVersion) : Set[XmlVersion] = {
+     * Given a base version,
+     * returns all compatible versions.
+     *
+     * @param base the base versions
+     * @return the compatible versions
+     */
+    def compatible(base: XmlVersion): Set[XmlVersion] = {
       base match {
         case XML10_4thOrEarlier =>
           Set(XML10_4thOrEarlier)
@@ -316,37 +365,37 @@ object XQTSParserActor {
   type Missing = Seq[String]
 
   /**
-    * Checks for missing dependencies.
-    *
-    * @param required The required dependencies.
-    * @param enabledFeatures The features which are enabled.
-    * @param enabledSpecs The specifications which are enabled.
-    * @param enabledXmlVersions The XML versions which are enabled.
-    * @param enabledXsdVersions The XSD versions which are enabled.
-    *
-    * @return A list of all missing dependencies, or an empty list
-    *         if there are no missing depdencies.
-    */
-  def missingDependencies(required: Seq[Dependency], enabledFeatures: Set[Feature], enabledSpecs: Set[Spec], enabledXmlVersions: Set[XmlVersion], enabledXsdVersions: Set[XsdVersion]) : Missing = {
+   * Checks for missing dependencies.
+   *
+   * @param required           The required dependencies.
+   * @param enabledFeatures    The features which are enabled.
+   * @param enabledSpecs       The specifications which are enabled.
+   * @param enabledXmlVersions The XML versions which are enabled.
+   * @param enabledXsdVersions The XSD versions which are enabled.
+   * @return A list of all missing dependencies, or an empty list
+   *         if there are no missing depdencies.
+   */
+  def missingDependencies(required: Seq[Dependency], enabledFeatures: Set[Feature], enabledSpecs: Set[Spec], enabledXmlVersions: Set[XmlVersion], enabledXsdVersions: Set[XsdVersion]): Missing = {
     type Missed = Option[String]
 
-    def hasEnabledFeature(requiredFeature: String) : Missed = {
+    def hasEnabledFeature(requiredFeature: String): Missed = {
       if (enabledFeatures.map(_.xqtsName).contains(requiredFeature)) {
         None
       } else {
-       Some(requiredFeature)
+        Some(requiredFeature)
       }
     }
 
-    def hasEnabledSpec(requiredSpec: String) : Missed = {
-      def lookupSpecs(specStr: String) : Set[Spec] = {
+    def hasEnabledSpec(requiredSpec: String): Missed = {
+      def lookupSpecs(specStr: String): Set[Spec] = {
         if (specStr.endsWith("+")) {
           Spec.atLeast(Spec.withName(specStr.substring(0, specStr.length - 1)))
         } else {
           Set(Spec.withName(specStr))
         }
       }
-      val anyRequiredSpecs : Set[Spec] = requiredSpec.split(' ').toSet.flatMap(lookupSpecs)
+
+      val anyRequiredSpecs: Set[Spec] = requiredSpec.split(' ').toSet.flatMap(lookupSpecs)
       if (anyRequiredSpecs.find(enabledSpecs.contains(_)).nonEmpty) {
         None
       } else {
@@ -354,9 +403,9 @@ object XQTSParserActor {
       }
     }
 
-    def hasEnabledXmlVersion(requiredXmlVersion: String) : Missed = {
+    def hasEnabledXmlVersion(requiredXmlVersion: String): Missed = {
       def check(version: String): Missed = {
-        val compatibleVersions : Set[XmlVersion] = XmlVersion.compatible(XmlVersion.fromXqtsName(version))
+        val compatibleVersions: Set[XmlVersion] = XmlVersion.compatible(XmlVersion.fromXqtsName(version))
         if (compatibleVersions.find(enabledXmlVersions.contains(_)).nonEmpty) {
           None
         } else {
@@ -365,16 +414,16 @@ object XQTSParserActor {
       }
 
       val requiredXmlVersions = requiredXmlVersion.split(' ')
-      requiredXmlVersions.foldLeft(Option.empty[String]){(accum, x) =>
-       accum match {
-         case missing @ Some(_) => missing
-         case None =>
-           check(x)
-       }
+      requiredXmlVersions.foldLeft(Option.empty[String]) { (accum, x) =>
+        accum match {
+          case missing@Some(_) => missing
+          case None =>
+            check(x)
+        }
       }
     }
 
-    def hasEnabledXsdVersion(requiredXsdVersion: String) : Missed = {
+    def hasEnabledXsdVersion(requiredXsdVersion: String): Missed = {
       if (enabledXsdVersions.map(_.xqtsName).contains(requiredXsdVersion)) {
         None
       } else {
@@ -383,13 +432,13 @@ object XQTSParserActor {
     }
 
     @unused
-    def firstMissing(test: String => Missed, required: Seq[Dependency]) : Missed = {
+    def firstMissing(test: String => Missed, required: Seq[Dependency]): Missed = {
       required.foldLeft(Option.empty[String]) { case (accum, x) =>
         accum.orElse(test(x.value))
       }
     }
 
-    def allMissing(test: String => Missed, required: Seq[Dependency]) : Missing = {
+    def allMissing(test: String => Missed, required: Seq[Dependency]): Missing = {
       required.foldLeft(Seq.empty[String]) { case (accum, x) =>
         test(x.value)
           .filter(_ => x.satisfied)
@@ -407,16 +456,16 @@ object XQTSParserActor {
 
     allMissing(hasEnabledFeature, requiredFeatures) ++
       allMissing(hasEnabledSpec, requiredSpecs) ++
-        allMissing(hasEnabledXmlVersion, requiredXmlVersions) ++
-          allMissing(hasEnabledXsdVersion, requiredXsdVersions)
+      allMissing(hasEnabledXmlVersion, requiredXmlVersions) ++
+      allMissing(hasEnabledXsdVersion, requiredXsdVersions)
   }
 }
 
 /**
-  * Exception type for errors that occure during
-  * parsing of XQTS, due to unexpected structure
-  * or values within the XQTS.
-  *
-  * @param message a description of the error.
-  */
+ * Exception type for errors that occure during
+ * parsing of XQTS, due to unexpected structure
+ * or values within the XQTS.
+ *
+ * @param message a description of the error.
+ */
 case class XQTSParseException(message: String) extends Exception(message)

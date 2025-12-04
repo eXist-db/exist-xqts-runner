@@ -22,8 +22,8 @@ import com.fasterxml.aalto.{AsyncInputFeeder, AsyncXMLStreamReader}
 import javax.xml.XMLConstants
 
 /**
-  * @author Adam Retter <adam@evolvedbinay.com>
-  */
+ * @author Adam Retter <adam@evolvedbinay.com>
+ */
 package object qt3 {
 
   /*
@@ -110,11 +110,13 @@ package object qt3 {
   private[qt3] val PARSER_FACTORY = new InputFactoryImpl
 
   /**
-    * Adds some convenience methods to {@link AsyncXMLStreamReader}.
-    */
-  implicit class AsyncXMLStreamReaderPimp[F <: AsyncInputFeeder](asyncXmlStreamReader : AsyncXMLStreamReader[F]) {
-    def getAttributeValue(localName: String) : String = asyncXmlStreamReader.getAttributeValue(XMLConstants.NULL_NS_URI, localName)
-    def getAttributeValueOpt(localName: String) : Option[String] = Option(asyncXmlStreamReader.getAttributeValue(XMLConstants.NULL_NS_URI, localName))
-    def getAttributeValueOptNE(localName: String) : Option[String] = getAttributeValueOpt(localName).filter(_.nonEmpty)
+   * Adds some convenience methods to [[AsyncXMLStreamReader]].
+   */
+  implicit class AsyncXMLStreamReaderPimp[F <: AsyncInputFeeder](asyncXmlStreamReader: AsyncXMLStreamReader[F]) {
+    def getAttributeValue(localName: String): String = asyncXmlStreamReader.getAttributeValue(XMLConstants.NULL_NS_URI, localName)
+
+    def getAttributeValueOpt(localName: String): Option[String] = Option(asyncXmlStreamReader.getAttributeValue(XMLConstants.NULL_NS_URI, localName))
+
+    def getAttributeValueOptNE(localName: String): Option[String] = getAttributeValueOpt(localName).filter(_.nonEmpty)
   }
 }

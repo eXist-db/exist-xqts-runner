@@ -22,13 +22,13 @@ import com.typesafe.config.Config
 import scala.jdk.CollectionConverters._;
 
 /**
-  * Configuration file settings, read from {@code application.conf}.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Configuration file settings, read from {@code application.conf}.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 class SettingsImpl(config: Config) extends Extension {
 
-  val xqtsVersions : Map[String, XqtsVersionConfig] = {
+  val xqtsVersions: Map[String, XqtsVersionConfig] = {
     (for (versionConfig <- config.getConfigList("xqtsrunner.xqts.versions").asScala.toSeq)
       yield (versionConfig.getString("version") -> XqtsVersionConfig(
         versionConfig.getString("version"),
@@ -51,6 +51,7 @@ class SettingsImpl(config: Config) extends Extension {
 
 object Settings extends ExtensionId[SettingsImpl] with ExtensionIdProvider {
   override def lookup = Settings
+
   override def createExtension(system: ExtendedActorSystem) =
     new SettingsImpl(system.settings.config)
 }

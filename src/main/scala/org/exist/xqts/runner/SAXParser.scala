@@ -33,15 +33,18 @@ object SAXParser {
   saxParserFactory.setNamespaceAware(true)
 
   /**
-    * Parses a String representation of an XML Document
-    * to an in-memory DOM.
-    *
-    * @param xml the string of xml to parse.
-    *
-    * @return either the Document object, or an exception.
-    */
+   * Parses a String representation of an XML Document
+   * to an in-memory DOM.
+   *
+   * @param xml the string of xml to parse.
+   * @return either the Document object, or an exception.
+   */
   def parseXml(xml: Array[Byte]): Either[ExistServerException, DocumentImpl] = {
-    val xmlRes = Resource.make(IO { new UnsynchronizedByteArrayInputStream(xml) })(is => IO { is.close() })
+    val xmlRes = Resource.make(IO {
+      new UnsynchronizedByteArrayInputStream(xml)
+    })(is => IO {
+      is.close()
+    })
 
     val parseIO = xmlRes.use(is => IO.blocking {
       val saxAdapter = new SAXAdapter()

@@ -27,32 +27,38 @@ import cats.effect.{IO, Resource}
 import scala.annotation.tailrec
 
 /**
-  * Checksum operations.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Checksum operations.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 object Checksum {
 
   sealed trait Algorithm
+
   case object MD2 extends Algorithm
+
   case object MD5 extends Algorithm
+
   case object SHA1 extends Algorithm
+
   case object SHA256 extends Algorithm
+
   case object SHA384 extends Algorithm
+
   case object SHA512 extends Algorithm
 
   /**
-    * Calculates the checksum of a file.
-    * 
-    * @param file the path to the file to checksum
-    * @param algorithm the algorithm to use for calculating the checksum.
-    * @param bufferSize the size of the buffer to use when calculating the checksum (default is 16 KB)
-    */
-  def checksum(file: Path, algorithm: Algorithm, bufferSize: Int = 16 * 1024) : Either[Throwable, Array[Byte]] = {
+   * Calculates the checksum of a file.
+   *
+   * @param file       the path to the file to checksum
+   * @param algorithm  the algorithm to use for calculating the checksum.
+   * @param bufferSize the size of the buffer to use when calculating the checksum (default is 16 KB)
+   */
+  def checksum(file: Path, algorithm: Algorithm, bufferSize: Int = 16 * 1024): Either[Throwable, Array[Byte]] = {
 
     def digestStream(is: InputStream, buf: Array[Byte], digest: MessageDigest): Array[Byte] = {
       @tailrec
-      def digestAll() : Unit = {
+      def digestAll(): Unit = {
         val read = is.read(buf)
         if (read == -1) {
           return
@@ -66,11 +72,17 @@ object Checksum {
       digest.digest()
     }
 
-    val checksumIO = Resource.make(IO { Files.newInputStream(file) })(is => IO { is.close() }).use { is =>
+    val checksumIO = Resource.make(IO {
+      Files.newInputStream(file)
+    })(is => IO {
+      is.close()
+    }).use { is =>
       getHash(algorithm).flatMap { digest =>
         // 16 KB buffer
         IO.pure(Array.ofDim[Byte](bufferSize)).flatMap { buf =>
-          IO { digestStream(is, buf, digest) }
+          IO {
+            digestStream(is, buf, digest)
+          }
         }
       }
     }
@@ -83,13 +95,12 @@ object Checksum {
   }
 
   /**
-    * Gets Message Digest algorithm.
-    *
-    * @param algorithm the type of algorith required for a message digest.
-    *
-    * @return the message digest
-    */
-  private def getHash(algorithm: Algorithm) : IO[MessageDigest] = {
+   * Gets Message Digest algorithm.
+   *
+   * @param algorithm the type of algorith required for a message digest.
+   * @return the message digest
+   */
+  private def getHash(algorithm: Algorithm): IO[MessageDigest] = {
     IO {
       algorithm match {
         case MD2 =>

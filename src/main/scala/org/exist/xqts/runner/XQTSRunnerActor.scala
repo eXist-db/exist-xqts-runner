@@ -32,19 +32,18 @@ import org.exist.xqts.runner.XQTSResultsSerializerActor.{FinalizeSerialization, 
 import org.exist.xqts.runner.qt3.XQTS3TestSetParserActor
 
 import scala.annotation.unused
-import scala.collection.immutable.Map
 
 /**
-  * The supervisor actor which will coordinate all other
-  * actors in parsing, executing, and reporting on an XQTS
-  * invocation.
-  *
-  * @param xmlParserBufferSize the maximum buffer size to use for each XML
-  *                            document from the XQTS which we parse.
-  * @param existServer a reference to an eXist-db server.
-  * @param serializerActorClass the class to use for serializing the results of the XQTS.
-  * @param outputDir the directory to serialize XQTS results to.
-  */
+ * The supervisor actor which will coordinate all other
+ * actors in parsing, executing, and reporting on an XQTS
+ * invocation.
+ *
+ * @param xmlParserBufferSize  the maximum buffer size to use for each XML
+ *                             document from the XQTS which we parse.
+ * @param existServer          a reference to an eXist-db server.
+ * @param serializerActorClass the class to use for serializing the results of the XQTS.
+ * @param outputDir            the directory to serialize XQTS results to.
+ */
 class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parserActorClass: Class[XQTSParserActor], serializerActorClass: Class[XQTSResultsSerializerActor], styleDir: Option[Path], outputDir: Path) extends Actor with Timers {
 
   private val logger = Logger(classOf[XQTSRunnerActor])
@@ -54,15 +53,18 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
 
   private var unparsedTestSets: Set[TestSetRef] = Set.empty
   private var unserializedTestSets: Set[TestSetRef] = Set.empty
-  private var testCases : Map[TestSetRef, Set[String]] = Map.empty
-  private var completedTestCases : Map[TestSetRef, Map[String, TestResult]] = Map.empty
+  private var testCases: Map[TestSetRef, Set[String]] = Map.empty
+  private var completedTestCases: Map[TestSetRef, Map[String, TestResult]] = Map.empty
 
   private case object TimerStatsKey
+
   private case object TimerPrintStats
+
   private case class Stats(unparsedTestSets: Int, testCases: (Int, Int), completedTestCases: (Int, Int), unserializedTestSets: Int) {
     def asMessage: String = s"XQTSRunnerActor Progress:\nunparsedTestSets=${unparsedTestSets}\ntestCases[sets/cases]=${testCases._1}/${testCases._2}\ncompletedTestCases[sets/cases]=${completedTestCases._1}/${completedTestCases._2}\nunserializedTestSets=${unserializedTestSets}"
   }
-  private var previousStats: Stats = Stats(0, (0,0), (0,0), 0)
+
+  private var previousStats: Stats = Stats(0, (0, 0), (0, 0), 0)
   private var unchangedStatsTicks = 0;
 
   override def receive: Receive = {
@@ -77,7 +79,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
         timers.startTimerAtFixedRate(TimerStatsKey, TimerPrintStats, 5.seconds)
       }
 
-      val readFileRouter = context.actorOf(FromConfig.props(Props(classOf[ReadFileActor])), name="ReadFileRouter")
+      val readFileRouter = context.actorOf(FromConfig.props(Props(classOf[ReadFileActor])), name = "ReadFileRouter")
       val commonResourceCacheActor = context.actorOf(Props(classOf[CommonResourceCacheActor], readFileRouter, maxCacheBytes))
 
       val testCaseRunnerRouter = context.actorOf(FromConfig.props(Props(classOf[TestCaseRunnerActor], existServer, commonResourceCacheActor)), name = "TestCaseRunnerRouter")
@@ -98,10 +100,10 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       // if stats have not changed for 5 ticks, dump some info about incomplete test sets
       if (unchangedStatsTicks > 5) {
         val incompleteTestSets = testCases
-          .map { case (testSetRef, testCaseNames) => (testSetRef, testCaseNames.removedAll(completedTestCases.get(testSetRef).map(_.keySet).getOrElse(Set.empty)))}
-          .filter {case (_, testCaseNames) => testCaseNames.nonEmpty}
+          .map { case (testSetRef, testCaseNames) => (testSetRef, testCaseNames.removedAll(completedTestCases.get(testSetRef).map(_.keySet).getOrElse(Set.empty))) }
+          .filter { case (_, testCaseNames) => testCaseNames.nonEmpty }
 
-        logger.debug(s"incompleteTestSets=${incompleteTestSets.map { case (testSetRef, testCaseNames) => (testSetRef.name, testCaseNames)}}")
+        logger.debug(s"incompleteTestSets=${incompleteTestSets.map { case (testSetRef, testCaseNames) => (testSetRef.name, testCaseNames) }}")
 
         // reset
         unchangedStatsTicks = 0;
@@ -165,7 +167,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     context.system.terminate()
   }
 
-  private def isTestSetCompleted(testSetRef: TestSetRef) : Boolean = {
+  private def isTestSetCompleted(testSetRef: TestSetRef): Boolean = {
     unparsedTestSets.contains(testSetRef) == false &&
       completedTestCases.get(testSetRef).map(_.keySet)
         .flatMap(completed => testCases.get(testSetRef).map(_ == completed))
@@ -175,11 +177,11 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   private def allTestSetsCompleted(): Boolean = {
     unserializedTestSets.isEmpty &&
       unparsedTestSets.isEmpty &&
-        !testCases.keySet.map(isTestSetCompleted(_)).contains(false)
+      !testCases.keySet.map(isTestSetCompleted(_)).contains(false)
   }
 
   @unused
-  private def add(map: Map[TestSetRef, Map[String, Option[TestResult]]], testSetRef: TestSetRef) : Map[TestSetRef, Map[String, Option[TestResult]]] = {
+  private def add(map: Map[TestSetRef, Map[String, Option[TestResult]]], testSetRef: TestSetRef): Map[TestSetRef, Map[String, Option[TestResult]]] = {
     if (map.contains(testSetRef)) {
       map
     } else {
@@ -188,7 +190,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   }
 
   @unused
-  private def add(map: Map[TestSetRef, Map[String, Option[TestResult]]], testSetRef: TestSetRef, testCase: String) : Map[TestSetRef, Map[String, Option[TestResult]]] = {
+  private def add(map: Map[TestSetRef, Map[String, Option[TestResult]]], testSetRef: TestSetRef, testCase: String): Map[TestSetRef, Map[String, Option[TestResult]]] = {
     if (map.contains(testSetRef)) {
       if (!map(testSetRef).contains(testCase)) {
         map + (testSetRef -> (map(testSetRef) + (testCase -> None)))
@@ -201,7 +203,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   }
 
   @unused
-  private def add(map: Map[TestSetRef, Map[String, Option[TestResult]]], testSetRef: TestSetRef, testCases: Seq[String]) : Map[TestSetRef, Map[String, Option[TestResult]]] = {
+  private def add(map: Map[TestSetRef, Map[String, Option[TestResult]]], testSetRef: TestSetRef, testCases: Seq[String]): Map[TestSetRef, Map[String, Option[TestResult]]] = {
     if (map.contains(testSetRef)) {
       map + (testSetRef -> (map(testSetRef) ++ testCases.filterNot(map(testSetRef).contains(_)).map((_, None)).toMap))
     } else {
@@ -209,7 +211,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     }
   }
 
-  private def addTestCase(map: Map[TestSetRef, Set[String]], testSetRef: TestSetRef, testCase: String) : Map[TestSetRef, Set[String]] = {
+  private def addTestCase(map: Map[TestSetRef, Set[String]], testSetRef: TestSetRef, testCase: String): Map[TestSetRef, Set[String]] = {
     if (map.contains(testSetRef)) {
       map + (testSetRef -> (map(testSetRef) + testCase))
     } else {
@@ -217,7 +219,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     }
   }
 
-  private def addTestCases(map: Map[TestSetRef, Set[String]], testSetRef: TestSetRef, testCases: Seq[String]) : Map[TestSetRef, Set[String]] = {
+  private def addTestCases(map: Map[TestSetRef, Set[String]], testSetRef: TestSetRef, testCases: Seq[String]): Map[TestSetRef, Set[String]] = {
     if (map.contains(testSetRef)) {
       map + (testSetRef -> (map(testSetRef) ++ testCases.toSet))
     } else {
@@ -226,7 +228,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   }
 
   @unused
-  private def removeOutstanding(map: Map[TestSetRef, Set[String]], testSetRef: TestSetRef, testCase: String) : Map[TestSetRef, Set[String]] = {
+  private def removeOutstanding(map: Map[TestSetRef, Set[String]], testSetRef: TestSetRef, testCase: String): Map[TestSetRef, Set[String]] = {
     if (map.contains(testSetRef)) {
       val newValueSet = map(testSetRef) - testCase
       if (newValueSet.isEmpty) {
@@ -249,15 +251,18 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
 }
 
 /**
-  * Objects and Classes that are used for executing an XQTS.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Objects and Classes that are used for executing an XQTS.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 object XQTSRunnerActor {
   case class RunXQTS(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], maxCacheBytes: Long, testSets: Either[Set[String], Pattern], testCases: Either[Set[String], Pattern], excludeTestSets: Set[String], excludeTestCases: Set[String])
 
   case class ParsingTestSet(testSetRef: TestSetRef)
+
   case class ParsedTestSet(testSetRef: TestSetRef, testCases: Seq[String])
+
   case class RunningTestCase(testSetRef: TestSetRef, testCase: String)
+
   case class RanTestCase(testSetRef: TestSetRef, testResult: TestResult)
 }

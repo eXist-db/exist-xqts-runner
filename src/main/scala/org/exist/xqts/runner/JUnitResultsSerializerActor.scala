@@ -34,25 +34,27 @@ import org.apache.tools.ant.types.FileSet
 import org.exist.xqts.runner.XQTSParserActor.TestSetName
 
 /**
-  * Actor which serialized test results to the JUnit XML report format.
-  * It can also aggregate a number of XML reports into a HTML report.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Actor which serialized test results to the JUnit XML report format.
+ * It can also aggregate a number of XML reports into a HTML report.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) extends XQTSResultsSerializerActor {
 
   private val logger = Logger(classOf[JUnitResultsSerializerActor])
 
   override def receive: Receive = {
 
-    case testSetResults : TestSetResults =>
+    case testSetResults: TestSetResults =>
       logger.info(s"Serializing results for TestSet: ${testSetResults.testSetRef.name} (${testSetResults.testSetRef.file})...")
       val serializeIo: IO[Option[Throwable]] = dataDir
         .flatMap(dataFile(_, testSetResults.testSetRef.name))
         .flatMap(dataFileOutput(_)
           .use(formatJunitTestSet(testSetResults, _)))
         .map(_ => None)
-        .handleErrorWith(t => IO.pure { Some(t) })
+        .handleErrorWith(t => IO.pure {
+          Some(t)
+        })
 
       implicit val runtime = IORuntime.global
 
@@ -69,7 +71,9 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
     case FinalizeSerialization =>
       val start = System.currentTimeMillis()
       val aggregateIO: IO[Either[Throwable, Path]] = dataDir
-        .flatTap(dd => IO { logger.info(s"Aggregating results report from: ${dd.toAbsolutePath}...") })
+        .flatTap(dd => IO {
+          logger.info(s"Aggregating results report from: ${dd.toAbsolutePath}...")
+        })
         .product(htmlDir)
         .flatTap { case (dataDir, htmlDir) => aggregateJUnitReports(dataDir, htmlDir) }
         .map { case (_, htmlDir) => htmlDir }
@@ -89,13 +93,13 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
       sender() ! FinishedSerialization
   }
 
-  private def dataDir : IO[Path] = IO {
+  private def dataDir: IO[Path] = IO {
     val dataDir = outputDir.resolve("junit").resolve("data")
     Files.createDirectories(dataDir)
     dataDir
   }
 
-  private def htmlDir : IO[Path] = IO {
+  private def htmlDir: IO[Path] = IO {
     val htmlDir = outputDir.resolve("junit").resolve("html")
     Files.createDirectories(htmlDir)
     htmlDir
@@ -105,8 +109,12 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
     dir.resolve("TEST-" + testSetName + ".xml")
   }
 
-  private def dataFileOutput(dataFile: Path) : Resource[IO, _ <: OutputStream] = {
-    Resource.make(IO { new BufferedOutputStream(Files.newOutputStream(dataFile)) })(os => IO { os.close()})
+  private def dataFileOutput(dataFile: Path): Resource[IO, _ <: OutputStream] = {
+    Resource.make(IO {
+      new BufferedOutputStream(Files.newOutputStream(dataFile))
+    })(os => IO {
+      os.close()
+    })
   }
 
   private def formatJunitTestSet(testSetResults: TestSetResults, os: OutputStream) = IO {
@@ -154,12 +162,12 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
     junitResultFormatter.endTestSuite(junitTestSet)
   }
 
-  private def asJavaHashtable[K, V](map: Map[K, V]) : java.util.Hashtable[K, V] = {
+  private def asJavaHashtable[K, V](map: Map[K, V]): java.util.Hashtable[K, V] = {
     import scala.jdk.CollectionConverters._
     new java.util.Hashtable(map.asJava)
   }
 
-  private def aggregateJUnitReports(dataDir: Path, htmlDir: Path) : IO[Unit] = IO {
+  private def aggregateJUnitReports(dataDir: Path, htmlDir: Path): IO[Unit] = IO {
     val project = new Project()
     project.setProperty("java.io.tmpdir", System.getProperty("java.io.tmpdir"))
 
@@ -171,10 +179,10 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
     val aggregator = new XMLResultAggregator()
     aggregator.setProject(project)
     aggregator.addFileSet(fileSet)
-    aggregator.setTodir(dataDir.toFile)   // for the `TESTS-TestSuites.xml` aggregate file
+    aggregator.setTodir(dataDir.toFile) // for the `TESTS-TestSuites.xml` aggregate file
 
     val aggregateTransformer = aggregator.createReport()
-    aggregateTransformer.setTodir(htmlDir.toFile)   // for the HTML reports
+    aggregateTransformer.setTodir(htmlDir.toFile) // for the HTML reports
     aggregateTransformer.createFactory().setName(classOf[TransformerFactoryImpl].getName)
 
     styleDir.map(dir => aggregateTransformer.setStyledir(dir.toAbsolutePath.toFile))
@@ -183,19 +191,19 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
   }
 
   private object XQTSJUnitTest {
-    def apply(testResult : TestResult) = new XQTSJUnitTest(testResult)
+    def apply(testResult: TestResult) = new XQTSJUnitTest(testResult)
   }
 
   private class XQTSJUnitTest(testResult: TestResult) extends JUTest {
     override def countTestCases(): Int = 1
 
-    def getName() : String = testResult.testCase
+    def getName(): String = testResult.testCase
 
-    def getCompilationTime : Long = testResult.compilationTime
+    def getCompilationTime: Long = testResult.compilationTime
 
-    def getExecutionTime : Long = testResult.executionTime
+    def getExecutionTime: Long = testResult.executionTime
 
-    override def run(juTestResult: JUTestResult): Unit =  {}
+    override def run(juTestResult: JUTestResult): Unit = {}
   }
 
   class XQTSXMLJUnitResultFormatter extends XMLJUnitResultFormatter {

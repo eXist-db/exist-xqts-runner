@@ -79,7 +79,7 @@ resolvers ++= Seq(
 
 javacOptions ++= Seq("-source", "21", "-target", "21")
 
-scalacOptions ++= Seq("-target:jvm-21", "-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused")
+scalacOptions ++= Seq("-target:jvm-21", "-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused", "-Xlint")
 
 // Fancy up the Assembly JAR
 Compile / packageBin / packageOptions +=  {
@@ -111,11 +111,12 @@ Compile / packageBin / packageOptions +=  {
     attributes.putValue(k, v)
   Package.JarManifest(manifest)
 }
-
 // assembly merge strategy for duplicate files from dependencies
 assembly / assemblyMergeStrategy := {
-  case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql")       => MergeStrategy.first
-  case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class")    => MergeStrategy.discard
+  case PathList("META-INF", "versions", "9" ,"OSGI-INF", "MANIFEST.MF") => MergeStrategy.discard
+  case PathList("META-INF", "versions", "9" ,"module-info.class") => MergeStrategy.discard
+  case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql") => MergeStrategy.first
+  case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class") => MergeStrategy.discard
   case x =>
     val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)

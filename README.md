@@ -12,15 +12,15 @@ This application executes a W3C XQTS against an embedded eXist-db server.
 To build from source you will need the following pre-requisites:
 
 1. Git Command Line tools.
-2. Java 8+
-3. SBT (Simple Build Tool) 1.5.5+
+2. Java 21
+3. SBT (Simple Build Tool) 1.10.11
 
 In the following steps, we assume that all of the above tools are available on your system path.
 
 The version of eXist-db that the XQTS driver is compiled for is set in `build.sbt`. If you wish to compile against a newer or custom version of eXist-db, you can modify this to the version of an eXist-db Maven/Ivy artifact which you have available to your system, e.g.:
 
 ```scala
-val existV = "5.3.0"
+val existV = "7.0.0-SNAPSHOT"
 ``` 
 
 Once the pre-requisites are met, to build from source you can execute the following commands from your console/terminal:

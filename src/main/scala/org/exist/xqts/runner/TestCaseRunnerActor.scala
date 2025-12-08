@@ -20,7 +20,7 @@ package org.exist.xqts.runner
 import java.io.IOException
 import java.nio.charset.Charset
 import java.nio.file.{Files, Path}
-import akka.actor.{Actor, ActorRef}
+import org.apache.pekko.actor.{Actor, ActorRef}
 import org.exist.xqts.runner.TestCaseRunnerActor.RunTestCase
 import org.exist.xqts.runner.XQTSParserActor._
 import TestCaseRunnerActor._
@@ -33,7 +33,6 @@ import java.util.regex.Pattern
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.syntax.either._
-import grizzled.slf4j.Logger
 import org.exist.dom.memtree.DocumentImpl
 import org.exist.xqts.runner.AssertTypeParser.TypeNode.{ExistTypeDescription, ExplicitExistTypeDescription, WildcardExistTypeDescription}
 import org.exist.xqts.runner.CommonResourceCacheActor.{CachedResource, GetResource, ResourceGetError}
@@ -238,7 +237,20 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
             getDynamicContextAvailableCollections(connection)(testCase, resolvedEnvironment).flatMap(availableCollections =>
               getDynamicContextAvailableTextResources(connection)(testCase, resolvedEnvironment).flatMap(availableTextResources =>
                 getVariableDeclarations(connection)(testCase, resolvedEnvironment).flatMap(variableDeclarations =>
-                  connection.executeQuery(queryString, false, baseUri, contextSequence, availableDocuments, availableCollections, availableTextResources, testCase.environment.map(_.namespaces).getOrElse(List.empty), variableDeclarations, testCase.environment.map(_.decimalFormats).getOrElse(List.empty), testCase.modules, testCase.dependencies.filter(_.`type` == DependencyType.Feature).headOption.nonEmpty)
+                  connection.executeQuery(
+                    queryString, 
+                    false,
+                    baseUri,
+                    contextSequence,
+                    availableDocuments,
+                    availableCollections,
+                    availableTextResources,
+                    testCase.environment.map(_.namespaces).getOrElse(List.empty),
+                    variableDeclarations,
+                    testCase.environment.map(_.decimalFormats).getOrElse(List.empty),
+                    testCase.modules,
+                    testCase.dependencies.filter(_.`type` == DependencyType.Feature).headOption.nonEmpty
+                  )
                 )
               )
             )
@@ -449,7 +461,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
           case Some(selectExpr) =>
             `type` match {
-              case Type.EMPTY =>
+              case Type.EMPTY_SEQUENCE =>
               Right(Sequence.EMPTY_SEQUENCE)
 
               case _ =>
@@ -459,7 +471,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
       }
 
-    val initAccum : Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
+      val initAccum : Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
 
       testCase.environment
         .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))
@@ -1170,7 +1182,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
       // query result returned an empty sequence
       case Right(Success(expectedType)) if (actual.isEmpty) =>
-        if (expectedType == WildcardExistTypeDescription || expectedType.asInstanceOf[ExplicitExistTypeDescription].base == Type.EMPTY) {
+        if (expectedType == WildcardExistTypeDescription || expectedType.asInstanceOf[ExplicitExistTypeDescription].base == Type.EMPTY_SEQUENCE) {
           // OK, we expected empty
           PassResult(testSetName, testCaseName, compilationTime, executionTime)
         } else {

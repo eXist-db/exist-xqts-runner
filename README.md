@@ -12,16 +12,21 @@ This application executes a W3C XQTS against an embedded eXist-db server.
 To build from source you will need the following pre-requisites:
 
 1. Git Command Line tools.
-2. Java 8+
-3. SBT (Simple Build Tool) 1.5.5+
+2. Java 21
+3. SBT (Simple Build Tool) 1.10.11
+4. a Github personal access token (PAT) with public read access
 
-In the following steps, we assume that all of the above tools are available on your system path.
+In the following steps, we assume that git, java and sbt are available on your system path.
 
 The version of eXist-db that the XQTS driver is compiled for is set in `build.sbt`. If you wish to compile against a newer or custom version of eXist-db, you can modify this to the version of an eXist-db Maven/Ivy artifact which you have available to your system, e.g.:
 
 ```scala
-val existV = "5.3.0"
+val existV = "7.0.0-SNAPSHOT"
 ``` 
+
+If you set the version to a SNAPSHOT version you want to load from Github Maven Package repository you need to authenticate with the Github PAT.
+
+It can be provided via a credentials file in ~/.ivy2/.credentials or by setting the environment variable `GITHUB_TOKEN`.
 
 Once the pre-requisites are met, to build from source you can execute the following commands from your console/terminal:
 
@@ -58,10 +63,20 @@ Given the standalone application, you can execute it by running either:
 2. or, even by just executing the `exist-xqts-runner-assembly-1.0.0.jar` file directly, as we compile an executable header into the Jar file. e.g. (on Linux/Mac): `./exist-xqts-runner-assembly-1.0.0.jar`.
 
 
-## Publishing to Maven Central / Evolved Binary Snapshots
+## Publishing 
+
+Releases are published to  Maven Central
+Snaphots are published to Github Maven Package repository
+
 1. Run `sbt clean release`
 2. Answer the questions
 3. Login to https://oss.sonatype.org/ then Close, and Release the Staging Repository
+
+You can also publish to your local m2 repository which is useful for testing new builds within existdb's xqts-runner sub-project.
+
+```sh
+sbt publishM2
+```
 
 ## XQTS Results
 The results of executing the XQTS will be formatted as JUnit test output.

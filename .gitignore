@@ -1,5 +1,8 @@
 .idea/
+.bsp/
 *.iml
 target/
 work/
 /project/metals.sbt
+.DS_Store
+.tool-versions

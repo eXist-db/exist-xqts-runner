@@ -17,7 +17,7 @@
 
 package org.exist.xqts.runner
 
-import akka.actor.Actor
+import org.apache.pekko.actor.Actor
 import org.exist.xqts.runner.TestCaseRunnerActor.TestResult
 import org.exist.xqts.runner.XQTSParserActor.TestSetRef
 

@@ -20,7 +20,7 @@ package org.exist.xqts.runner
 import java.net.URI
 import java.nio.file.Path
 import java.util.regex.Pattern
-import akka.actor.Actor
+import org.apache.pekko.actor.Actor
 
 import javax.xml.namespace.QName
 import net.sf.saxon.value.AnyURIValue

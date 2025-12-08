@@ -19,7 +19,7 @@ package org.exist.xqts.runner
 
 import java.io.IOException
 import java.nio.file.{Files, Path}
-import akka.actor.Actor
+import org.apache.pekko.actor.Actor
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.syntax.either._

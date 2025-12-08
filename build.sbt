@@ -4,7 +4,7 @@ name := "exist-xqts-runner"
 
 organization := "org.exist-db"
 
-scalaVersion := "2.13.8"
+scalaVersion := "2.13.17"
 
 semanticdbEnabled := true
 
@@ -36,30 +36,35 @@ developers := List(
     name  = "Adam Retter",
     email = "adam@evolvedbinary.com",
     url   = url("https://www.evolvedbinary.com")
+  ),
+  Developer(
+    id    = "line0",
+    name  = "Juri Leino",
+    email = "juri@existsolutions.com",
+    url   = url("http://existsolutions.com")
   )
 )
 
 versionScheme := Some("semver-spec")
 
 libraryDependencies ++= {
-  val existV = "6.1.0"
+  val existV = "7.0.0-SNAPSHOT"
 
   Seq(
-    "com.typesafe.akka" %% "akka-actor" % "2.6.20",
-    "com.github.scopt" %% "scopt" % "4.0.1",
-    "org.typelevel" %% "cats-effect" % "3.4.5",
-    //"com.fasterxml" %	"aalto-xml" % "1.1.0-SNAPSHOT",
+    "org.apache.pekko" %% "pekko-actor" % "1.3.0",
+    "com.github.scopt" %% "scopt" % "4.1.0",
+    "org.typelevel" %% "cats-effect" % "3.6.3",
+    // "com.fasterxml" %	"aalto-xml" % "1.3.4",
     "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
-    "org.parboiled" %% "parboiled" % "2.4.1",
-    "org.clapper" %% "grizzled-slf4j" % "1.3.4" exclude("org.slf4j", "slf4j-api"),
-    "org.apache.ant" % "ant-junit" % "1.10.13",   // used for formatting junit style report
+    "org.parboiled" %% "parboiled" % "2.5.1",
+    "org.apache.ant" % "ant-junit" % "1.10.15",   // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
-    "org.exist-db" % "exist-core" % existV,
-    "org.xmlunit" % "xmlunit-core" % "2.9.1",
+    "org.exist-db" % "exist-core" % existV changing() exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
+    "org.xmlunit" % "xmlunit-core" % "2.11.0",
 
-    "org.slf4j" % "slf4j-api" % "2.0.6" % "runtime",
-    "org.apache.logging.log4j" % "log4j-slf4j2-impl" % "2.19.0" % "runtime"
+    "org.slf4j" % "slf4j-api" % "2.0.17",
+    "org.apache.logging.log4j" % "log4j-slf4j2-impl" % "2.25.2" % "runtime",
   )
 }
 
@@ -73,12 +78,13 @@ excludeDependencies ++= Seq(
 
 resolvers ++= Seq(
   Resolver.mavenLocal,
-  "eXist-db Releases" at "https://repo.evolvedbinary.com/repository/exist-db/",
-  "eXist-db Snapshots" at "https://repo.evolvedbinary.com/repository/exist-db-snapshots/",
-  "eXist-db Maven Repo" at "https://raw.github.com/eXist-db/mvn-repo/master/"
+  "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
+  "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
 )
 
-scalacOptions ++= Seq("-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused")
+javacOptions ++= Seq("-source", "21", "-target", "21")
+
+scalacOptions ++= Seq("-target:jvm-21", "-encoding", "utf-8", "-deprecation", "-feature", "-Ywarn-unused", "-Xlint")
 
 // Fancy up the Assembly JAR
 Compile / packageBin / packageOptions +=  {
@@ -91,6 +97,7 @@ Compile / packageBin / packageOptions +=  {
   val gitTag = s"git name-rev --tags --name-only $gitCommit".!!.trim
 
   val additional = Map(
+    "Multi-Release" -> "true",  /* Required by log4j2 on JDK 11 and newer */
     "Build-Timestamp" -> new SimpleDateFormat("yyyyMMddHHmmss").format(Calendar.getInstance.getTime),
     "Built-By" -> sys.props("user.name"),
     "Build-Tag" -> gitTag,
@@ -109,11 +116,12 @@ Compile / packageBin / packageOptions +=  {
     attributes.putValue(k, v)
   Package.JarManifest(manifest)
 }
-
 // assembly merge strategy for duplicate files from dependencies
 assembly / assemblyMergeStrategy := {
-  case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql")       => MergeStrategy.first
-  case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class")    => MergeStrategy.discard
+  case PathList("META-INF", "versions", "9" ,"OSGI-INF", "MANIFEST.MF") => MergeStrategy.discard
+  case PathList("META-INF", "versions", "9" ,"module-info.class") => MergeStrategy.discard
+  case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql") => MergeStrategy.first
+  case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class") => MergeStrategy.discard
   case x =>
     val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)
@@ -134,15 +142,19 @@ Compile / assembly / artifact := {
 addArtifact(Compile / assembly / artifact, assembly)
 
 // Publish to Maven Repo
-
 publishMavenStyle := true
 
-credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
+// Use GitHub Packages if GITHUB_TOKEN is set, otherwise use local connection in credentials file
+credentials += {
+  sys.env.get("GITHUB_TOKEN") match {
+    case Some(token) => Credentials("GitHub Package Registry", "maven.pkg.github.com", "_", token)
+    case _ => Credentials(Path.userHome / ".ivy2" / ".credentials")
+  }
+}
 
 publishTo := {
-  val eb = "https://repo.evolvedbinary.com/"
   if (isSnapshot.value)
-    Some("snapshots" at eb + "repository/exist-db-snapshots/")
+    Some("snapshots" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
   else
     Some(Opts.resolver.sonatypeStaging)
 }

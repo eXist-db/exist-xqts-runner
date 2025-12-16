@@ -88,7 +88,6 @@ object XQTSRunner {
     HigherOrderFunctions,
     ModuleImport,
     Serialization,
-    StaticTyping,
     TypedData,
     XPath_1_0_Compatibility,
     TransformXSLT,

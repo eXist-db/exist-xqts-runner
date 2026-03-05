@@ -212,7 +212,7 @@ object XQTSParserActor {
    */
   object Spec extends Enumeration {
     type Spec = Value
-    val XP10, XP20, XP30, XP31, XQ10, XQ30, XQ31, XT30 = Value
+    val XP10, XP20, XP30, XP31, XP40, XQ10, XQ30, XQ31, XQ40, XT30 = Value
 
     /**
      * Returns all specs which implement at
@@ -224,20 +224,24 @@ object XQTSParserActor {
     def atLeast(spec: Spec): Set[Spec] = {
       spec match {
         case XP10 =>
-          Set(XP10, XP20, XP30, XP31)
+          Set(XP10, XP20, XP30, XP31, XP40)
         case XP20 =>
-          Set(XP20, XP30, XP31)
+          Set(XP20, XP30, XP31, XP40)
         case XP30 =>
-          Set(XP30, XP31)
+          Set(XP30, XP31, XP40)
         case XP31 =>
-          Set(XP31)
+          Set(XP31, XP40)
+        case XP40 =>
+          Set(XP40)
 
         case XQ10 =>
-          Set(XQ10, XQ30, XQ31)
+          Set(XQ10, XQ30, XQ31, XQ40)
         case XQ30 =>
-          Set(XQ30, XQ31)
+          Set(XQ30, XQ31, XQ40)
         case XQ31 =>
-          Set(XQ31)
+          Set(XQ31, XQ40)
+        case XQ40 =>
+          Set(XQ40)
 
         case XT30 =>
           Set(XT30)
@@ -282,6 +286,7 @@ object XQTSParserActor {
     val XPath_1_0_Compatibility = FeatureVal("xpath-1.0-compatibility")
     val TransformXSLT = FeatureVal("fn-transform-XSLT")
     val TransformXSLT_30 = FeatureVal("fn-transform-XSLT30")
+    val XQUpdate = FeatureVal("XQUpdate")
   }
 
   /**

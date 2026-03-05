@@ -513,7 +513,11 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
               case None =>
                 // No verification query — update-only test
                 testCase.result match {
+                  case Some(expectedError: Error) =>
+                    // Expected an error but the update succeeded — failure
+                    FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, failureMessage(connection)(expectedError, new org.exist.xquery.value.EmptySequence()))
                   case Some(_) =>
+                    // Expected a non-error result with no verification query — this is a test authoring issue
                     FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, s"Expected a result but no verification query defined")
                   case None =>
                     PassResult(testSetName, testCase.name, updateCompTime, updateExecTime)

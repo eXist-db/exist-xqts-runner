@@ -91,7 +91,8 @@ object XQTSRunner {
     TypedData,
     XPath_1_0_Compatibility,
     TransformXSLT,
-    TransformXSLT_30
+    TransformXSLT_30,
+    XQUpdate
   )
 
   /**
@@ -102,9 +103,11 @@ object XQTSRunner {
     XP20,
     XP30,
     XP31,
+    XP40,
     XQ10,
     XQ30,
     XQ31,
+    XQ40,
     XT30
   )
 
@@ -154,7 +157,7 @@ object XQTSRunner {
 
       opt[XQTSVersion]('x', "xqts-version")
         .text("The version of XQTS to run. These are configured in the application.conf file. We ship with 'W3C' (the final W3C XQTS 3.1) and 'HEAD' (the GitHub community maintained XQTS) pre-configured")
-        .validate(x => if (x == XQTS_3_1 || x == XQTS_HEAD) success else failure("only version 3.1, or HEAD is currently supported"))
+        .validate(x => if (x == XQTS_3_1 || x == XQTS_HEAD || x == XQTS_QT4) success else failure("only version 3.1, HEAD, or QT4 is currently supported"))
         .action((x, c) => c.copy(xqtsVersion = x))
 
       opt[Path]('l', "local-dir")
@@ -361,9 +364,9 @@ private class XQTSRunner {
   @throws[IllegalArgumentException]
   private def getParserActorClass(xqtsVersion: XQTSVersion): Class[_ <: XQTSParserActor] = {
     xqtsVersion match {
-      case XQTS_3_1 | XQTS_HEAD =>
+      case XQTS_3_1 | XQTS_HEAD | XQTS_QT4 =>
         classOf[XQTS3CatalogParserActor]
-      case _ => throw new IllegalArgumentException(s"We only support XQTS version 3.1 or HEAD, but version: ${XQTSVersion.label(xqtsVersion)} was requested")
+      case _ => throw new IllegalArgumentException(s"We only support XQTS version 3.1, HEAD, or QT4, but version: ${XQTSVersion.label(xqtsVersion)} was requested")
     }
   }
 

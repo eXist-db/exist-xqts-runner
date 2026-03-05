@@ -115,11 +115,47 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
           }
 
         case None =>
-          // error - invalid test case
-          //TODO(AR) detect this in catalog parser and inform the manager there!
-          //TODO(AR) replace these two messages with InvalidTestCase() - and let the manager deal with it
-          manager ! RunningTestCase(testSetRef, testCase.name)
-          manager ! RanTestCase(testSetRef, ErrorResult(testSetRef.name, testCase.name, -1, -1, new IllegalStateException("Invalid Test Case: No test defined for test-case")))
+          // No main test query - check if this is an update-only test case
+          if (testCase.updateTests.nonEmpty) {
+              // Update-only test with inline queries - handle like a normal inline test
+              // Check if any update test uses external files
+              val externalQueryFiles = testCase.updateTests.collect { case Right(path) => path }
+              externalQueryFiles.foreach(queryPath => {
+                commonResourceCacheActor ! GetResource(queryPath)
+                awaitingQueryStr = merge1(awaitingQueryStr)((testSetRef.name, testCase.name), queryPath)
+              })
+
+              testCase.environment match {
+                case Some(environment) if (environment.schemas.filter(_.file.nonEmpty).nonEmpty || environment.sources.nonEmpty || environment.resources.nonEmpty || environment.collections.flatMap(_.sources).nonEmpty) =>
+                  val requiredSchemas = environment.schemas.filter(_.file.nonEmpty)
+                  requiredSchemas.map(schema => commonResourceCacheActor ! GetResource(schema.file.get))
+                  awaitingSchemas = merge(awaitingSchemas)((testSetRef.name, testCase.name), requiredSchemas.map(schema => () => schema.file.get))
+
+                  environment.sources.map(source => commonResourceCacheActor ! GetResource(source.file))
+                  awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.sources.map(source => () => source.file))
+                  environment.resources.map(resource => commonResourceCacheActor ! GetResource(resource.file))
+                  awaitingResources = merge(awaitingResources)((testSetRef.name, testCase.name), environment.resources.map(resource => () => resource.file))
+                  environment.collections.map(_.sources.map(source => commonResourceCacheActor ! GetResource(source.file)))
+                  awaitingSources = merge(awaitingSources)((testSetRef.name, testCase.name), environment.collections.flatMap(_.sources).map(source => () => source.file))
+
+                  pendingTestCases = addIfNotPresent(pendingTestCases)(rtc)
+
+                case _ =>
+                  if (externalQueryFiles.nonEmpty) {
+                    // we are awaiting external query files
+                    pendingTestCases = addIfNotPresent(pendingTestCases)(rtc)
+                  } else {
+                    // we have everything we need - schedule the test case
+                    self ! RunTestCaseInternal(rtc, ResolvedEnvironment())
+                  }
+              }
+          } else {
+              // error - truly invalid test case (no test and no updateTests)
+              //TODO(AR) detect this in catalog parser and inform the manager there!
+              //TODO(AR) replace these two messages with InvalidTestCase() - and let the manager deal with it
+              manager ! RunningTestCase(testSetRef, testCase.name)
+              manager ! RanTestCase(testSetRef, ErrorResult(testSetRef.name, testCase.name, -1, -1, new IllegalStateException("Invalid Test Case: No test defined for test-case")))
+          }
       }
 
 
@@ -217,6 +253,18 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    */
   @throws(classOf[OutOfMemoryError])
   private def runTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
+    if (testCase.updateTests.nonEmpty) {
+      runUpdateTestCase(connection, testSetName, testCase, resolvedEnvironment)
+    } else {
+      runNonUpdateTestCase(connection, testSetName, testCase, resolvedEnvironment)
+    }
+  }
+
+  /**
+   * Run a non-update (standard) XQTS test-case.
+   */
+  @throws(classOf[OutOfMemoryError])
+  private def runNonUpdateTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
     testCase.test match {
       case Some(test) =>
 
@@ -297,6 +345,181 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
       case None =>
         ErrorResult(testSetName, testCase.name, -1, -1, new IllegalStateException("No test defined for test-case"))
+    }
+  }
+
+  /**
+   * Run an XQuery Update XQTS test-case.
+   *
+   * Update tests have two phases:
+   * 1. Execute the update query (with update="true") which modifies the source document(s)
+   * 2. Execute the verification query against the modified document(s) and check the result
+   */
+  @throws(classOf[OutOfMemoryError])
+  private def runUpdateTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
+    val baseUri = testCase.environment
+      .flatMap(_.staticBaseUri.orElse(Some(testCase.file.toUri.toString)))
+      .filterNot(_ == "#UNDEFINED")
+
+    // Parse source documents once, so the same in-memory document objects are shared between update and verification queries
+    val parsedSources: Either[ExistServerException, List[(Source, org.exist.dom.memtree.DocumentImpl)]] = {
+      val initAccum: Either[ExistServerException, List[(Source, org.exist.dom.memtree.DocumentImpl)]] = Right(List.empty)
+      testCase.environment
+        .map(_.sources)
+        .getOrElse(List.empty)
+        .foldLeft(initAccum) { case (accum, source) =>
+          accum.flatMap { results =>
+            resolveSource(resolvedEnvironment, source)
+              .flatMap(rs => SAXParser.parseXml(rs.data).map(doc => {
+                doc.setDocumentURI(rs.path.toUri.toString)
+                (source, doc) +: results
+              }))
+          }
+        }
+    }
+
+    parsedSources match {
+      case Left(error) =>
+        ErrorResult(testSetName, testCase.name, error.compilationTime, error.executionTime, error)
+
+      case Right(sourceDocs) =>
+        // Build variable declarations from parsed source docs (for external variables like $input-context)
+        val externalVarDocs: List[(String, Sequence)] = sourceDocs.filter { case (source, _) =>
+          source.role.exists(_.isInstanceOf[ExternalVariableRole])
+        }.map { case (source, doc) =>
+          (source.role.get.asInstanceOf[ExternalVariableRole].name, doc.asInstanceOf[Sequence])
+        }
+
+        // Build context sequence from source with role="." (context item)
+        // For update tests, also fall back to the first mutable source as context
+        val contextDoc: Option[Sequence] = sourceDocs.find { case (source, _) =>
+          source.role.exists(Role.isContextItem)
+        }.map { case (_, doc) => doc.asInstanceOf[Sequence] }
+          .orElse(sourceDocs.find { case (source, _) => source.mutable }.map { case (_, doc) => doc.asInstanceOf[Sequence] })
+
+        val hasUpdateFeature = testCase.dependencies.exists(_.`type` == DependencyType.Feature)
+
+        // Phase 1: Execute all update queries sequentially.
+        // Each step shares the same in-memory documents, so mutations accumulate.
+        val updateStepsResult: Either[TestResult, (Long, Long)] = {
+          var totalCompilationTime: Long = 0
+          var totalExecutionTime: Long = 0
+          var earlyResult: Option[TestResult] = None
+
+          val iter = testCase.updateTests.iterator
+          while (iter.hasNext && earlyResult.isEmpty) {
+            val step = iter.next()
+            val queryString: String = step match {
+              case Left(query) => query
+              case Right(_) => resolvedEnvironment.resolvedQuery.get
+            }
+
+            connection.executeQuery(
+              queryString, false, baseUri, contextDoc,
+              Seq.empty, Seq.empty, Seq.empty,
+              testCase.environment.map(_.namespaces).getOrElse(List.empty),
+              externalVarDocs,
+              testCase.environment.map(_.decimalFormats).getOrElse(List.empty),
+              testCase.modules, false
+            ) match {
+              case Left(ex) =>
+                earlyResult = Some(ErrorResult(testSetName, testCase.name, ex.compilationTime, ex.executionTime, ex))
+
+              case Right(Result(result, ct, et)) =>
+                totalCompilationTime += ct
+                totalExecutionTime += et
+                result match {
+                  case Left(queryError) =>
+                    // An update step raised an error — check if expected
+                    earlyResult = Some(testCase.result match {
+                      case Some(Error(expected)) if expected == queryError.errorCode =>
+                        PassResult(testSetName, testCase.name, totalCompilationTime, totalExecutionTime)
+                      case Some(anyOf@AnyOf(_)) if anyOfContainsError(anyOf, queryError.errorCode) =>
+                        PassResult(testSetName, testCase.name, totalCompilationTime, totalExecutionTime)
+                      case Some(expectedResult) =>
+                        FailureResult(testSetName, testCase.name, totalCompilationTime, totalExecutionTime, failureMessage(expectedResult, queryError))
+                      case None =>
+                        ErrorResult(testSetName, testCase.name, totalCompilationTime, totalExecutionTime, new IllegalStateException("No defined expected result"))
+                    })
+                  case Right(_) => // success — continue to next step
+                }
+            }
+          }
+
+          earlyResult match {
+            case Some(result) => Left(result)
+            case None => Right((totalCompilationTime, totalExecutionTime))
+          }
+        }
+
+        updateStepsResult match {
+          case Left(terminalResult) => terminalResult
+
+          case Right((updateCompTime, updateExecTime)) =>
+            // Phase 2: Execute verification query
+            testCase.test match {
+              case Some(verifyTest) =>
+                val verifyQueryString: String = verifyTest match {
+                  case Left(query) => query
+                  case Right(_) => resolvedEnvironment.resolvedQuery.get
+                }
+
+                // For verification, use the first mutable source as context item (now modified by updates)
+                val verifyContextDoc: Option[Sequence] = sourceDocs.find { case (source, _) =>
+                  source.mutable
+                }.map { case (_, doc) => doc.asInstanceOf[Sequence] }
+                  .orElse(contextDoc)
+
+                connection.executeQuery(
+                  verifyQueryString, false, baseUri, verifyContextDoc,
+                  Seq.empty, Seq.empty, Seq.empty,
+                  testCase.environment.map(_.namespaces).getOrElse(List.empty),
+                  externalVarDocs,
+                  testCase.environment.map(_.decimalFormats).getOrElse(List.empty),
+                  testCase.modules, false
+                ) match {
+                  case Left(ex) =>
+                    ErrorResult(testSetName, testCase.name, ex.compilationTime, ex.executionTime, ex)
+
+                  case Right(Result(verifyResultValue, compilationTime, executionTime)) =>
+                    verifyResultValue match {
+                      case Left(queryError) =>
+                        testCase.result match {
+                          case Some(Error(expected)) if expected == queryError.errorCode =>
+                            PassResult(testSetName, testCase.name, compilationTime, executionTime)
+                          case Some(anyOf@AnyOf(_)) if anyOfContainsError(anyOf, queryError.errorCode) =>
+                            PassResult(testSetName, testCase.name, compilationTime, executionTime)
+                          case Some(expectedResult) =>
+                            FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(expectedResult, queryError))
+                          case None =>
+                            ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("No defined expected result"))
+                        }
+
+                      case Right(null) =>
+                        ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("eXist-db returned null from the verification query"))
+
+                      case Right(queryResult) =>
+                        testCase.result match {
+                          case Some(expectedError: Error) =>
+                            FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(connection)(expectedError, queryResult))
+                          case Some(expectedResult) =>
+                            processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime)(expectedResult, queryResult)
+                          case None =>
+                            ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("No defined expected result"))
+                        }
+                    }
+                }
+
+              case None =>
+                // No verification query — update-only test
+                testCase.result match {
+                  case Some(_) =>
+                    FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, s"Expected a result but no verification query defined")
+                  case None =>
+                    PassResult(testSetName, testCase.name, updateCompTime, updateExecTime)
+                }
+            }
+        }
     }
   }
 

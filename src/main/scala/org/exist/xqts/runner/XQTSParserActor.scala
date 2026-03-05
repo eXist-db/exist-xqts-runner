@@ -81,7 +81,7 @@ object XQTSParserActor {
 
   case class Schema(uri: Option[AnyURIValue], file: Option[Path], xsdVersion: Float = 1.0f, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
 
-  case class Source(role: Option[Role], file: Path, uri: Option[String], validation: Option[Validation.Validation] = None, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
+  case class Source(role: Option[Role], file: Path, uri: Option[String], validation: Option[Validation.Validation] = None, mutable: Boolean = false, declared: Boolean = false, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
 
   case class Resource(file: Path, uri: String, mediaType: Option[String] = None, encoding: Option[String], description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
 
@@ -113,7 +113,7 @@ object XQTSParserActor {
 
   case class Dependency(`type`: DependencyType, value: String, satisfied: Boolean)
 
-  case class TestCase(file: Path, name: TestCaseName, covers: String, description: Option[String] = None, created: Option[Created] = None, modifications: Seq[Modified] = Seq.empty, environment: Option[Environment] = None, modules: Seq[Module] = Seq.empty, dependencies: Seq[Dependency] = Seq.empty, test: Option[Either[String, Path]] = None, result: Option[Result] = None)
+  case class TestCase(file: Path, name: TestCaseName, covers: String, description: Option[String] = None, created: Option[Created] = None, modifications: Seq[Modified] = Seq.empty, environment: Option[Environment] = None, modules: Seq[Module] = Seq.empty, dependencies: Seq[Dependency] = Seq.empty, test: Option[Either[String, Path]] = None, updateTests: Seq[Either[String, Path]] = Seq.empty, result: Option[Result] = None)
 
   sealed trait Result
 

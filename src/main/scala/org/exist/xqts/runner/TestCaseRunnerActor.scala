@@ -1193,8 +1193,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
 
       case Right(expectedXmlStr) =>
+        // Trim leading/trailing whitespace from expected XML — test catalog CDATA often
+        // has formatting newlines (e.g., after </result> before ]]>) that would become
+        // spurious text nodes inside the ignorable-wrapper, causing child count mismatches.
+        val trimmedExpectedXmlStr = expectedXmlStr.trim
 
-        SAXParser.parseXml(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expectedXmlStr</$IGNORABLE_WRAPPER_ELEM_NAME>".getBytes(UTF_8)) match {
+        SAXParser.parseXml(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$trimmedExpectedXmlStr</$IGNORABLE_WRAPPER_ELEM_NAME>".getBytes(UTF_8)) match {
           case Left(e: ExistServerException) =>
             ErrorResult(testSetName, testCaseName, compilationTime, executionTime, e)
 

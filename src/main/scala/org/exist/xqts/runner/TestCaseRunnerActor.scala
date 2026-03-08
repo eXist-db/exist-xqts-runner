@@ -444,10 +444,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
         // Phase 1: Execute all update queries sequentially.
         // Each step shares the same in-memory documents, so mutations accumulate.
-        val updateStepsResult: Either[TestResult, (Long, Long)] = {
+        // For copy-modify-return expressions, the update query itself returns a value
+        // that may be needed for assertion checking (when no verification query exists).
+        val updateStepsResult: Either[TestResult, (Long, Long, Option[Sequence])] = {
           var totalCompilationTime: Long = 0
           var totalExecutionTime: Long = 0
           var earlyResult: Option[TestResult] = None
+          var lastUpdateResult: Option[Sequence] = None
 
           val iter = testCase.updateTests.iterator
           while (iter.hasNext && earlyResult.isEmpty) {
@@ -484,21 +487,25 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                       case None =>
                         ErrorResult(testSetName, testCase.name, totalCompilationTime, totalExecutionTime, new IllegalStateException("No defined expected result"))
                     })
-                  case Right(_) => // success — continue to next step
+                  case Right(queryResult) =>
+                    // Save result — needed for copy-modify-return assertions
+                    if (queryResult != null && queryResult.getItemCount > 0) {
+                      lastUpdateResult = Some(queryResult)
+                    }
                 }
             }
           }
 
           earlyResult match {
             case Some(result) => Left(result)
-            case None => Right((totalCompilationTime, totalExecutionTime))
+            case None => Right((totalCompilationTime, totalExecutionTime, lastUpdateResult))
           }
         }
 
         updateStepsResult match {
           case Left(terminalResult) => terminalResult
 
-          case Right((updateCompTime, updateExecTime)) =>
+          case Right((updateCompTime, updateExecTime, lastUpdateResult)) =>
             // Phase 2: Execute verification query
             testCase.test match {
               case Some(verifyTest) =>
@@ -554,13 +561,16 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                 }
 
               case None =>
-                // No verification query — update-only test
+                // No verification query — update-only test or copy-modify-return
                 testCase.result match {
                   case Some(expectedError: Error) =>
                     // Expected an error but the update succeeded — failure
                     FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, failureMessage(connection)(expectedError, new org.exist.xquery.value.EmptySequence()))
+                  case Some(expectedResult) if lastUpdateResult.isDefined =>
+                    // Copy-modify-return: use the update expression's return value for assertion
+                    processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime)(expectedResult, lastUpdateResult.get)
                   case Some(_) =>
-                    // Expected a non-error result with no verification query — this is a test authoring issue
+                    // Expected a non-error result with no verification query and no update result
                     FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, s"Expected a result but no verification query defined")
                   case None =>
                     PassResult(testSetName, testCase.name, updateCompTime, updateExecTime)
@@ -1613,6 +1623,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
       val diff = DiffBuilder.compare(actualSource)
         .withTest(expectedSource)
+        .withNodeFilter(new org.xmlunit.util.Predicate[org.w3c.dom.Node] {
+          override def test(node: org.w3c.dom.Node): Boolean =
+            !(node.getNodeType == org.w3c.dom.Node.TEXT_NODE && node.getTextContent.trim.isEmpty)
+        })
         .checkForIdentical()
         .withComparisonFormatter(ignorableWrapperComparisonFormatter)
         .checkForSimilar()

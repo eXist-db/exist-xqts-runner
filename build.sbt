@@ -78,11 +78,16 @@ excludeDependencies ++= Seq(
   ExclusionRule("org.hamcrest", "hamcrest-library")
 )
 
-resolvers ++= Seq(
-  Resolver.mavenLocal,
-  "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
-  "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
-)
+resolvers ++= {
+  val customMavenLocal = sys.props.get("maven.repo.local").map { path =>
+    "Custom Local Maven" at new java.io.File(path).toURI.toString
+  }
+  customMavenLocal.toSeq ++ Seq(
+    Resolver.mavenLocal,
+    "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
+    "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
+  )
+}
 
 javacOptions ++= Seq("-source", "21", "-target", "21")
 

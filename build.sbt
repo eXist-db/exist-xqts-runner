@@ -1,5 +1,11 @@
 import ReleaseTransformations._
 
+// When using a custom local Maven repo (-Dmaven.repo.local), disable coursier
+// to prevent it from resolving SNAPSHOT artifacts from ~/.m2/repository instead
+// of the specified directory. Coursier has a hardcoded ~/.m2/repository fallback
+// that cannot be overridden via sbt resolver settings.
+ThisBuild / useCoursier := !sys.props.contains("maven.repo.local")
+
 name := "exist-xqts-runner"
 
 organization := "org.exist-db"
@@ -79,11 +85,19 @@ excludeDependencies ++= Seq(
   ExclusionRule("org.hamcrest", "hamcrest-library")
 )
 
-resolvers ++= Seq(
-  Resolver.mavenLocal,
-  "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
-  "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
-)
+resolvers ++= {
+  // Support per-worktree Maven repos: pass -Dmaven.repo.local=/path/to/.m2-repo
+  // Uses MavenCache (file-based) instead of "at" (URL-based) for proper local resolution.
+  // When a custom repo is set, skip Resolver.mavenLocal to avoid SNAPSHOT conflicts
+  // across concurrent builds on the same machine.
+  val customMavenLocal = sys.props.get("maven.repo.local").map { path =>
+    MavenCache("Custom Local Maven", new java.io.File(path))
+  }
+  customMavenLocal.toSeq ++ (if (customMavenLocal.isDefined) Seq.empty else Seq(Resolver.mavenLocal)) ++ Seq(
+    "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
+    "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
+  )
+}
 
 javacOptions ++= Seq("-source", "21", "-target", "21")
 

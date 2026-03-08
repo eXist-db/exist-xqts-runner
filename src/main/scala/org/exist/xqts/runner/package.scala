@@ -35,6 +35,7 @@ package object runner {
 
   object XQTS_HEAD extends XQTSVersion
   object XQTS_QT4 extends XQTSVersion
+  object XQTS_FTTS_1_0 extends XQTSVersion
 
   object XQTSVersion {
 
@@ -52,6 +53,7 @@ package object runner {
         case "3.1" | "31" => XQTS_3_1
         case "head" | "HEAD" => XQTS_HEAD
         case "qt4" | "QT4" => XQTS_QT4
+        case "ftts" | "FTTS" | "XQFTTS" | "xqftts" => XQTS_FTTS_1_0
         case _ => throw new IllegalArgumentException(s"No such XQTS version: $s")
       }
     }
@@ -70,6 +72,7 @@ package object runner {
         case 31 => XQTS_3_1
         case -1 => XQTS_HEAD
         case -2 => XQTS_QT4
+        case -3 => XQTS_FTTS_1_0
         case _ => throw new IllegalArgumentException(s"No such XQTS version: $i")
       }
     }
@@ -88,6 +91,7 @@ package object runner {
         case 3.1f => XQTS_3_1
         case -1 => XQTS_HEAD
         case -2 => XQTS_QT4
+        case -3 => XQTS_FTTS_1_0
         case _ => throw new IllegalArgumentException(s"No such XQTS version: $f")
       }
     }
@@ -110,6 +114,8 @@ package object runner {
           "XQTS_HEAD"
         case XQTS_QT4 =>
           "XQTS_QT4"
+        case XQTS_FTTS_1_0 =>
+          "XQTS_FTTS_1_0"
       }
     }
 
@@ -131,6 +137,8 @@ package object runner {
           "HEAD"
         case XQTS_QT4 =>
           "QT4"
+        case XQTS_FTTS_1_0 =>
+          "FTTS"
       }
     }
   }

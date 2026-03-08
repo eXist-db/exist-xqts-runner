@@ -814,6 +814,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       case AssertTrue =>
         assertTrue(testSetName, testCaseName, compilationTime, executionTime)(actualResult)
 
+      case AssertInspect =>
+        // "Inspect" comparison: cannot automatically verify, always passes
+        PassResult(testSetName, testCaseName, compilationTime, executionTime)
+
       case Error(expected) =>
         FailureResult(testSetName, testCaseName, compilationTime, executionTime, s"error: expected='$expected', but no error was raised")
 

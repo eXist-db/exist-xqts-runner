@@ -157,7 +157,7 @@ object XQTSRunner {
 
       opt[XQTSVersion]('x', "xqts-version")
         .text("The version of XQTS to run. These are configured in the application.conf file. We ship with 'W3C' (the final W3C XQTS 3.1) and 'HEAD' (the GitHub community maintained XQTS) pre-configured")
-        .validate(x => if (x == XQTS_3_1 || x == XQTS_HEAD || x == XQTS_QT4) success else failure("only version 3.1, HEAD, or QT4 is currently supported"))
+        .validate(x => if (x == XQTS_3_1 || x == XQTS_HEAD || x == XQTS_QT4 || x == XQTS_FTTS_1_0) success else failure("only version 3.1, HEAD, QT4, or FTTS is currently supported"))
         .action((x, c) => c.copy(xqtsVersion = x))
 
       opt[Path]('l', "local-dir")
@@ -366,7 +366,9 @@ private class XQTSRunner {
     xqtsVersion match {
       case XQTS_3_1 | XQTS_HEAD | XQTS_QT4 =>
         classOf[XQTS3CatalogParserActor]
-      case _ => throw new IllegalArgumentException(s"We only support XQTS version 3.1, HEAD, or QT4, but version: ${XQTSVersion.label(xqtsVersion)} was requested")
+      case XQTS_FTTS_1_0 =>
+        classOf[xqftts.XQFTTSCatalogParserActor]
+      case _ => throw new IllegalArgumentException(s"We only support XQTS version 3.1, HEAD, QT4, or FTTS, but version: ${XQTSVersion.label(xqtsVersion)} was requested")
     }
   }
 

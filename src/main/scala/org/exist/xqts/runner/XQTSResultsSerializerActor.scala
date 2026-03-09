@@ -22,25 +22,28 @@ import org.exist.xqts.runner.TestCaseRunnerActor.TestResult
 import org.exist.xqts.runner.XQTSParserActor.TestSetRef
 
 /**
-  * An Actor that serializes the
-  * results of executing the tests
-  * within an XQTS.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * An Actor that serializes the
+ * results of executing the tests
+ * within an XQTS.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 trait XQTSResultsSerializerActor extends Actor {
 }
 
 /**
-  * Objects and Classes that are used for serializing the
-  * an results of executing the tests
-  * within an XQTS.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Objects and Classes that are used for serializing the
+ * an results of executing the tests
+ * within an XQTS.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 object XQTSResultsSerializerActor {
   case class TestSetResults(testSetRef: TestSetRef, results: Seq[TestResult])
+
   case class SerializedTestSetResults(testSetRef: TestSetRef)
+
   case object FinalizeSerialization
+
   case object FinishedSerialization
 }

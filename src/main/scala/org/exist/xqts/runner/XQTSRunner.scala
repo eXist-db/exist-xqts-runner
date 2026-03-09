@@ -42,34 +42,34 @@ import scala.language.postfixOps
 import scala.util.Try
 
 /**
-  * This is the Entry Point to the command line XQTS Runner application.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * This is the Entry Point to the command line XQTS Runner application.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 object XQTSRunner {
 
   /**
-    * Container for command line options.
-    */
+   * Container for command line options.
+   */
   private case class CmdConfig(
-      xqtsVersion: XQTSVersion = XQTS_3_1,
-      localDir: Option[Path] = None,
-      enableFeatures : Seq[Feature] = Seq.empty,
-      disableFeatures : Seq[Feature] = Seq.empty,
-      enableSpecs: Seq[Spec] = Seq.empty,
-      disableSpecs: Seq[Spec] = Seq.empty,
-      enableXmlVersions: Seq[XmlVersion] = Seq.empty,
-      disableXmlVersions: Seq[XmlVersion] = Seq.empty,
-      enableXsdVersions: Seq[XsdVersion] = Seq.empty,
-      disableXsdVersions: Seq[XsdVersion] = Seq.empty,
-      testSetPattern: Option[Pattern] = None,
-      testSets: Seq[String] = Seq.empty,
-      testCasePattern: Option[Pattern] = None,
-      testCases: Seq[String] = Seq.empty,
-      excludeTestSets: Seq[String] = Seq.empty,
-      excludeTestCases: Seq[String] = Seq.empty,
-      outputDir: Option[Path] = None
-  )
+                                xqtsVersion: XQTSVersion = XQTS_3_1,
+                                localDir: Option[Path] = None,
+                                enableFeatures: Seq[Feature] = Seq.empty,
+                                disableFeatures: Seq[Feature] = Seq.empty,
+                                enableSpecs: Seq[Spec] = Seq.empty,
+                                disableSpecs: Seq[Spec] = Seq.empty,
+                                enableXmlVersions: Seq[XmlVersion] = Seq.empty,
+                                disableXmlVersions: Seq[XmlVersion] = Seq.empty,
+                                enableXsdVersions: Seq[XsdVersion] = Seq.empty,
+                                disableXsdVersions: Seq[XsdVersion] = Seq.empty,
+                                testSetPattern: Option[Pattern] = None,
+                                testSets: Seq[String] = Seq.empty,
+                                testCasePattern: Option[Pattern] = None,
+                                testCases: Seq[String] = Seq.empty,
+                                excludeTestSets: Seq[String] = Seq.empty,
+                                excludeTestCases: Seq[String] = Seq.empty,
+                                outputDir: Option[Path] = None
+                              )
 
   /*
     Exit codes of the application.
@@ -80,8 +80,8 @@ object XQTSRunner {
   private val EXIT_CODE_EXIST_START_FAILED = 3
 
   /**
-    * XQTS Features which are enabled by default.
-    */
+   * XQTS Features which are enabled by default.
+   */
   private val DEFAULT_FEATURES = Seq(
     CollectionStability,
     DirectoryAsCollectionUri,
@@ -95,8 +95,8 @@ object XQTSRunner {
   )
 
   /**
-    * XQTS Specs which are enabled by default.
-    */
+   * XQTS Specs which are enabled by default.
+   */
   private val DEFAULT_SPECS = Seq(
     XP10,
     XP20,
@@ -109,8 +109,8 @@ object XQTSRunner {
   )
 
   /**
-    * XQTS XML Versions which are enabled by default.
-    */
+   * XQTS XML Versions which are enabled by default.
+   */
   private val DEFAULT_XML_VERSIONS = Seq(
     XML10,
     XML10_4thOrEarlier,
@@ -119,8 +119,8 @@ object XQTSRunner {
   )
 
   /**
-    * XQTS XSD Versions which are enabled by default.
-    */
+   * XQTS XSD Versions which are enabled by default.
+   */
   private val DEFAULT_XSD_VERSIONS = Seq.empty
 
   // Converters used for parsing the command line arguments.
@@ -131,15 +131,23 @@ object XQTSRunner {
   private implicit val specRead: scopt.Read[Spec] = scopt.Read.reads(Spec.withName(_))
   private implicit val xmlVersionRead: scopt.Read[XmlVersion] = scopt.Read.reads(XmlVersion.withName(_))
   private implicit val xsdVersionRead: scopt.Read[XsdVersion] = scopt.Read.reads(XsdVersion.withName(_))
-  private def fileExists(f: Path) : Either[String, Unit] = if(Files.exists(f)) { Right(()) } else Left(s"${f.toAbsolutePath} does not exist")
-  private def isDirOrNotExists(f: Path) : Either[String, Unit] = if(Files.isDirectory(f) || !Files.exists(f)) { Right(()) } else { Left(s"${f.toAbsolutePath} is not a writable directory")}
+
+  private def fileExists(f: Path): Either[String, Unit] = if (Files.exists(f)) {
+    Right(())
+  } else Left(s"${f.toAbsolutePath} does not exist")
+
+  private def isDirOrNotExists(f: Path): Either[String, Unit] = if (Files.isDirectory(f) || !Files.exists(f)) {
+    Right(())
+  } else {
+    Left(s"${f.toAbsolutePath} is not a writable directory")
+  }
 
 
   /**
-    * MAIN
-    *
-    * @param args the command line arguments
-    */
+   * MAIN
+   *
+   * @param args the command line arguments
+   */
   def main(args: Array[String]): Unit = {
     val parser = new scopt.OptionParser[CmdConfig]("xqtsrunner") {
       head("xqtsrunner", "1.0")
@@ -150,42 +158,42 @@ object XQTSRunner {
         .action((x, c) => c.copy(xqtsVersion = x))
 
       opt[Path]('l', "local-dir")
-        .text ("A directory where downloaded copies of XQTS are cached. If not provided then a directory 'work' within the current working directory is assumed")
+        .text("A directory where downloaded copies of XQTS are cached. If not provided then a directory 'work' within the current working directory is assumed")
         .validate(fileExists)
         .action((x, c) => c.copy(localDir = Some(x)))
 
       opt[Pattern]("test-set-pattern").abbr("tsptn")
         .text("A regular expression that matches one or more test set names to run. The default is to run all of them")
-        .action((x,c) => c.copy(testSetPattern = Some(x)))
+        .action((x, c) => c.copy(testSetPattern = Some(x)))
 
       opt[Seq[String]]("test-set").abbr("ts")
-          .valueName("<test-set-1>,<test-set-2>...")
-          .text("The name of one or more test sets to run. The default is to run all of them")
-          .action((x,c) => c.copy(testSets = x))
+        .valueName("<test-set-1>,<test-set-2>...")
+        .text("The name of one or more test sets to run. The default is to run all of them")
+        .action((x, c) => c.copy(testSets = x))
 
       opt[Pattern]("test-case-pattern").abbr("tcptn")
         .text("A regular expression that matches one or more test case names to run. The default is to run all of them")
-        .action((x,c) => c.copy(testCasePattern = Some(x)))
+        .action((x, c) => c.copy(testCasePattern = Some(x)))
 
       opt[Seq[String]]("test-case").abbr("tc")
         .valueName("<test-case-1>,<test-case-2>...")
         .text("The name of one or more test cases (within the test sets) to run. The default is to run all of them")
-        .action((x,c) => c.copy(testCases = x))
+        .action((x, c) => c.copy(testCases = x))
 
       opt[Seq[String]]("exclude-test-set").abbr("xts")
         .valueName("<test-set-1>,<test-set-2>...")
         .text("The name of one or more test sets to exclude from the run. The default is to run all of them")
-        .action((x,c) => c.copy(excludeTestSets = x))
+        .action((x, c) => c.copy(excludeTestSets = x))
 
       opt[Seq[String]]("exclude-test-case").abbr("xtc")
         .valueName("<test-case-1>,<test-case-2>...")
         .text("The name of one or more test cases to exclude (within the test sets) from the run. The default is to run all of them")
-        .action((x,c) => c.copy(excludeTestCases = x))
+        .action((x, c) => c.copy(excludeTestCases = x))
 
       opt[Seq[Feature]]("enable-feature").abbr("ef")
-          .valueName("<feature-1>,<feature-2>...")
-          .text("The name of one or more XQTS features to enable.")
-          .action((x, c) => c.copy(enableFeatures = x))
+        .valueName("<feature-1>,<feature-2>...")
+        .text("The name of one or more XQTS features to enable.")
+        .action((x, c) => c.copy(enableFeatures = x))
 
       opt[Seq[Feature]]("disable-feature").abbr("df")
         .valueName("<feature-1>,<feature-2>...")
@@ -223,9 +231,9 @@ object XQTSRunner {
         .action((x, c) => c.copy(disableXsdVersions = x))
 
       opt[Path]('o', "output-dir")
-          .text("A directory where the results of the XQTS are written. If not provided then 'target' is assumed")
-          .validate(isDirOrNotExists)
-          .action((x, c) => c.copy(outputDir = Some(x)))
+        .text("A directory where the results of the XQTS are written. If not provided then 'target' is assumed")
+        .validate(isDirOrNotExists)
+        .action((x, c) => c.copy(outputDir = Some(x)))
 
       note("The test-set-pattern argument takes preference over the test-set argument")
       note(s"By default the following features are enabled: ${DEFAULT_FEATURES.mkString(", ")}")
@@ -249,20 +257,20 @@ object XQTSRunner {
 }
 
 /**
-  * Main application class.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Main application class.
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 private class XQTSRunner {
 
   private val logger = Logger(classOf[XQTSRunner])
   @scala.annotation.unused private var existServer: Option[ExistServer] = None
 
   /**
-    * Run's an XQTS against eXist-db.
-    *
-    * @param cmdConfig the command line arguments
-    */
+   * Run's an XQTS against eXist-db.
+   *
+   * @param cmdConfig the command line arguments
+   */
   private def run(cmdConfig: CmdConfig): Unit = {
     logger.info(s"eXist-db XQTS Runner starting for: ${XQTSVersion.label(cmdConfig.xqtsVersion)}")
 
@@ -313,7 +321,7 @@ private class XQTSRunner {
 
             // 4) register the shutdown process
             //TODO(AR) should likely switch to Coordinated Shutdown, see: https://doc.akka.io/docs/akka/2.5/actors.html#coordinated-shutdown
-            system.registerOnTermination (() => {
+            system.registerOnTermination(() => {
               server.stopServer()
               sys.exit(EXIT_CODE_OK)
             })
@@ -332,30 +340,26 @@ private class XQTSRunner {
   }
 
   /**
-    * Get the dependencies which are enabled.
-    *
-    * @param defaultEnabled the dependencies which are enabled by default.
-    *
-    * @param enable the dependencies to enable.
-    * @param disable the dependencies to disable.
-    *
-    * @return just the enabled dependencies.
-    */
+   * Get the dependencies which are enabled.
+   *
+   * @param defaultEnabled the dependencies which are enabled by default.
+   * @param enable         the dependencies to enable.
+   * @param disable        the dependencies to disable.
+   * @return just the enabled dependencies.
+   */
   private def getEnabled[T](defaultEnabled: Seq[T])(enable: Seq[T], disable: Seq[T]): Seq[T] = {
     (defaultEnabled ++ enable).filterNot(disable.contains(_)).toSet.toSeq
   }
 
   /**
-    * Gets the parser for the XQTS version.
-    *
-    * @param xqtsVersion the version of XQTS to parse.
-    *
-    * @return the parser for the XQTS version.
-    *
-    * @throws IllegalArgumentException if we don't support the requested XQTS version.
-    */
+   * Gets the parser for the XQTS version.
+   *
+   * @param xqtsVersion the version of XQTS to parse.
+   * @return the parser for the XQTS version.
+   * @throws IllegalArgumentException if we don't support the requested XQTS version.
+   */
   @throws[IllegalArgumentException]
-  private def getParserActorClass(xqtsVersion: XQTSVersion) : Class[_<: XQTSParserActor] = {
+  private def getParserActorClass(xqtsVersion: XQTSVersion): Class[_ <: XQTSParserActor] = {
     xqtsVersion match {
       case XQTS_3_1 | XQTS_HEAD =>
         classOf[XQTS3CatalogParserActor]
@@ -364,25 +368,25 @@ private class XQTSRunner {
   }
 
   /**
-    * Gets the serializer for the XQTS.
-    *
-    * @return the serializer for the XQTS.
-    */
-  private def getSerializerActorClass() : Class[_<: XQTSResultsSerializerActor] = {
+   * Gets the serializer for the XQTS.
+   *
+   * @return the serializer for the XQTS.
+   */
+  private def getSerializerActorClass(): Class[_ <: XQTSResultsSerializerActor] = {
     classOf[JUnitResultsSerializerActor]
   }
 
   //TODO(AR) use Cats IO for download and store ops
+
   /**
-    * Ensure that an XQTS version is present, if not it will be downloaded.
-    *
-    * @param xqtsVersion the version of XQTS
-    * @param settings the configured application settings.
-    * @param overrideLocalDir a directory to use for storing the XQTS, overrides the default setting.
-    *
-    * @return Either the path to the XQTS, or an exception
-    */
-  private def ensureXqtsPresent(xqtsVersion: XQTSVersion, settings: SettingsImpl, overrideLocalDir: Option[Path]) : Either[Throwable, Path] = {
+   * Ensure that an XQTS version is present, if not it will be downloaded.
+   *
+   * @param xqtsVersion      the version of XQTS
+   * @param settings         the configured application settings.
+   * @param overrideLocalDir a directory to use for storing the XQTS, overrides the default setting.
+   * @return Either the path to the XQTS, or an exception
+   */
+  private def ensureXqtsPresent(xqtsVersion: XQTSVersion, settings: SettingsImpl, overrideLocalDir: Option[Path]): Either[Throwable, Path] = {
     def getLocalWorkDir(hasDir: Option[String]) = {
       hasDir match {
         case Some(_) =>
@@ -391,11 +395,13 @@ private class XQTSRunner {
           overrideLocalDir.getOrElse(Paths.get(settings.xqtsLocalDir)).resolve(XQTSVersion.label(xqtsVersion))
       }
     }
+
     def hasLocalCopy(xqtsLocalPath: Path, xqtsCheckFile: String) = Files.exists(xqtsLocalPath) && Files.exists(xqtsLocalPath.resolve(xqtsCheckFile))
-    def verifySha256(path: Path, sha256: String) : Either[Throwable, Path] = {
+
+    def verifySha256(path: Path, sha256: String): Either[Throwable, Path] = {
       Checksum.checksum(path, SHA256).map(_.map(_.toChar).mkString) match {
         case Right(pathSha256) =>
-          if(sha256.equals(sha256)) {
+          if (sha256.equals(sha256)) {
             Right(path)
           } else {
             Left(new IOException(s"Downloaded file checksum is: $pathSha256 but expected $sha256"))
@@ -405,16 +411,17 @@ private class XQTSRunner {
     }
 
     def getFilename(xqtsUrl: String) = Paths.get(new URI(xqtsUrl).getPath).getFileName.toString
-    def hasDownload(xqtsUrl: String, sha256: String, xqtsLocalPath: Path) : Either[Throwable, Option[Path]] = {
+
+    def hasDownload(xqtsUrl: String, sha256: String, xqtsLocalPath: Path): Either[Throwable, Option[Path]] = {
       val downloadFile = xqtsLocalPath.resolve(getFilename(xqtsUrl))
-      if(Files.exists(downloadFile)) {
+      if (Files.exists(downloadFile)) {
         verifySha256(downloadFile, sha256).map(Some(_))
       } else {
         Right(Option.empty[Path])
       }
     }
 
-    def download(xqtsUrl: String, sha256: String, xqtsLocalPath: Path) : Either[Throwable, Path] = {
+    def download(xqtsUrl: String, sha256: String, xqtsLocalPath: Path): Either[Throwable, Path] = {
       def getFile(dest: Path): Path = {
         import sys.process._
         new URL(xqtsUrl) #> dest.toFile !!;
@@ -427,22 +434,22 @@ private class XQTSRunner {
       }
     }
 
-    def expandToLocalCopy(xqtsZip: Path, xqtsLocalPath: Path) : Either[Throwable, Path] = {
-        logger.info(s"Expanding XQTS from: $xqtsZip to: $xqtsLocalPath")
-        try {
-          // create dest if doesn't exist
-          if(!Files.exists(xqtsLocalPath)) {
-            Files.createDirectories(xqtsLocalPath)
-          }
-
-          // unzip the file
-          org.exist.xqts.runner.Unzip.unzip(xqtsZip, xqtsLocalPath)
-
-          Right(xqtsLocalPath)
-        } catch {
-          case e: IOException =>
-            Left(e)
+    def expandToLocalCopy(xqtsZip: Path, xqtsLocalPath: Path): Either[Throwable, Path] = {
+      logger.info(s"Expanding XQTS from: $xqtsZip to: $xqtsLocalPath")
+      try {
+        // create dest if doesn't exist
+        if (!Files.exists(xqtsLocalPath)) {
+          Files.createDirectories(xqtsLocalPath)
         }
+
+        // unzip the file
+        org.exist.xqts.runner.Unzip.unzip(xqtsZip, xqtsLocalPath)
+
+        Right(xqtsLocalPath)
+      } catch {
+        case e: IOException =>
+          Left(e)
+      }
     }
 
     def processXqtsVersion(xqtsVersionConfig: settings.XqtsVersionConfig): Either[Throwable, Path] = {

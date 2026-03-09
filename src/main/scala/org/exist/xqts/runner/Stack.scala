@@ -17,86 +17,82 @@
 
 package org.exist.xqts.runner
 
-import scala.collection.immutable.Nil
-
 /**
-  * A very simple Stack implementation
-  * build atop a {@link List}.
-  *
-  * @param list the list which backs the stack
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * A very simple Stack implementation
+ * build atop a [[List]].
+ *
+ * @param list the list which backs the stack
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 class Stack[+A](list: List[A]) {
 
   /**
-    * Constructor for an empty stack.
-    */
+   * Constructor for an empty stack.
+   */
   def this() = this(Nil)
 
   /**
-    * Places a new item onto the top of the stack.
-    *
-    * @param x the new item to place atop the stack.
-    *
-    * @return the new stack.
-    */
-  def push[B >: A](x: B) : Stack[B] = Stack(x :: list)
+   * Places a new item onto the top of the stack.
+   *
+   * @param x the new item to place atop the stack.
+   * @return the new stack.
+   */
+  def push[B >: A](x: B): Stack[B] = Stack(x :: list)
 
   /**
-    * Get a copy of the item at the top of the stack.
-    *
-    * @return the item at the top of the stack.
-    *
-    * @throws NoSuchElementException if the stack is empty
-    */
+   * Get a copy of the item at the top of the stack.
+   *
+   * @return the item at the top of the stack.
+   * @throws NoSuchElementException if the stack is empty
+   */
   @throws[NoSuchElementException]
-  def peek : A = list.head
+  def peek: A = list.head
 
   /**
-    * Get a copy of the item at the top of the stack.
-    *
-    * @return a Some of the item at the top of the stack,
-    *         or a None if the stack is empty
-    */
+   * Get a copy of the item at the top of the stack.
+   *
+   * @return a Some of the item at the top of the stack,
+   *         or a None if the stack is empty
+   */
   def peekOption: Option[A] = list.headOption
 
   /**
-    * Takes item from the top of the stack.
-    *
-    * @return A tuple consisting of: the item from the
-    *         top of the stack, and the new stack
-    *
-    * @throws NoSuchElementException if the stack is empty
-    */
+   * Takes item from the top of the stack.
+   *
+   * @return A tuple consisting of: the item from the
+   *         top of the stack, and the new stack
+   * @throws NoSuchElementException if the stack is empty
+   */
   @throws[NoSuchElementException]
-  def pop() : (A, Stack[A]) = (list.head, Stack(list.tail))
+  def pop(): (A, Stack[A]) = (list.head, Stack(list.tail))
 
   /**
-    * Replaces the item at the top of the stack with a new item.
-    *
-    * @param x the new item for the head
-    * @return the new stack
-    */
-  def replace[B >: A](x: B) : Stack[B] = Stack(x :: list.tail)
+   * Replaces the item at the top of the stack with a new item.
+   *
+   * @param x the new item for the head
+   * @return the new stack
+   */
+  def replace[B >: A](x: B): Stack[B] = Stack(x :: list.tail)
 
   /**
-    * Removes the top item from the stack, and returns the stack.
-    *
-    * @return the new stack
-    */
-  def drop() : Stack[A] = Stack(list.tail)
+   * Removes the top item from the stack, and returns the stack.
+   *
+   * @return the new stack
+   */
+  def drop(): Stack[A] = Stack(list.tail)
 
   /**
-    * Gets the depth of the stack.
-    *
-    * @return the depth of the stack
-    */
+   * Gets the depth of the stack.
+   *
+   * @return the depth of the stack
+   */
   def size: Int = list.size
 }
 
 object Stack {
-  def empty[A] : Stack[A] = new Stack()
-  def apply[A] (head: A) = new Stack(List(head))
-  def apply[A] (list: List[A]) = new Stack(list)
+  def empty[A]: Stack[A] = new Stack()
+
+  def apply[A](head: A) = new Stack(List(head))
+
+  def apply[A](list: List[A]) = new Stack(list)
 }

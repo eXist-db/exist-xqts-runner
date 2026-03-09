@@ -18,28 +18,31 @@
 package org.exist.xqts
 
 /**
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 package object runner {
 
   /**
-    * Enumeration of XQTS versions.
-    */
+   * Enumeration of XQTS versions.
+   */
   sealed trait XQTSVersion
+
   object XQTS_1_0 extends XQTSVersion
+
   object XQTS_3_0 extends XQTSVersion
+
   object XQTS_3_1 extends XQTSVersion
+
   object XQTS_HEAD extends XQTSVersion
 
   object XQTSVersion {
 
     /**
-      * Gets an XQTS version from a string representation.
-      *
-      * @param s the XQTS version string.
-      *
-      * @return the XQTS Version.
-      */
+     * Gets an XQTS version from a string representation.
+     *
+     * @param s the XQTS version string.
+     * @return the XQTS Version.
+     */
     @throws[IllegalArgumentException]
     def from(s: String): XQTSVersion = {
       s match {
@@ -52,12 +55,11 @@ package object runner {
     }
 
     /**
-      * Gets an XQTS version from an integer representation.
-      *
-      * @param i the XQTS version number.
-      *
-      * @return the XQTS Version.
-      */
+     * Gets an XQTS version from an integer representation.
+     *
+     * @param i the XQTS version number.
+     * @return the XQTS Version.
+     */
     @throws[IllegalArgumentException]
     def from(i: Int): XQTSVersion = {
       i match {
@@ -70,12 +72,11 @@ package object runner {
     }
 
     /**
-      * Gets an XQTS version from a numeric representation.
-      *
-      * @param f the XQTS version number.
-      *
-      * @return the XQTS Version.
-      */
+     * Gets an XQTS version from a numeric representation.
+     *
+     * @param f the XQTS version number.
+     * @return the XQTS Version.
+     */
     @throws[IllegalArgumentException]
     def from(f: Float) = {
       f match {
@@ -88,13 +89,12 @@ package object runner {
     }
 
     /**
-      * Gets the XQTS version label string.
-      *
-      * @param xqtsVersion the XQTS version.
-      *
-      * @return the XQTS version label string.
-      */
-    def label(xqtsVersion: XQTSVersion) : String = {
+     * Gets the XQTS version label string.
+     *
+     * @param xqtsVersion the XQTS version.
+     * @return the XQTS version label string.
+     */
+    def label(xqtsVersion: XQTSVersion): String = {
       xqtsVersion match {
         case XQTS_1_0 =>
           "XQTS_1_0"
@@ -108,13 +108,12 @@ package object runner {
     }
 
     /**
-      * Gets the XQTS version name string.
-      *
-      * @param xqtsVersion the XQTS version.
-      *
-      * @return the XQTS version name string.
-      */
-    def toVersionName(xqtsVersion: XQTSVersion) : String = {
+     * Gets the XQTS version name string.
+     *
+     * @param xqtsVersion the XQTS version.
+     * @return the XQTS version name string.
+     */
+    def toVersionName(xqtsVersion: XQTSVersion): String = {
       xqtsVersion match {
         case XQTS_1_0 =>
           "1.0"

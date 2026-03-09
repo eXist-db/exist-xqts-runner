@@ -114,8 +114,7 @@ object Logger {
 
   /** Get the logger for the specified class.
    *
-   * @param clazz  the class
-   *
+   * @param clazz the class
    * @return the `Logger`.
    */
   def apply(clazz: Class[_]): Logger = new Logger(SLF4JLoggerFactory.getLogger(clazz))

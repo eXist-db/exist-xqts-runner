@@ -34,40 +34,46 @@ object AssertTypeParser {
   sealed trait AstNode
 
   object TypeNode {
-    type ExistCardinalityType = org.exist.xquery.Cardinality  // eXist-db's Cardinality type
-    type ExistTypeType = Int  // eXist-db's XDM type
+    type ExistCardinalityType = org.exist.xquery.Cardinality // eXist-db's Cardinality type
+    type ExistTypeType = Int // eXist-db's XDM type
+
     sealed trait ExistTypeDescription {
-      def hasParameterTypes : Boolean
+      def hasParameterTypes: Boolean
     }
+
     case class ExplicitExistTypeDescription(base: ExistTypeType, parameterTypes: Option[Seq[ExistTypeDescription]], cardinality: Option[ExistCardinality]) extends ExistTypeDescription {
       override def hasParameterTypes = parameterTypes.map(_.nonEmpty).getOrElse(false)
     }
+
     case object WildcardExistTypeDescription extends ExistTypeDescription {
       override def hasParameterTypes = false
     }
   }
+
   sealed trait TypeNode extends AstNode {
     /**
-      * Convert to a representation
-      * which can be used more easily
-      * with eXist-db.
-      *
-      * @return a representation which
-      *  is more easily used with eXist-db
-      */
+     * Convert to a representation
+     * which can be used more easily
+     * with eXist-db.
+     *
+     * @return a representation which
+     *         is more easily used with eXist-db
+     */
     @throws[XPathException]
-    def asExistTypeDescription : ExistTypeDescription
+    def asExistTypeDescription: ExistTypeDescription
   }
 
 
   trait ExplicitTypeNode extends TypeNode {
     def name: TypeNameNode;
+
     def typeParameters: Option[ParametersNode];
+
     def cardinality: Option[CardinalityNode];
 
     @throws[XPathException]
     override def asExistTypeDescription = {
-      def isFunctionType(name: TypeNameNode) : Boolean = {
+      def isFunctionType(name: TypeNameNode): Boolean = {
         name.localName.equals("function") || name.localName.equals("map") || name.localName.equals("array")
       }
 
@@ -92,7 +98,7 @@ object AssertTypeParser {
       ExplicitExistTypeDescription(
         existType,
         typeParameters.map(x => x.parameters.map(y => y.asExistTypeDescription)),
-        cardinality.map(_.cardinality  match {
+        cardinality.map(_.cardinality match {
           case TypeCardinality.* => ExistCardinality.ZERO_OR_MORE
           case TypeCardinality.+ => ExistCardinality.ONE_OR_MORE
           case TypeCardinality.? => ExistCardinality.ZERO_OR_ONE
@@ -112,7 +118,7 @@ object AssertTypeParser {
   }
 
   case class TypeNameNode(prefix: Option[String], localName: String) extends AstNode {
-    def asXdmTypeName : String = prefix.map(_ + ':' + localName).getOrElse(localName)
+    def asXdmTypeName: String = prefix.map(_ + ':' + localName).getOrElse(localName)
   }
 
   case class ParametersNode(parameters: Seq[TypeNode]) extends AstNode
@@ -125,14 +131,13 @@ object AssertTypeParser {
   }
 
   /**
-    * Parses a type description
-    * as expressed in XQTS.
-    *
-    * @param text The complete test to parse.
-    *
-    * @return the parse result.
-    */
-  def parse(text: String) : Try[TypeNode] = {
+   * Parses a type description
+   * as expressed in XQTS.
+   *
+   * @param text The complete test to parse.
+   * @return the parse result.
+   */
+  def parse(text: String): Try[TypeNode] = {
     val normalized = text.trim
     val parseResult = new AssertTypeParser(normalized)
       .InputLine
@@ -142,34 +147,36 @@ object AssertTypeParser {
 }
 
 /**
-  * Simple parser for parsing type descriptions
-  * expressed in XQTS as a String.
-  *
-  * For example:
-  *
-  * document-node()*
-  * xs:boolean
-  * element(employee)
-  * xs:anyURI?
-  * map(*)
-  * map(xs:string, xs:integer)
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Simple parser for parsing type descriptions
+ * expressed in XQTS as a String.
+ *
+ * For example:
+ *
+ * document-node()*
+ * xs:boolean
+ * element(employee)
+ * xs:anyURI?
+ * map(*)
+ * map(xs:string, xs:integer)
+ *
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 class AssertTypeParser(val input: ParserInput) extends Parser {
 
   /**
-    * Parse all input for a type description.
-    *
-    * @return The parse result
-    */
-  def InputLine = rule { Type ~ EOI }
+   * Parse all input for a type description.
+   *
+   * @return The parse result
+   */
+  def InputLine = rule {
+    Type ~ EOI
+  }
 
   /**
-    * Parse any input, matching the first type description.
-    *
-    * @return The parse result
-    */
+   * Parse any input, matching the first type description.
+   *
+   * @return The parse result
+   */
   def Type: Rule1[TypeNode] = rule {
     WildcardType | ExplicitType
   }
@@ -182,11 +189,11 @@ class AssertTypeParser(val input: ParserInput) extends Parser {
     ExplicitFunctionType | ExplicitNonFunctionType
   }
 
-  private def ExplicitFunctionType : Rule1[ExplicitFunctionTypeNode] = rule {
+  private def ExplicitFunctionType: Rule1[ExplicitFunctionTypeNode] = rule {
     optional("xs:") ~ "function" ~ optional(Parameters) ~ optional(FunctionReturnType) ~ optional(Cardinality) ~> ExplicitFunctionTypeNode
   }
 
-  private def FunctionReturnType : Rule1[TypeNode] = rule {
+  private def FunctionReturnType: Rule1[TypeNode] = rule {
     ws() ~ "as" ~ ws() ~ Type
   }
 
@@ -195,15 +202,15 @@ class AssertTypeParser(val input: ParserInput) extends Parser {
   }
 
 
-  private def TypeName : Rule1[TypeNameNode] = rule {
+  private def TypeName: Rule1[TypeNameNode] = rule {
     optional(Prefix) ~ LocalPart ~> ((prefix: Option[String], localPart: String) => TypeNameNode(prefix, localPart))
   }
 
-  private def Prefix : Rule1[String] = rule {
+  private def Prefix: Rule1[String] = rule {
     capture(oneOrMore(AlphaNum)) ~ ':'
   }
 
-  private def LocalPart : Rule1[String] = rule {
+  private def LocalPart: Rule1[String] = rule {
     capture(oneOrMore(AlphaNum ++ Hyphen))
   }
 
@@ -211,22 +218,22 @@ class AssertTypeParser(val input: ParserInput) extends Parser {
     ch('(') ~ optional(ParameterTypes) ~ ch(')') ~> ((parameterTypes: Option[Seq[TypeNode]]) => ParametersNode(parameterTypes.getOrElse(Seq.empty)))
   }
 
-  private def ParameterTypes : Rule1[Seq[TypeNode]] = rule {
+  private def ParameterTypes: Rule1[Seq[TypeNode]] = rule {
     ParameterType ~ zeroOrMore(ch(',') ~ ws() ~ ParameterType) ~> ((first: TypeNode, others: Seq[TypeNode]) => first +: others)
   }
 
-  private def ParameterType : Rule1[TypeNode] = Type
+  private def ParameterType: Rule1[TypeNode] = Type
 
-  private def Cardinality : Rule1[CardinalityNode] = rule {
+  private def Cardinality: Rule1[CardinalityNode] = rule {
     ch('*') ~> (() => CardinalityNode(TypeCardinality.*)) |
       ch('+') ~> (() => CardinalityNode(TypeCardinality.+)) |
-        ch('?') ~> (() => CardinalityNode(TypeCardinality.?))
+      ch('?') ~> (() => CardinalityNode(TypeCardinality.?))
   }
 
   /**
-    * Whitespace!
-    */
-  private def ws() : Rule0 = rule {
+   * Whitespace!
+   */
+  private def ws(): Rule0 = rule {
     zeroOrMore(CharPredicate(Seq(' ', '\t', '\n', 0x0B.toChar, '\f', '\r')))
   }
 }

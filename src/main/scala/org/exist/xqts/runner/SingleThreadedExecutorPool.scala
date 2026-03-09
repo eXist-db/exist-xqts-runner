@@ -25,42 +25,42 @@ import scala.concurrent.ExecutionContext
 case class SingleThreadedExecutor(executorService: ExecutorService, executionContext: ExecutionContext)
 
 /**
-  * eXist-db requires the broker to be acquired, used (e.g XQuery compilation and execution),
-  * and then released by the same thread.
-  *
-  * Therefore we create a SingleThreadExecutorPool whereby we have a pool of
-  * SingleThreadedExecutor that can be used for processing an Acquire, Compile, Execute, and Release
-  * sequence of actions against eXist-db all on the same thread.
-  */
+ * eXist-db requires the broker to be acquired, used (e.g XQuery compilation and execution),
+ * and then released by the same thread.
+ *
+ * Therefore we create a SingleThreadExecutorPool whereby we have a pool of
+ * SingleThreadedExecutor that can be used for processing an Acquire, Compile, Execute, and Release
+ * sequence of actions against eXist-db all on the same thread.
+ */
 object SingleThreadedExecutorPool {
 
   private val brokerExecutorPool = new ConcurrentLinkedDeque[SingleThreadedExecutor]()
 
-  private def createSingleThreadedExecutionContext() : SingleThreadedExecutor = {
+  private def createSingleThreadedExecutionContext(): SingleThreadedExecutor = {
     val executorService = Executors.newSingleThreadExecutor()
     val executionContext = ExecutionContext.fromExecutorService(executorService)
     SingleThreadedExecutor(executorService, executionContext)
   }
 
-  def borrowSingleThreadedExecutor() : SingleThreadedExecutor = {
+  def borrowSingleThreadedExecutor(): SingleThreadedExecutor = {
     val maybeBrokerExecutor = Option(brokerExecutorPool.poll())
     maybeBrokerExecutor.getOrElse(createSingleThreadedExecutionContext())
   }
 
-  def returnSingleThreadedExecutor(singleThreadedExecutor: SingleThreadedExecutor) : Unit = {
+  def returnSingleThreadedExecutor(singleThreadedExecutor: SingleThreadedExecutor): Unit = {
     brokerExecutorPool.push(singleThreadedExecutor)
   }
 
-  def newResource() : Resource[IO, SingleThreadedExecutor] = {
+  def newResource(): Resource[IO, SingleThreadedExecutor] = {
     Resource.make {
       // build
       IO.delay(SingleThreadedExecutorPool.borrowSingleThreadedExecutor())
-//        .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Build"))  // enable for debugging
+      //        .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Build"))  // enable for debugging
     } {
       // release
       singleThreadedExecutionContext =>
         IO.delay(SingleThreadedExecutorPool.returnSingleThreadedExecutor(singleThreadedExecutionContext))
-//          .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Release"))  // enable for debugging
+      //          .flatTap(_ => IOUtil.printlnExecutionContext("SingleThreadedExecutorPool/Release"))  // enable for debugging
     }
   }
 }

@@ -49,21 +49,25 @@ object ExistServer {
 
   object Result {
     def apply(queryError: QueryError, compilationTime: CompilationTime, executionTime: ExecutionTime) = new Result(Left(queryError), compilationTime, executionTime)
+
     def apply(queryResult: QueryResult, compilationTime: CompilationTime, executionTime: ExecutionTime) = new Result(Right(queryResult), compilationTime, executionTime)
   }
+
   case class Result(result: Either[QueryError, QueryResult], compilationTime: CompilationTime, executionTime: ExecutionTime)
 
   type QueryResult = Sequence
+
   object QueryError {
     def apply(xpathException: XPathException) = new QueryError(xpathException.getErrorCode.getErrorQName.getLocalPart, xpathException.getMessage)
   }
+
   case class QueryError(errorCode: String, message: String)
 
   /**
-    * Starts up an eXist-db server.
-    *
-    * @return A reference to the server, or an exception.
-    */
+   * Starts up an eXist-db server.
+   *
+   * @return A reference to the server, or an exception.
+   */
   def start(): Either[Throwable, ExistServer] = {
     val server = new ExistServer
     server.startServer() match {
@@ -74,36 +78,36 @@ object ExistServer {
     }
   }
 
-  def getVersion() : String = org.exist.Version.getVersion()
+  def getVersion(): String = org.exist.Version.getVersion()
 
-  def getCommitAbbrev() : String = {
+  def getCommitAbbrev(): String = {
     val commit = Option(org.exist.Version.getGitCommit()).filter(_.nonEmpty)
     commit.map(_.substring(0, 7)).getOrElse("UNKNOWN")
   }
 }
 
 /**
-  * Encapsulation of operations for an exist-db server.
-  */
+ * Encapsulation of operations for an exist-db server.
+ */
 class ExistServer {
   private val existServer = new ExistEmbeddedServer(true, true)
   private val logger = Logger(classOf[ExistServer])
 
   /**
-    * Starts the eXist-db server.
-    *
-    * @return Success or Failure.
-    */
-  private def startServer() : Try[Unit] = Try(existServer.startDb())
+   * Starts the eXist-db server.
+   *
+   * @return Success or Failure.
+   */
+  private def startServer(): Try[Unit] = Try(existServer.startDb())
 
   /**
-    * Get a connection to the eXist-db server.
-    */
-  def getConnection() : ExistConnection = {
+   * Get a connection to the eXist-db server.
+   */
+  def getConnection(): ExistConnection = {
     val brokerRes = Resource.make {
       // build
       IO.delay(existServer.getBrokerPool.getBroker)
-//        .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Acquire"))  // enable for debugging
+      //        .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Acquire"))  // enable for debugging
     } {
       // release
       broker =>
@@ -111,15 +115,15 @@ class ExistServer {
           logger.warn(s"Error releasing DBBroker: ${t.getMessage}", t)
           IO.unit
         }
-//          .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Release"))  // enable for debugging
+      //          .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Release"))  // enable for debugging
     }
 
     ExistConnection(brokerRes)
   }
 
   /**
-    * Shutdown the eXist-db server.
-    */
+   * Shutdown the eXist-db server.
+   */
   def stopServer(): Unit = {
     existServer.stopDb()
   }
@@ -130,88 +134,84 @@ private object ExistConnection {
 }
 
 /**
-  * Represents a connection
-  * to an eXist-db server, i.e. a {@link org.exist.storage.DBBroker}
-  *
-  * @param brokerRes the eXist-db broker to wrap.
-  */
+ * Represents a connection
+ * to an eXist-db server, i.e. a [[DBBroker]]
+ *
+ * @param brokerRes the eXist-db broker to wrap.
+ */
 class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
 
   /**
-    * Execute an XQuery with eXist-db.
-    *
-    * @param query The XQuery to execute.
-    * @param cacheCompiled true if you want to cache the compiled query form.
-    * @param staticBaseUri An optional static-baseURI for the XQuery.
-    * @param contextSequence An optional context sequence for the XQuery to operate on.
-    * @param availableDocuments Any dynamically available Documents that should be available to the XQuery.
-    * @param availableCollections Any dynamically available Collections that should be available to the XQuery.
-    * @param availableTextResources Any dynamically available Text Resources that should be available to the XQuery.
-    * @param namespaces Any static namespaces that should be available to the XQuery.
-    * @param externalVariables Any external variables that should be bound for the XQuery.
-    * @param decimalFormats Any changes to the `unnamed` decimal format.
-    * @param modules Any modules that should be imported for the XQuery.
-    * @param xpath1Compatibility whether XPath 1.0 backwards compatibility should be enabled.
-    *
-    * @return the result or executing the query, or an exception.
-    */
+   * Execute an XQuery with eXist-db.
+   *
+   * @param query                  The XQuery to execute.
+   * @param cacheCompiled          true if you want to cache the compiled query form.
+   * @param staticBaseUri          An optional static-baseURI for the XQuery.
+   * @param contextSequence        An optional context sequence for the XQuery to operate on.
+   * @param availableDocuments     Any dynamically available Documents that should be available to the XQuery.
+   * @param availableCollections   Any dynamically available Collections that should be available to the XQuery.
+   * @param availableTextResources Any dynamically available Text Resources that should be available to the XQuery.
+   * @param namespaces             Any static namespaces that should be available to the XQuery.
+   * @param externalVariables      Any external variables that should be bound for the XQuery.
+   * @param decimalFormats         Any changes to the `unnamed` decimal format.
+   * @param modules                Any modules that should be imported for the XQuery.
+   * @param xpath1Compatibility    whether XPath 1.0 backwards compatibility should be enabled.
+   * @return the result or executing the query, or an exception.
+   */
   def executeQuery(
-    query: String,
-    cacheCompiled: Boolean,
-    staticBaseUri: Option[String],
-    contextSequence: Option[Sequence],
-    availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty,
-    availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty,
-    availableTextResources: Seq[(String, Charset, String)] = Seq.empty,
-    namespaces: Seq[Namespace] = Seq.empty,
-    externalVariables: Seq[(String, Sequence)] = Seq.empty,
-    decimalFormats: Seq[DecimalFormat] = Seq.empty,
-    modules: Seq[Module] = Seq.empty,
-    xpath1Compatibility : Boolean = false
-  ) : Either[ExistServerException, Result] = {
+                    query: String,
+                    cacheCompiled: Boolean,
+                    staticBaseUri: Option[String],
+                    contextSequence: Option[Sequence],
+                    availableDocuments: Seq[(String, DocumentImpl)] = Seq.empty,
+                    availableCollections: Seq[(String, List[DocumentImpl])] = Seq.empty,
+                    availableTextResources: Seq[(String, Charset, String)] = Seq.empty,
+                    namespaces: Seq[Namespace] = Seq.empty,
+                    externalVariables: Seq[(String, Sequence)] = Seq.empty,
+                    decimalFormats: Seq[DecimalFormat] = Seq.empty,
+                    modules: Seq[Module] = Seq.empty,
+                    xpath1Compatibility: Boolean = false
+                  ): Either[ExistServerException, Result] = {
 
     /**
-      * Gets the XQuery Pool.
-      *
-      * @param broker the database broker.
-      *
-      * @return the XQuery Pool.
-      */
-    def getXQueryPool(broker: DBBroker) : IO[XQueryPool] = {
+     * Gets the XQuery Pool.
+     *
+     * @param broker the database broker.
+     * @return the XQuery Pool.
+     */
+    def getXQueryPool(broker: DBBroker): IO[XQueryPool] = {
       IO.pure(broker.getBrokerPool.getXQueryPool)
     }
 
     /**
-      * Gets the XQuery Service.
-      *
-      * @param broker the database broker.
-      *
-      * @return the XQuery Service.
-      */
-    def getXQueryService(broker: DBBroker) : IO[XQuery] = {
+     * Gets the XQuery Service.
+     *
+     * @param broker the database broker.
+     * @return the XQuery Service.
+     */
+    def getXQueryService(broker: DBBroker): IO[XQuery] = {
       IO.pure(broker.getBrokerPool.getXQueryService)
     }
 
     /**
-      * Data class for a Compiled XQuery.
-      *
-      * @param compiledXquery the compiled query itself.
-      * @param xqueryContext the context prepared for use when executing the compiled query.
-      * @param compilationTime the time it took to compile the XQuery.
-      */
+     * Data class for a Compiled XQuery.
+     *
+     * @param compiledXquery  the compiled query itself.
+     * @param xqueryContext   the context prepared for use when executing the compiled query.
+     * @param compilationTime the time it took to compile the XQuery.
+     */
     case class CompiledQuery(compiledXquery: CompiledXQuery, xqueryContext: XQueryContext, compilationTime: CompilationTime)
 
     /**
-      * Gets a compiled XQuery from an the XQuery Pool.
-      *
-      * @param broker the database broker.
-      * @param xqueryPool the XQuery Pool.
-      * @param source the source of the XQuery.
-      * @param fnConfigureContext a function that can configure the context of the query.
-      *
-      * @return The compiled XQuery from the pool, or None if the pool did not have a compiled query available.
-      */
-    def compiledXQueryFromPool(broker: DBBroker, xqueryPool: XQueryPool, source: Source, fnConfigureContext: XQueryContext => XQueryContext) : Resource[IO, Option[CompiledQuery]] = {
+     * Gets a compiled XQuery from an the XQuery Pool.
+     *
+     * @param broker             the database broker.
+     * @param xqueryPool         the XQuery Pool.
+     * @param source             the source of the XQuery.
+     * @param fnConfigureContext a function that can configure the context of the query.
+     * @return The compiled XQuery from the pool, or None if the pool did not have a compiled query available.
+     */
+    def compiledXQueryFromPool(broker: DBBroker, xqueryPool: XQueryPool, source: Source, fnConfigureContext: XQueryContext => XQueryContext): Resource[IO, Option[CompiledQuery]] = {
       Resource.make {
         // build
         for {
@@ -220,7 +220,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
           //            .flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Borrow"))  // enable for debugging
           maybeCompiledXQueryContext <- IO.delay(maybeCompiledXQuery.map(compiledXQuery => fnConfigureContext(compiledXQuery.getContext)))
           endCompilationTime <- Clock[IO].realTime.map(_.toMillis)
-        } yield maybeCompiledXQuery.zip(maybeCompiledXQueryContext).map{ case (compiledXQuery, compiledXQueryContext) => CompiledQuery(compiledXQuery, compiledXQueryContext, endCompilationTime - startCompilationTime)}
+        } yield maybeCompiledXQuery.zip(maybeCompiledXQueryContext).map { case (compiledXQuery, compiledXQueryContext) => CompiledQuery(compiledXQuery, compiledXQueryContext, endCompilationTime - startCompilationTime) }
       } {
         // release
         _ match {
@@ -228,7 +228,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
             for {
               _ <- IO.delay(compiledQuery.xqueryContext.runCleanupTasks())
               _ <- IO.delay(xqueryPool.returnCompiledXQuery(source, compiledQuery.compiledXquery))
-            //                .flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Return"))  // enable for debugging
+              //                .flatTap(_ => IOUtil.printlnExecutionContext("CompiledQuery/Return"))  // enable for debugging
             } yield IO.unit
           case None =>
             IO.unit
@@ -237,16 +237,15 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     }
 
     /**
-      * Compiles an XQuery.
-      *
-      * @param broker the database broker.
-      * @param source the source of the XQuery.
-      * @param fnConfigureContext a function that can configure the context of the query.
-      * @param maybeXQueryPool if present, the query will be returned to the pool after it is used.
-      *
-      * @return The compiled XQuery.
-      */
-    def compileXQuery(broker: DBBroker, source: Source, fnConfigureContext: XQueryContext => XQueryContext, maybeXQueryPool: Option[XQueryPool]) : Resource[IO, CompiledQuery] = {
+     * Compiles an XQuery.
+     *
+     * @param broker             the database broker.
+     * @param source             the source of the XQuery.
+     * @param fnConfigureContext a function that can configure the context of the query.
+     * @param maybeXQueryPool    if present, the query will be returned to the pool after it is used.
+     * @return The compiled XQuery.
+     */
+    def compileXQuery(broker: DBBroker, source: Source, fnConfigureContext: XQueryContext => XQueryContext, maybeXQueryPool: Option[XQueryPool]): Resource[IO, CompiledQuery] = {
       val xqueryContextRes = Resource.make {
         // build
         IO.delay(fnConfigureContext(new XQueryContext(broker.getBrokerPool())))
@@ -255,7 +254,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
         // release
         xqueryContext =>
           IO.delay(xqueryContext.runCleanupTasks())
-          //            .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Release"))  // enable for debugging
+        //            .flatTap(_ => IOUtil.printlnExecutionContext("CompileQuery/Release"))  // enable for debugging
       }
 
       xqueryContextRes.flatMap { xqueryContext =>
@@ -282,62 +281,60 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     }
 
     /**
-      * Gets a compiled XQuery from an XQuery source.
-      *
-      * Handles caching of compiled XQuery:
-      *
-      *   1. If the cache should be used, then it will try
-      *   and retrieve a compiled version. If there is no
-      *   compiled version, the query source will be
-      *   compiled and added to the cache, before being
-      *   returned.
-      *
-      *   2. If the cache should not be used, then the
-      *   query source will be compiled before being
-      *   returned.
-      *
-      * @param broker the database broker.
-      * @param source the source of the XQuery.
-      * @param fnConfigureContext a function that can configure the context of the query.
-      * @param maybeXQueryPool if present, the query will be returned to the pool after it is used.
-      *
-      * @return The compiled XQuery.
-      */
+     * Gets a compiled XQuery from an XQuery source.
+     *
+     * Handles caching of compiled XQuery:
+     *
+     *   1. If the cache should be used, then it will try
+     *      and retrieve a compiled version. If there is no
+     *      compiled version, the query source will be
+     *      compiled and added to the cache, before being
+     *      returned.
+     *
+     * 2. If the cache should not be used, then the
+     * query source will be compiled before being
+     * returned.
+     *
+     * @param broker             the database broker.
+     * @param source             the source of the XQuery.
+     * @param fnConfigureContext a function that can configure the context of the query.
+     * @param maybeXQueryPool    if present, the query will be returned to the pool after it is used.
+     * @return The compiled XQuery.
+     */
     def compiledXQuery(broker: DBBroker, source: Source, fnConfigureContext: XQueryContext => XQueryContext, maybeXqueryPool: Option[XQueryPool]): Resource[IO, CompiledQuery] = {
       maybeXqueryPool match {
         case Some(xqueryPool) =>
           compiledXQueryFromPool(broker, xqueryPool, source, fnConfigureContext).flatMap { maybeCompiledQueryFromPool =>
             maybeCompiledQueryFromPool match {
-              case Some(compiledQueryFromPool) => Resource.pure(compiledQueryFromPool)            // use the existing query from the pool
-              case None => compileXQuery(broker, source, fnConfigureContext, maybeXqueryPool)     // no existing query in the pool, fallback to compiling a new query
+              case Some(compiledQueryFromPool) => Resource.pure(compiledQueryFromPool) // use the existing query from the pool
+              case None => compileXQuery(broker, source, fnConfigureContext, maybeXqueryPool) // no existing query in the pool, fallback to compiling a new query
             }
           }
-        case None => compileXQuery(broker, source, fnConfigureContext, maybeXqueryPool)           // compile a new query
+        case None => compileXQuery(broker, source, fnConfigureContext, maybeXqueryPool) // compile a new query
       }
     }
 
     /**
-      * Executes a compiled XQuery.
-      *
-      * @param broker the database broker.
-      * @param xqueryService the XQuery Service.
-      * @param compiledQuery the compiled XQuery to execute.
-      * @param contextSequence an optional context sequence for the XQuery to execute over.
-      *
-      * @return the result of the query, or an exception.
-      */
+     * Executes a compiled XQuery.
+     *
+     * @param broker          the database broker.
+     * @param xqueryService   the XQuery Service.
+     * @param compiledQuery   the compiled XQuery to execute.
+     * @param contextSequence an optional context sequence for the XQuery to execute over.
+     * @return the result of the query, or an exception.
+     */
     def executeCompiledQuery(
-      broker: DBBroker,
-      xqueryService: XQuery,
-      compiledQuery: CompiledQuery,
-      contextSequence: Option[Sequence]
-    ): IO[Either[ExistServerException, Result]] = {
+                              broker: DBBroker,
+                              xqueryService: XQuery,
+                              compiledQuery: CompiledQuery,
+                              contextSequence: Option[Sequence]
+                            ): IO[Either[ExistServerException, Result]] = {
       def execute(
-        broker: DBBroker,
-        compiledQuery: CompiledQuery,
-        executionStartTime: ExecutionTime,
-        contextSequence: Option[Sequence]
-      ) : IO[Either[ExistServerException, Result]] = {
+                   broker: DBBroker,
+                   compiledQuery: CompiledQuery,
+                   executionStartTime: ExecutionTime,
+                   contextSequence: Option[Sequence]
+                 ): IO[Either[ExistServerException, Result]] = {
         IO.delay {
           try {
             val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.orNull)
@@ -359,34 +356,31 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     }
 
     /**
-      * Handler to manage an XPathException
-      * differently from any other type of throwable.
-      *
-      * XPathException will be converted to a {@link Result}
-      * of {@link QueryError}, wilst any other exception
-      * will be converted to an {@link ExistServerException}.
-      *
-      * @param t the exception.
-      * @param compilationTime the time taken to compile the XQuery.
-      * @param executionTime the time taken to execute the XQuery.
-      *
-      * @return either a {@link Result}, or a {@link ExistServerException}.
-      */
-    def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime) : Either[ExistServerException, Result] = {
-        if (t.isInstanceOf[XPathException]) {
-          Right(Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime))
-        } else if (t.isInstanceOf[ExistServerException]) {
-          Left(t.asInstanceOf[ExistServerException]) // pass-through
-        } else {
-          Left(ExistServerException(t, compilationTime, executionTime))
-        }
+     * Handle an XPathException differently from any other type of throwable.
+     *
+     * XPathException will be converted to a [[Result]] of [[QueryError]],
+     * whilst any other exception will be converted to an [[ExistServerException]].
+     *
+     * @param t               the exception.
+     * @param compilationTime the time taken to compile the XQuery.
+     * @param executionTime   the time taken to execute the XQuery.
+     * @return either a [[Result]], or a [[ExistServerException]].
+     */
+    def fromExecutionException(t: Throwable, compilationTime: CompilationTime, executionTime: ExecutionTime): Either[ExistServerException, Result] = {
+      if (t.isInstanceOf[XPathException]) {
+        Right(Result(QueryError(t.asInstanceOf[XPathException]), compilationTime, executionTime))
+      } else if (t.isInstanceOf[ExistServerException]) {
+        Left(t.asInstanceOf[ExistServerException]) // pass-through
+      } else {
+        Left(ExistServerException(t, compilationTime, executionTime))
+      }
     }
 
     /**
-      * Sets up the XQuery Context.
-      *
-      * @param context The XQuery Context to configure
-      */
+     * Sets up the XQuery Context.
+     *
+     * @param context The XQuery Context to configure
+     */
     def setupContext(context: XQueryContext)(
       staticBaseUri: Option[String],
       availableDocuments: Seq[(String, DocumentImpl)],
@@ -396,7 +390,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       externalVariables: Seq[(String, Sequence)],
       decimalFormats: Seq[DecimalFormat],
       modules: Seq[Module],
-      xpath1Compatibility : Boolean
+      xpath1Compatibility: Boolean
     ): XQueryContext = {
 
       // Turn on/off XPath 1.0 backwards compatibility.
@@ -439,7 +433,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       }
 
       // modify/create the decimal formats
-      for (df <- decimalFormats ) {
+      for (df <- decimalFormats) {
         val unnamedDecimalFormat = context.getStaticDecimalFormat(null)
         val modifiedDecimalFormat = new org.exist.xquery.DecimalFormat(
           df.decimalSeparator.getOrElse(unnamedDecimalFormat.decimalSeparator),
@@ -460,8 +454,8 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
       }
 
       for (module <- modules) {
-        val fileUri : XmldbURI = XmldbURI.createInternal(module.file.toAbsolutePath.toUri.toString)
-        val locations : Array[AnyURIValue] = Array(new AnyURIValue(fileUri))
+        val fileUri: XmldbURI = XmldbURI.createInternal(module.file.toAbsolutePath.toUri.toString)
+        val locations: Array[AnyURIValue] = Array(new AnyURIValue(fileUri))
         context.importModule(module.uri.getStringValue, null, locations)
       }
 
@@ -497,15 +491,15 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
   }
 
   // TODO(AR) should return Either[Throwable, String] type
+
   /**
-    * Serializes a Sequence to a String
-    * using Adaptive serialization.
-    *
-    * @param sequence the sequence to serialize.
-    *
-    * @return the result of serializing the sequence.
-    */
-  def sequenceToStringAdaptive(sequence: Sequence) : String = {
+   * Serializes a Sequence to a String
+   * using Adaptive serialization.
+   *
+   * @param sequence the sequence to serialize.
+   * @return the result of serializing the sequence.
+   */
+  def sequenceToStringAdaptive(sequence: Sequence): String = {
     val outputProperties = new Properties()
     outputProperties.setProperty(OutputKeys.METHOD, "adaptive") // improves the output for expected value messages
     outputProperties.setProperty(OutputKeys.INDENT, "no")
@@ -513,38 +507,42 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
   }
 
   // TODO(AR) should return Either[Throwable, String] type
+
   /**
-    * Serializes a Sequence to a String
-    * using XML serialization.
-    *
-    * @param sequence the sequence to serialize.
-    *
-    * @return the result of serializing the sequence.
-    */
-  def sequenceToString(sequence: Sequence) : String = {
+   * Serializes a Sequence to a String
+   * using XML serialization.
+   *
+   * @param sequence the sequence to serialize.
+   * @return the result of serializing the sequence.
+   */
+  def sequenceToString(sequence: Sequence): String = {
     sequenceToString(sequence, new Properties())
   }
 
   // TODO(AR) should return Either[Throwable, String] type
+
   /**
-    * Serializes a Sequence to a String.
-    *
-    * If the serialization method is not
-    * set in the properties, the the XML
-    * method will be used.
-    *
-    * @param sequence the sequence to serialize.
-    * @param outputProperties the serialization settings.
-    *
-    * @return the result of serializing the sequence.
-    */
+   * Serializes a Sequence to a String.
+   *
+   * If the serialization method is not
+   * set in the properties, the the XML
+   * method will be used.
+   *
+   * @param sequence         the sequence to serialize.
+   * @param outputProperties the serialization settings.
+   * @return the result of serializing the sequence.
+   */
   def sequenceToString(sequence: Sequence, outputProperties: Properties): String = {
 
     val res: IO[String] = SingleThreadedExecutorPool.newResource().use { singleThreadedExecutor =>
       val writerRes =
         for {
           broker <- brokerRes
-          writer <- Resource.make(IO.delay { new StringWriter() })(writer => IO.delay { writer.close() })
+          writer <- Resource.make(IO.delay {
+            new StringWriter()
+          })(writer => IO.delay {
+            writer.close()
+          })
         } yield (broker, writer)
 
       writerRes.evalOn(singleThreadedExecutor.executionContext).use {
@@ -553,7 +551,7 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
             val serializer = new XQuerySerializer(broker, outputProperties, writer)
             serializer.serialize(sequence)
             writer.getBuffer.toString
-              .replace("\r", "").replace("\n", ", ")  // further improves the output for expected value messages
+              .replace("\r", "").replace("\n", ", ") // further improves the output for expected value messages
           }.evalOn(singleThreadedExecutor.executionContext)
       }
     }

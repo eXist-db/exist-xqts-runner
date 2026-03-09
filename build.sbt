@@ -32,16 +32,16 @@ scmInfo := Some(ScmInfo(
 
 developers := List(
   Developer(
-    id    = "adamretter",
-    name  = "Adam Retter",
+    id = "adamretter",
+    name = "Adam Retter",
     email = "adam@evolvedbinary.com",
-    url   = url("https://www.evolvedbinary.com")
+    url = url("https://www.evolvedbinary.com")
   ),
   Developer(
-    id    = "line0",
-    name  = "Juri Leino",
+    id = "line0",
+    name = "Juri Leino",
     email = "juri@existsolutions.com",
-    url   = url("http://existsolutions.com")
+    url = url("http://existsolutions.com")
   )
 )
 
@@ -55,9 +55,9 @@ libraryDependencies ++= {
     "com.github.scopt" %% "scopt" % "4.1.0",
     "org.typelevel" %% "cats-effect" % "3.6.3",
     // "com.fasterxml" %	"aalto-xml" % "1.3.4",
-    "org.exist-db.thirdparty.com.fasterxml" %	"aalto-xml" % "1.1.0-20180330",
+    "org.exist-db.thirdparty.com.fasterxml" % "aalto-xml" % "1.1.0-20180330",
     "org.parboiled" %% "parboiled" % "2.5.1",
-    "org.apache.ant" % "ant-junit" % "1.10.15",   // used for formatting junit style report
+    "org.apache.ant" % "ant-junit" % "1.10.15", // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
     "org.exist-db" % "exist-core" % existV changing() exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
@@ -67,6 +67,8 @@ libraryDependencies ++= {
     "org.apache.logging.log4j" % "log4j-slf4j2-impl" % "2.25.2" % "runtime",
   )
 }
+
+autoAPIMappings := true
 
 // we prefer Saxon over Xalan
 excludeDependencies ++= Seq(

@@ -20,7 +20,7 @@ package org.exist.xqts.runner
 import cats.effect.IO
 
 object IOUtil {
-  def printlnExecutionContext(label: String) : IO[Unit] = {
+  def printlnExecutionContext(label: String): IO[Unit] = {
     IO.executionContext.flatMap(ec => IO.println((label, ec)))
   }
 }

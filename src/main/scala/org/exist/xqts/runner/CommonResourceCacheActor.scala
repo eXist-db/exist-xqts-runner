@@ -25,16 +25,15 @@ import org.exist.xqts.runner.CommonResourceCacheActor._
 import org.exist.xqts.runner.ReadFileActor.{FileContent, FileReadError, ReadFile}
 
 /**
-  * Actor which provides an LRU like cache for holding the content of files.
-  *
-  * @param readFileActor An actor which can read files from the filesystem
-  * @param maxCacheBytes The total maximum size for the cache in bytes.
-  *
-  * @author Adam Retter <adam@evolvedbinary.com>
-  */
+ * Actor which provides an LRU like cache for holding the content of files.
+ *
+ * @param readFileActor An actor which can read files from the filesystem
+ * @param maxCacheBytes The total maximum size for the cache in bytes.
+ * @author Adam Retter <adam@evolvedbinary.com>
+ */
 class CommonResourceCacheActor(readFileActor: ActorRef, maxCacheBytes: Long) extends Actor {
-  private var cached : Cache = emptyCache
-  private var pending : Pending = nothingPending
+  private var cached: Cache = emptyCache
+  private var pending: Pending = nothingPending
 
   override def receive: Receive = {
     case GetResource(key) =>
@@ -85,22 +84,24 @@ object CommonResourceCacheActor {
   private val nothingPending = Map.empty[Path, List[ActorRef]]
 
   case class GetResource(key: Key)
+
   case class CachedResource(key: Key, value: Value)
+
   case class ResourceGetError(key: Key, error: IOException)
 
 
-  private def addPending(pending: Pending)(key: Key, actor: ActorRef) : Pending = {
+  private def addPending(pending: Pending)(key: Key, actor: ActorRef): Pending = {
     pending + (key ->
       pending.get(key)
         .map(actor +: _)
         .getOrElse(List(actor)))
   }
 
-  private def removePending(pending: Pending)(key: Key) : Pending = pending - key
+  private def removePending(pending: Pending)(key: Key): Pending = pending - key
 
-  private def incrementUseCount(cache: Cache)(key: Key) : Cache = {
+  private def incrementUseCount(cache: Cache)(key: Key): Cache = {
     cache.get(key)
-      .map { case (count, value) => (count + 1, value)}.map(updated => cache + (key -> updated))
+      .map { case (count, value) => (count + 1, value) }.map(updated => cache + (key -> updated))
       .getOrElse(cache)
   }
 
@@ -108,7 +109,7 @@ object CommonResourceCacheActor {
 
   private def cache(cache: Cache)(key: Key, value: TimestampedValue): Cache = cache + (key -> value)
 
-  private def evictAtLeast(cache: Cache)(bytes: Long) : Cache = {
+  private def evictAtLeast(cache: Cache)(bytes: Long): Cache = {
     //TODO(AR) write a tail recursive version
     //@tailrec
     def keysForNBytes(cache: Cache, bytesToClaim: Long): Seq[Key] = {

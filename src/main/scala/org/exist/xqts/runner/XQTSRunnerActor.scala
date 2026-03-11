@@ -87,7 +87,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       // For XQFTTS, the catalog parser sends directly to the test case runner (no test-set parser needed).
       // For QT3/QT4, the catalog parser sends to a test-set parser pool which then sends to test case runners.
       val parserActor = if (xqtsVersion == XQTS_FTTS_1_0) {
-        context.actorOf(Props(parserActorClass, xmlParserBufferSize, testCaseRunnerRouter), parserActorClass.getSimpleName)
+        context.actorOf(Props(parserActorClass, xmlParserBufferSize, testCaseRunnerRouter, existServer), parserActorClass.getSimpleName)
       } else {
         val testSetParserRouter = context.actorOf(FromConfig.props(Props(classOf[XQTS3TestSetParserActor], xmlParserBufferSize, testCaseRunnerRouter)), "XQTS3TestSetParserRouter")
         context.actorOf(Props(parserActorClass, xmlParserBufferSize, testSetParserRouter), parserActorClass.getSimpleName)

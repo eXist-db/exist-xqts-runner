@@ -46,6 +46,8 @@ package object xqftts {
   val ELEM_CONTEXT_ITEM = "contextItem"
   val ELEM_EXPECTED_ERROR = "expected-error"
   val ELEM_SPEC_CITATION = "spec-citation"
+  val ELEM_STOPWORDS = "stopwords"
+  val ELEM_THESAURUS = "thesaurus"
 
   // Attribute names
   val ATTR_NAME = "name"
@@ -63,6 +65,7 @@ package object xqftts {
   val ATTR_RESULT_OFFSET_PATH = "ResultOffsetPath"
   val ATTR_XQUERY_FILE_EXTENSION = "XQueryFileExtension"
   val ATTR_SOURCE_OFFSET_PATH = "SourceOffsetPath"
+  val ATTR_URI = "uri"
 
   // Comparison types
   val COMPARE_XML = "XML"

@@ -47,12 +47,18 @@ import scala.annotation.tailrec
   * @param xmlParserBufferSize the maximum buffer size for XML parsing.
   * @param testCaseRunnerRouter a router to test case runner actors.
   */
-class XQFTTSCatalogParserActor(xmlParserBufferSize: Int, testCaseRunnerRouter: ActorRef) extends XQTSParserActor {
+class XQFTTSCatalogParserActor(xmlParserBufferSize: Int, testCaseRunnerRouter: ActorRef, existServer: ExistServer) extends XQTSParserActor {
 
   private val logger = Logger(classOf[XQFTTSCatalogParserActor])
 
   // Source lookup: ID -> resolved file path
   private var sources: Map[String, Path] = Map.empty
+
+  // Stop word URI -> local file path mapping (populated from <stopwords> catalog elements)
+  private var stopWordURIMap: Map[String, Path] = Map.empty
+
+  // Thesaurus URI -> local file path mapping (populated from <thesaurus> catalog elements)
+  private var thesaurusURIMap: Map[String, Path] = Map.empty
 
   // Test group tracking
   private var groupStack: List[String] = List.empty
@@ -91,6 +97,24 @@ class XQFTTSCatalogParserActor(xmlParserBufferSize: Int, testCaseRunnerRouter: A
       val sender = context.sender()
       logger.info(s"Parsing XQFTTS Catalog: ${xqtsPath.resolve(CATALOG_FILE)}...")
       val matched = parseCatalog(sender, xqtsVersion, xqtsPath, testSets, testCases, excludeTestSets, excludeTestCases)
+      // Set stop word URI mappings on the ExistServer so they're available
+      // to FTEvaluator via XQueryContext attributes during test execution
+      if (stopWordURIMap.nonEmpty) {
+        import scala.jdk.CollectionConverters._
+        val javaMap: java.util.Map[String, Path] = stopWordURIMap.asJava
+        existServer.globalContextAttributes = existServer.globalContextAttributes +
+          ("ft.stopWordURIMap" -> javaMap)
+        logger.info(s"Registered ${stopWordURIMap.size} stop word URI mappings")
+      }
+
+      if (thesaurusURIMap.nonEmpty) {
+        import scala.jdk.CollectionConverters._
+        val javaMap: java.util.Map[String, Path] = thesaurusURIMap.asJava
+        existServer.globalContextAttributes = existServer.globalContextAttributes +
+          ("ft.thesaurusURIMap" -> javaMap)
+        logger.info(s"Registered ${thesaurusURIMap.size} thesaurus URI mappings")
+      }
+
       logger.info(s"Parsed XQFTTS Catalog OK. Matched $matched test sets.")
       sender ! ParseComplete(xqtsVersion, xqtsPath, matched)
       context.stop(self)
@@ -176,6 +200,26 @@ class XQFTTSCatalogParserActor(xmlParserBufferSize: Int, testCaseRunnerRouter: A
         val fileName = asyncReader.getAttributeValue(ATTR_FILE_NAME)
         if (id != null && fileName != null) {
           sources = sources + (id -> xqtsPath.resolve(fileName))
+        }
+
+      case START_ELEMENT if asyncReader.getLocalName == ELEM_STOPWORDS && groupStack.isEmpty =>
+        // Stop word definition: maps URI to local file path
+        val uri = asyncReader.getAttributeValue(ATTR_URI)
+        val fileName = asyncReader.getAttributeValue(ATTR_FILE_NAME)
+        if (uri != null && fileName != null) {
+          val resolvedPath = xqtsPath.resolve(fileName)
+          stopWordURIMap = stopWordURIMap + (uri -> resolvedPath)
+          logger.debug(s"Registered stop word URI mapping: $uri -> $resolvedPath")
+        }
+
+      case START_ELEMENT if asyncReader.getLocalName == ELEM_THESAURUS && groupStack.isEmpty =>
+        // Thesaurus definition: maps URI to local file path
+        val uri = asyncReader.getAttributeValue(ATTR_URI)
+        val fileName = asyncReader.getAttributeValue(ATTR_FILE_NAME)
+        if (uri != null && fileName != null) {
+          val resolvedPath = xqtsPath.resolve(fileName)
+          thesaurusURIMap = thesaurusURIMap + (uri -> resolvedPath)
+          logger.debug(s"Registered thesaurus URI mapping: $uri -> $resolvedPath")
         }
 
       case START_ELEMENT if asyncReader.getLocalName == ELEM_TEST_GROUP =>

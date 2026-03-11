@@ -79,11 +79,14 @@ excludeDependencies ++= Seq(
 )
 
 resolvers ++= {
+  // Support per-worktree Maven repos: pass -Dmaven.repo.local=/path/to/.m2-repo
+  // Uses MavenCache (file-based) instead of "at" (URL-based) for proper local resolution.
+  // When a custom repo is set, skip Resolver.mavenLocal to avoid SNAPSHOT conflicts
+  // across concurrent builds on the same machine.
   val customMavenLocal = sys.props.get("maven.repo.local").map { path =>
-    "Custom Local Maven" at new java.io.File(path).toURI.toString
+    MavenCache("Custom Local Maven", new java.io.File(path))
   }
-  customMavenLocal.toSeq ++ Seq(
-    Resolver.mavenLocal,
+  customMavenLocal.toSeq ++ (if (customMavenLocal.isDefined) Seq.empty else Seq(Resolver.mavenLocal)) ++ Seq(
     "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
     "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
   )

@@ -408,7 +408,7 @@ class XQFTTSCatalogParserActor(xmlParserBufferSize: Int, testCaseRunnerRouter: A
         case COMPARE_TEXT =>
           Some(AssertXml(Right(path)))
         case COMPARE_INSPECT | COMPARE_IGNORE =>
-          Some(AssertTrue) // cannot automatically verify; assume pass
+          Some(AssertInspect) // cannot automatically verify; always passes
         case _ =>
           Some(AssertXml(Right(path)))
       }

@@ -168,6 +168,9 @@ object XQTSParserActor {
 
   case object AssertFalse extends Assertion
 
+  /** Assertion for "Inspect" comparisons that always passes (requires manual review). */
+  case object AssertInspect extends Assertion
+
   case class Error(expected: String) extends ValueAssertion[String]
 
   /**

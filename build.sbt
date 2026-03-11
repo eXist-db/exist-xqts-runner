@@ -67,6 +67,7 @@ libraryDependencies ++= {
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
     "org.exist-db" % "exist-core" % existV changing() exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
+    "org.exist-db" % "exist-expath" % existV changing(),
     "org.xmlunit" % "xmlunit-core" % "2.11.0",
 
     "org.slf4j" % "slf4j-api" % "2.0.17",
@@ -138,6 +139,7 @@ assembly / assemblyMergeStrategy := {
   case PathList("META-INF", "versions", "9" ,"module-info.class") => MergeStrategy.discard
   case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql") => MergeStrategy.first
   case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class") => MergeStrategy.discard
+  case "version.properties" => MergeStrategy.first
   case x =>
     val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)

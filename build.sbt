@@ -1,5 +1,11 @@
 import ReleaseTransformations._
 
+// When using a custom local Maven repo (-Dmaven.repo.local), disable coursier
+// to prevent it from resolving SNAPSHOT artifacts from ~/.m2/repository instead
+// of the specified directory. Coursier has a hardcoded ~/.m2/repository fallback
+// that cannot be overridden via sbt resolver settings.
+ThisBuild / useCoursier := !sys.props.contains("maven.repo.local")
+
 name := "exist-xqts-runner"
 
 organization := "org.exist-db"

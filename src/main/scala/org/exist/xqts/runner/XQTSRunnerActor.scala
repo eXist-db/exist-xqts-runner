@@ -60,6 +60,10 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
 
   private case object TimerPrintStats
 
+  private case object TimerWatchdogKey
+
+  private case object TimerWatchdogCheck
+
   private case class Stats(unparsedTestSets: Int, testCases: (Int, Int), completedTestCases: (Int, Int), unserializedTestSets: Int) {
     def asMessage: String = s"XQTSRunnerActor Progress:\nunparsedTestSets=${unparsedTestSets}\ntestCases[sets/cases]=${testCases._1}/${testCases._2}\ncompletedTestCases[sets/cases]=${completedTestCases._1}/${completedTestCases._2}\nunserializedTestSets=${unserializedTestSets}"
   }
@@ -67,16 +71,25 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   private var previousStats: Stats = Stats(0, (0, 0), (0, 0), 0)
   private var unchangedStatsTicks = 0;
 
+  /** Number of consecutive watchdog ticks with no progress before forcing shutdown. 10s tick x 60 = 600s stall timeout. */
+  private val STALL_TIMEOUT_TICKS = 60
+  private var watchdogPreviousCompletedCount = 0
+  private var watchdogStalledTicks = 0
+
   override def receive: Receive = {
 
     case RunXQTS(xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, maxCacheBytes, testSets, testCases, excludeTestSets, excludeTestCases) =>
       started = System.currentTimeMillis()
       logger.info(s"Running XQTS: ${XQTSVersion.label(xqtsVersion)}")
 
-      if (logger.isDebugEnabled()) {
-        // prints stats about the state of this actor (i.e. test set progress)
+      {
         import scala.concurrent.duration._
-        timers.startTimerAtFixedRate(TimerStatsKey, TimerPrintStats, 5.seconds)
+        // watchdog: detect stalls where no test cases complete for 120 seconds
+        timers.startTimerAtFixedRate(TimerWatchdogKey, TimerWatchdogCheck, 10.seconds)
+        if (logger.isDebugEnabled()) {
+          // prints stats about the state of this actor (i.e. test set progress)
+          timers.startTimerAtFixedRate(TimerStatsKey, TimerPrintStats, 5.seconds)
+        }
       }
 
       val readFileRouter = context.actorOf(FromConfig.props(Props(classOf[ReadFileActor])), name = "ReadFileRouter")
@@ -115,6 +128,33 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
         unchangedStatsTicks = 0;
       }
       previousStats = stats
+
+    case TimerWatchdogCheck =>
+      val currentCompletedCount = this.completedTestCases.values.foldLeft(0)(_ + _.size)
+      if (currentCompletedCount > watchdogPreviousCompletedCount) {
+        watchdogStalledTicks = 0
+      } else if (this.testCases.nonEmpty) {
+        // only count stall ticks after we've started receiving test cases
+        watchdogStalledTicks += 1
+      }
+      watchdogPreviousCompletedCount = currentCompletedCount
+
+      if (watchdogStalledTicks >= STALL_TIMEOUT_TICKS) {
+        val totalCases = this.testCases.values.foldLeft(0)(_ + _.size)
+        logger.warn(s"Watchdog: no progress for ${STALL_TIMEOUT_TICKS * 10}s ($currentCompletedCount/$totalCases cases completed, ${unserializedTestSets.size} unserialized). Forcing shutdown.")
+
+        // Serialize any completed but unsent test sets before shutting down
+        for {
+          (testSetRef, _) <- this.testCases
+          if isTestSetCompleted(testSetRef) && !unserializedTestSets.contains(testSetRef)
+        } {
+          completedTestCases.get(testSetRef).foreach { results =>
+            resultsSerializerRouter ! TestSetResults(testSetRef, results.values.toSeq)
+          }
+        }
+
+        shutdown()
+      }
 
     case ParseComplete(xqtsVersion, _, matchedTestSets) =>
       logger.info(s"Matched $matchedTestSets Test Sets in XQTS ${XQTSVersion.toVersionName(xqtsVersion)}...")
@@ -166,6 +206,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   }
 
   private def shutdown(): Unit = {
+    timers.cancel(TimerWatchdogKey)
     if (logger.isDebugEnabled()) {
       timers.cancel(TimerStatsKey)
     }

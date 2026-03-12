@@ -209,6 +209,7 @@ object XQTSParserActor {
     val XmlVersion = DependencyTypeVal("xml-version")
     val XsdVersion = DependencyTypeVal("xsd-version")
     val Revalidation = DependencyTypeVal("revalidation")
+    val Put = DependencyTypeVal("put")
   }
 
   /**

@@ -77,7 +77,9 @@ object XQTSParserActor {
   case class ExternalVariableRole(name: String) extends Role
 
 
-  case class Environment(name: String, schemas: List[Schema] = List.empty, sources: List[Source] = List.empty, resources: List[Resource] = List.empty, params: List[Param] = List.empty, contextItem: Option[String] = None, decimalFormats: List[DecimalFormat] = List.empty, namespaces: List[Namespace] = List.empty, collections: List[Collection] = List.empty, staticBaseUri: Option[String] = None, collation: Option[Collation] = None)
+  case class Sandpit(path: Path)
+
+  case class Environment(name: String, schemas: List[Schema] = List.empty, sources: List[Source] = List.empty, resources: List[Resource] = List.empty, params: List[Param] = List.empty, contextItem: Option[String] = None, decimalFormats: List[DecimalFormat] = List.empty, namespaces: List[Namespace] = List.empty, collections: List[Collection] = List.empty, staticBaseUri: Option[String] = None, collation: Option[Collation] = None, sandpit: Option[Sandpit] = None)
 
   case class Schema(uri: Option[AnyURIValue], file: Option[Path], xsdVersion: Float = 1.0f, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
 

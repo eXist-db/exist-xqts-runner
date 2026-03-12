@@ -253,10 +253,53 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    */
   @throws(classOf[OutOfMemoryError])
   private def runTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
-    if (testCase.updateTests.nonEmpty) {
-      runUpdateTestCase(connection, testSetName, testCase, resolvedEnvironment)
-    } else {
-      runNonUpdateTestCase(connection, testSetName, testCase, resolvedEnvironment)
+    // Set up sandpit if the environment defines one
+    val sandpitTempDir: Option[Path] = testCase.environment.flatMap(_.sandpit).map { sandpit =>
+      val tempDir = Files.createTempDirectory("xqts-sandpit-")
+      copyDirectory(sandpit.path, tempDir)
+      tempDir
+    }
+
+    try {
+      // If sandpit is active, override the static base URI to point to the temp directory
+      val effectiveTestCase = sandpitTempDir match {
+        case Some(tempDir) =>
+          val sandpitBaseUri = tempDir.toUri.toString
+          testCase.copy(environment = testCase.environment.map(_.copy(staticBaseUri = Some(sandpitBaseUri))))
+        case None => testCase
+      }
+
+      if (effectiveTestCase.updateTests.nonEmpty) {
+        runUpdateTestCase(connection, testSetName, effectiveTestCase, resolvedEnvironment)
+      } else {
+        runNonUpdateTestCase(connection, testSetName, effectiveTestCase, resolvedEnvironment)
+      }
+    } finally {
+      // Clean up sandpit temp directory
+      sandpitTempDir.foreach(deleteDirectory)
+    }
+  }
+
+  /** Recursively copy a directory tree. */
+  private def copyDirectory(source: Path, target: Path): Unit = {
+    Files.walk(source).forEach { sourcePath =>
+      val targetPath = target.resolve(source.relativize(sourcePath))
+      if (Files.isDirectory(sourcePath)) {
+        Files.createDirectories(targetPath)
+      } else {
+        Files.copy(sourcePath, targetPath)
+      }
+    }
+  }
+
+  /** Recursively delete a directory tree. */
+  private def deleteDirectory(dir: Path): Unit = {
+    try {
+      Files.walk(dir)
+        .sorted(java.util.Comparator.reverseOrder())
+        .forEach(Files.delete(_))
+    } catch {
+      case _: IOException => // best-effort cleanup
     }
   }
 

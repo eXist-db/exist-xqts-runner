@@ -208,6 +208,7 @@ object XQTSParserActor {
     val UnicodeNormalizationForm = DependencyTypeVal("unicode-normalization-form")
     val XmlVersion = DependencyTypeVal("xml-version")
     val XsdVersion = DependencyTypeVal("xsd-version")
+    val Revalidation = DependencyTypeVal("revalidation")
   }
 
   /**

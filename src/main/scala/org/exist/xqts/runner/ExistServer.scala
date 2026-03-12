@@ -58,7 +58,21 @@ object ExistServer {
   type QueryResult = Sequence
 
   object QueryError {
-    def apply(xpathException: XPathException) = new QueryError(xpathException.getErrorCode.getErrorQName.getLocalPart, xpathException.getMessage)
+    private val STANDARD_ERROR_NAMESPACES = Set(
+      "http://www.w3.org/2005/xqt-errors",
+      "http://www.exist-db.org/xqt-errors/"
+    )
+
+    def apply(xpathException: XPathException) = {
+      val qname = xpathException.getErrorCode.getErrorQName
+      val ns = qname.getNamespaceURI
+      val code = if (ns != null && ns.nonEmpty && !STANDARD_ERROR_NAMESPACES.contains(ns)) {
+        s"Q{$ns}${qname.getLocalPart}"
+      } else {
+        qname.getLocalPart
+      }
+      new QueryError(code, xpathException.getMessage)
+    }
   }
 
   case class QueryError(errorCode: String, message: String)

@@ -137,7 +137,7 @@ class ExistServer {
     val shutdownTimeout = new Thread(() => {
       Thread.sleep(30000)
       logger.warn("BrokerPool shutdown did not complete within 30 seconds, forcing exit")
-      System.exit(0)
+      Runtime.getRuntime.halt(0)
     }, "exist-shutdown-timeout")
     shutdownTimeout.setDaemon(true)
     shutdownTimeout.start()

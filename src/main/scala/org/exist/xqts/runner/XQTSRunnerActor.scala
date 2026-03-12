@@ -71,8 +71,8 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   private var previousStats: Stats = Stats(0, (0, 0), (0, 0), 0)
   private var unchangedStatsTicks = 0;
 
-  /** Number of consecutive watchdog ticks with no progress before forcing shutdown. 10s tick x 12 = 120s stall timeout. */
-  private val STALL_TIMEOUT_TICKS = 12
+  /** Number of consecutive watchdog ticks with no progress before forcing shutdown. 10s tick x 60 = 600s stall timeout. */
+  private val STALL_TIMEOUT_TICKS = 60
   private var watchdogPreviousCompletedCount = 0
   private var watchdogStalledTicks = 0
 

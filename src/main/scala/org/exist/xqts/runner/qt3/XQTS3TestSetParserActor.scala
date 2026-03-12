@@ -362,6 +362,11 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           val uri = asyncReader.getAttributeValueOptNE(ATTR_URI)
           currentEnv = currentEnv.map(_.copy(staticBaseUri = uri))
 
+        case START_ELEMENT if (asyncReader.getLocalName == ELEM_SANDPIT && currentEnv.nonEmpty) =>
+          val path = asyncReader.getAttributeValue(ATTR_PATH)
+          val resolvedPath = testSetDir.resolve(path)
+          currentEnv = currentEnv.map(_.copy(sandpit = Some(Sandpit(resolvedPath))))
+
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_COLLATION && currentEnv.nonEmpty) =>
           val uri = asyncReader.getAttributeValueOptNE(ATTR_URI).map(new URI(_))
           val default = asyncReader.getAttributeValueOptNE(ATTR_DEFAULT).map(_.toBoolean).getOrElse(false)

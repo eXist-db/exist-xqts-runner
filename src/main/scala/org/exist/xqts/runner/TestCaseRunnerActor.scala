@@ -1035,7 +1035,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
       case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-        ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing XPath: ${queryError.errorCode}: ${queryError.message}"))
+        // A query error during assertion evaluation means the assertion failed (e.g., type
+        // mismatch comparing result to expected value), not that the runner itself errored.
+        FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert: expected='$xpath' raised ${queryError.errorCode}: ${queryError.message}")
 
       case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
@@ -1092,7 +1094,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
       case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-        ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing deep-equals: ${queryError.errorCode}: ${queryError.message}}"))
+        FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert-deep-eq: expected='$expected' raised ${queryError.errorCode}: ${queryError.message}")
 
       case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
@@ -1131,7 +1133,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
       case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-        ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing eq: ${queryError.errorCode}: ${queryError.message}"))
+        FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert-eq: expected='$expected' raised ${queryError.errorCode}: ${queryError.message}")
 
       case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
@@ -1235,7 +1237,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
       case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-        ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing permutation: ${queryError.errorCode}: ${queryError.message}"))
+        FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert-permutation raised ${queryError.errorCode}: ${queryError.message}")
 
       case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
@@ -1654,7 +1656,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
             ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
           case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-            ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing serialization: ${queryError.errorCode}: ${queryError.message}"))
+            FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert-serialization raised ${queryError.errorCode}: ${queryError.message}")
 
           case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
             val totalCompilationTime = compilationTime + resCompilationTime

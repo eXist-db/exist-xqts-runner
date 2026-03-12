@@ -90,6 +90,7 @@ class XQFTTSCatalogParserActor(xmlParserBufferSize: Int, testCaseRunnerRouter: A
   private var testSetTestCases: Map[String, List[String]] = Map.empty
   private var announcedTestSets: Set[String] = Set.empty
   private var matchedTestSets: Int = 0
+  private var uriMapsRegistered: Boolean = false
 
   override def receive: Receive = {
 
@@ -97,22 +98,10 @@ class XQFTTSCatalogParserActor(xmlParserBufferSize: Int, testCaseRunnerRouter: A
       val sender = context.sender()
       logger.info(s"Parsing XQFTTS Catalog: ${xqtsPath.resolve(CATALOG_FILE)}...")
       val matched = parseCatalog(sender, xqtsVersion, xqtsPath, testSets, testCases, excludeTestSets, excludeTestCases)
-      // Set stop word URI mappings on the ExistServer so they're available
-      // to FTEvaluator via XQueryContext attributes during test execution
-      if (stopWordURIMap.nonEmpty) {
-        import scala.jdk.CollectionConverters._
-        val javaMap: java.util.Map[String, Path] = stopWordURIMap.asJava
-        existServer.globalContextAttributes = existServer.globalContextAttributes +
-          ("ft.stopWordURIMap" -> javaMap)
-        logger.info(s"Registered ${stopWordURIMap.size} stop word URI mappings")
-      }
-
-      if (thesaurusURIMap.nonEmpty) {
-        import scala.jdk.CollectionConverters._
-        val javaMap: java.util.Map[String, Path] = thesaurusURIMap.asJava
-        existServer.globalContextAttributes = existServer.globalContextAttributes +
-          ("ft.thesaurusURIMap" -> javaMap)
-        logger.info(s"Registered ${thesaurusURIMap.size} thesaurus URI mappings")
+      // Ensure URI maps are registered (in case catalog had no test groups)
+      if (!uriMapsRegistered) {
+        registerURIMaps()
+        uriMapsRegistered = true
       }
 
       logger.info(s"Parsed XQFTTS Catalog OK. Matched $matched test sets.")
@@ -223,6 +212,12 @@ class XQFTTSCatalogParserActor(xmlParserBufferSize: Int, testCaseRunnerRouter: A
         }
 
       case START_ELEMENT if asyncReader.getLocalName == ELEM_TEST_GROUP =>
+        // Register stop word and thesaurus URI maps before the first test group
+        // to ensure they're available before any test cases are sent to the runner.
+        if (!uriMapsRegistered) {
+          registerURIMaps()
+          uriMapsRegistered = true
+        }
         val name = asyncReader.getAttributeValue(ATTR_NAME)
         groupStack = groupStack :+ (if (name != null) name else s"group-${groupStack.size}")
         currentFilePath = currentFilePath :+ Option(asyncReader.getAttributeValue(ATTR_FILE_PATH))
@@ -395,6 +390,26 @@ class XQFTTSCatalogParserActor(xmlParserBufferSize: Int, testCaseRunnerRouter: A
     }
 
     parseAll(asyncReader.next(), asyncReader, xqtsPath, channel, buf, xqtsRunner, matchesTestSets, matchesTestCases)
+  }
+
+  /**
+    * Register stop word and thesaurus URI mappings on the ExistServer's global context
+    * attributes, so they're available via XQueryContext.getAttribute() during test execution.
+    */
+  private def registerURIMaps(): Unit = {
+    import scala.jdk.CollectionConverters._
+    if (stopWordURIMap.nonEmpty) {
+      val javaMap: java.util.Map[String, Path] = stopWordURIMap.asJava
+      existServer.globalContextAttributes = existServer.globalContextAttributes +
+        ("ft.stopWordURIMap" -> javaMap)
+      logger.info(s"Registered ${stopWordURIMap.size} stop word URI mappings")
+    }
+    if (thesaurusURIMap.nonEmpty) {
+      val javaMap: java.util.Map[String, Path] = thesaurusURIMap.asJava
+      existServer.globalContextAttributes = existServer.globalContextAttributes +
+        ("ft.thesaurusURIMap" -> javaMap)
+      logger.info(s"Registered ${thesaurusURIMap.size} thesaurus URI mappings")
+    }
   }
 
   /**

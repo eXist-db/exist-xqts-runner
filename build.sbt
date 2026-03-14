@@ -66,7 +66,7 @@ libraryDependencies ++= {
     "org.apache.ant" % "ant-junit" % "1.10.15", // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
-    "org.exist-db" % "exist-core" % existV changing() exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
+    "org.exist-db" % "exist-core" % existV changing(),
     "org.exist-db" % "exist-expath" % existV changing(),
     "org.xmlunit" % "xmlunit-core" % "2.11.0",
 
@@ -80,6 +80,7 @@ autoAPIMappings := true
 // we prefer Saxon over Xalan
 excludeDependencies ++= Seq(
   ExclusionRule("xalan", "xalan"),
+  ExclusionRule("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
 
   ExclusionRule("org.hamcrest", "hamcrest-core"),
   ExclusionRule("org.hamcrest", "hamcrest-library")

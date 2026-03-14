@@ -953,7 +953,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @return the test result from processing the assertion.
    */
   private def assert(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime)(xpath: String, actual: ExistServer.QueryResult): TestResult = {
-    executeQueryWith$Result(connection, xpath, true, None, actual) match {
+    // Set context item only for single-item results (e.g., maps from parse-csv)
+    // Multi-item sequences (e.g., from csv-to-arrays) would cause the xpath to run per-item
+    val contextForAssert = if (actual.getItemCount == 1) Some(actual) else None
+    executeQueryWith$Result(connection, xpath, true, contextForAssert, actual) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 

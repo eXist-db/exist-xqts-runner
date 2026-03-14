@@ -1269,22 +1269,31 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     val serializationQuery = if (serializationProperties.isEmpty || !serializationProperties.containsKey(OutputKeys.METHOD)) {
       QUERY_ASSERT_XML_SERIALIZATION
     } else {
-      val method = serializationProperties.getProperty(OutputKeys.METHOD, "xml")
-      val indent = serializationProperties.getProperty(OutputKeys.INDENT, "no")
+      // Build a map with all serialization properties from the query context
+      val mapEntries = new StringBuilder()
+      val propNames = serializationProperties.propertyNames()
+      while (propNames.hasMoreElements) {
+        val key = propNames.nextElement().asInstanceOf[String]
+        val value = serializationProperties.getProperty(key)
+        if (mapEntries.nonEmpty) mapEntries.append(", ")
+        // Boolean-valued properties need xs:boolean, not string
+        val booleanProps = Set("indent", "omit-xml-declaration", "include-content-type",
+          "escape-uri-attributes", "undeclare-prefixes", "byte-order-mark", "allow-duplicate-names")
+        if (booleanProps.contains(key) && (value == "yes" || value == "no")) {
+          mapEntries.append(s"'$key': ${value == "yes"}")
+        } else {
+          mapEntries.append(s"'$key': '${value.replace("'", "''")}'")
+        }
+      }
+      // Always include omit-xml-declaration unless already set
+      if (!serializationProperties.containsKey("omit-xml-declaration")) {
+        if (mapEntries.nonEmpty) mapEntries.append(", ")
+        mapEntries.append("'omit-xml-declaration': true()")
+      }
       s"""
-         |xquery version "3.1";
-         |declare namespace output = "http://www.w3.org/2010/xslt-xquery-serialization";
-         |
-         |declare variable $$local:serialization :=
-         |  <output:serialization-parameters>
-         |    <output:method value="$method"/>
-         |    <output:indent value="$indent"/>
-         |    <output:omit-xml-declaration value="yes"/>
-         |  </output:serialization-parameters>;
-         |
          |declare variable $$result external;
          |
-         |fn:serialize($$result, $$local:serialization)
+         |fn:serialize($$result, map { $mapEntries })
          |""".stripMargin
     }
     executeQueryWith$Result(connection, serializationQuery, true, None, actual) match {

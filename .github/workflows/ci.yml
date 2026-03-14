@@ -30,4 +30,4 @@ jobs:
         run: sbt -v assembly
       - name: Test
         shell: bash
-        run: target/scala-2.13/exist-xqts-runner-assembly-*-SNAPSHOT.jar --xqts-version HEAD --test-set fn-current-date
+        run: java -jar target/scala-2.13/exist-xqts-runner-assembly-*-SNAPSHOT.jar --xqts-version HEAD --test-set fn-current-date

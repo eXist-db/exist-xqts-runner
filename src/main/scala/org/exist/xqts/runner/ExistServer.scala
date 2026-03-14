@@ -123,7 +123,7 @@ class ExistServer {
   def getConnection(): ExistConnection = {
     val brokerRes = Resource.make {
       // build
-      IO.delay(existServer.getBrokerPool.getBroker)
+      IO.delay(existServer.getBrokerPool.authenticate("admin", ""))
       //        .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Acquire"))  // enable for debugging
     } {
       // release

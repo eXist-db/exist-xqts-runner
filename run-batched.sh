@@ -17,6 +17,7 @@
 #   --test-set-pattern PAT   regex filter for test set names
 #   --exclude-test-set SETS  comma-separated test sets to exclude
 #   --enable-feature FEATS   comma-separated features to enable
+#   --parallel N             run N batch streams in parallel (default: 1)
 #   --resume                 skip test sets that already have result XML
 #   --dry-run                print batches without running
 #   --                       remaining args passed through to runner JAR
@@ -36,6 +37,7 @@ OUTPUT_DIR="target"
 TEST_SET_PATTERN=""
 EXCLUDE_TEST_SETS=""
 ENABLE_FEATURES=""
+PARALLEL=1
 RESUME=false
 DRY_RUN=false
 EXTRA_ARGS=()
@@ -53,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --test-set-pattern) TEST_SET_PATTERN="$2"; shift 2 ;;
     --exclude-test-set) EXCLUDE_TEST_SETS="$2"; shift 2 ;;
     --enable-feature)   ENABLE_FEATURES="$2"; shift 2 ;;
+    --parallel)     PARALLEL="$2"; shift 2 ;;
     --resume)       RESUME=true; shift ;;
     --dry-run)      DRY_RUN=true; shift ;;
     --)             shift; EXTRA_ARGS+=("$@"); break ;;
@@ -133,80 +136,152 @@ echo "Version:    $XQTS_VERSION"
 echo "Test sets:  $TOTAL"
 echo "Batch size: $BATCH_SIZE"
 echo "Batches:    $BATCHES"
+echo "Parallel:   $PARALLEL"
 echo "Heap:       $HEAP"
 echo "Output:     $OUTPUT_DIR"
 echo "JAR:        $JAR"
 echo ""
 
-# === Run batches ===
-BATCH_NUM=0
-FAILURES=0
-START_TIME=$(date +%s)
+# === Run a single batch ===
+# Args: batch_num total_batches start_idx end_idx stream_id
+run_batch() {
+  local batch_num=$1 total_batches=$2 start_idx=$3 end_idx=$4 stream_id=$5
 
-for (( i=0; i<TOTAL; i+=BATCH_SIZE )); do
-  BATCH_NUM=$((BATCH_NUM + 1))
-  END=$((i + BATCH_SIZE))
-  if (( END > TOTAL )); then END=$TOTAL; fi
-
-  # Build comma-separated test set list for this batch
-  BATCH_SETS=""
-  for (( j=i; j<END; j++ )); do
-    if [[ -n "$BATCH_SETS" ]]; then BATCH_SETS+=","; fi
-    BATCH_SETS+="${SET_ARRAY[$j]}"
+  # Build comma-separated test set list
+  local batch_sets=""
+  for (( j=start_idx; j<end_idx; j++ )); do
+    if [[ -n "$batch_sets" ]]; then batch_sets+=","; fi
+    batch_sets+="${SET_ARRAY[$j]}"
   done
 
-  echo "=== Batch $BATCH_NUM/$BATCHES (sets $((i+1))-$END of $TOTAL) ==="
+  echo "=== Batch $batch_num/$total_batches (sets $((start_idx+1))-$end_idx of $TOTAL) [stream $stream_id] ==="
 
   if [[ "$DRY_RUN" == true ]]; then
-    echo "  Sets: $BATCH_SETS"
+    echo "  Sets: $batch_sets"
     echo "  [dry run, skipping]"
-    continue
+    return 0
   fi
 
+  # Each parallel stream gets its own eXist-db home directory to avoid
+  # BrokerPool data directory lock conflicts between JVMs.
+  local exist_home
+  exist_home=$(mktemp -d /tmp/xqts-stream.XXXXXX)
+
   # Build runner command
-  CMD=("$JAVA_HOME/bin/java" "-Xmx${HEAP}" "-jar" "$JAR"
+  local cmd=("$JAVA_HOME/bin/java" "-Xmx${HEAP}"
+    "-Dexist.home=$exist_home"
+    "-jar" "$JAR"
     "--xqts-version" "$XQTS_VERSION"
-    "--test-set" "$BATCH_SETS"
+    "--test-set" "$batch_sets"
     "--local-dir" "$SCRIPT_DIR/work"
     "--output-dir" "$OUTPUT_DIR"
   )
 
   if [[ -n "$ENABLE_FEATURES" ]]; then
-    CMD+=("--enable-feature" "$ENABLE_FEATURES")
+    cmd+=("--enable-feature" "$ENABLE_FEATURES")
   fi
 
-  # Pass through extra args
   if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
-    CMD+=("${EXTRA_ARGS[@]}")
+    cmd+=("${EXTRA_ARGS[@]}")
   fi
 
-  BATCH_START=$(date +%s)
+  local batch_start batch_end batch_elapsed exit_code
+  batch_start=$(date +%s)
 
-  # Run with timeout (5 min per batch — no legitimate batch exceeds 3 min)
-  # Use --kill-after=15 to SIGKILL Java processes that ignore SIGTERM
-  # Redirect to temp file instead of piping through tail (pipe prevents timeout from killing process tree)
-  BATCH_LOG=$(mktemp /tmp/xqts-batch.XXXXXX)
+  local batch_log
+  batch_log=$(mktemp /tmp/xqts-batch.XXXXXX)
   set +e
-  timeout --kill-after=15 300 "${CMD[@]}" > "$BATCH_LOG" 2>&1
-  EXIT_CODE=$?
+  timeout --kill-after=15 300 "${cmd[@]}" > "$batch_log" 2>&1
+  exit_code=$?
   set -e
-  tail -20 "$BATCH_LOG"
-  rm -f "$BATCH_LOG"
+  tail -20 "$batch_log"
+  rm -f "$batch_log"
+  rm -rf "$exist_home"
 
-  BATCH_END=$(date +%s)
-  BATCH_ELAPSED=$((BATCH_END - BATCH_START))
+  batch_end=$(date +%s)
+  batch_elapsed=$((batch_end - batch_start))
 
-  if [[ $EXIT_CODE -eq 0 ]]; then
-    echo "  Batch $BATCH_NUM completed in ${BATCH_ELAPSED}s"
-  elif [[ $EXIT_CODE -eq 124 || $EXIT_CODE -eq 137 ]]; then
-    echo "  WARNING: Batch $BATCH_NUM TIMED OUT after 300s (exit $EXIT_CODE)"
-    FAILURES=$((FAILURES + 1))
+  if [[ $exit_code -eq 0 ]]; then
+    echo "  Batch $batch_num completed in ${batch_elapsed}s [stream $stream_id]"
+  elif [[ $exit_code -eq 124 || $exit_code -eq 137 ]]; then
+    echo "  WARNING: Batch $batch_num TIMED OUT after 300s (exit $exit_code) [stream $stream_id]"
+    return 1
   else
-    echo "  WARNING: Batch $BATCH_NUM exited with code $EXIT_CODE (${BATCH_ELAPSED}s)"
-    FAILURES=$((FAILURES + 1))
+    echo "  WARNING: Batch $batch_num exited with code $exit_code (${batch_elapsed}s) [stream $stream_id]"
+    return 1
   fi
+  return 0
+}
+
+# === Run a stream of batches sequentially ===
+# Args: stream_id batch_indices...
+# Writes failure count to /tmp/xqts-stream-failures-$stream_id
+run_stream() {
+  local stream_id=$1; shift
+  local failures=0
+  local indices=("$@")
+
+  for batch_idx in "${indices[@]}"; do
+    local start_idx=$((batch_idx * BATCH_SIZE))
+    local end_idx=$((start_idx + BATCH_SIZE))
+    if (( end_idx > TOTAL )); then end_idx=$TOTAL; fi
+    local batch_num=$((batch_idx + 1))
+
+    run_batch "$batch_num" "$BATCHES" "$start_idx" "$end_idx" "$stream_id" || failures=$((failures + 1))
+    echo ""
+  done
+
+  echo "$failures" > "/tmp/xqts-stream-failures-$stream_id"
+}
+
+# === Dispatch batches ===
+mkdir -p "$OUTPUT_DIR/junit/data"
+START_TIME=$(date +%s)
+FAILURES=0
+
+if [[ "$PARALLEL" -le 1 ]]; then
+  # Sequential mode (original behavior)
+  for (( batch_idx=0; batch_idx<BATCHES; batch_idx++ )); do
+    local_start=$((batch_idx * BATCH_SIZE))
+    local_end=$((local_start + BATCH_SIZE))
+    if (( local_end > TOTAL )); then local_end=$TOTAL; fi
+
+    run_batch "$((batch_idx + 1))" "$BATCHES" "$local_start" "$local_end" "1" || FAILURES=$((FAILURES + 1))
+    echo ""
+  done
+else
+  # Parallel mode: distribute batches round-robin across streams
+  echo "Starting $PARALLEL parallel streams..."
   echo ""
-done
+
+  # Build batch index arrays for each stream
+  declare -a STREAM_PIDS
+  for (( s=0; s<PARALLEL; s++ )); do
+    STREAM_INDICES=()
+    for (( batch_idx=s; batch_idx<BATCHES; batch_idx+=PARALLEL )); do
+      STREAM_INDICES+=("$batch_idx")
+    done
+
+    if [[ ${#STREAM_INDICES[@]} -gt 0 ]]; then
+      run_stream "$((s + 1))" "${STREAM_INDICES[@]}" &
+      STREAM_PIDS+=($!)
+    fi
+  done
+
+  # Wait for all streams
+  for pid in "${STREAM_PIDS[@]}"; do
+    wait "$pid" || true
+  done
+
+  # Collect failure counts
+  for (( s=0; s<PARALLEL; s++ )); do
+    local_file="/tmp/xqts-stream-failures-$((s + 1))"
+    if [[ -f "$local_file" ]]; then
+      FAILURES=$((FAILURES + $(cat "$local_file")))
+      rm -f "$local_file"
+    fi
+  done
+fi
 
 END_TIME=$(date +%s)
 TOTAL_ELAPSED=$((END_TIME - START_TIME))

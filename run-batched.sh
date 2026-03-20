@@ -190,13 +190,13 @@ run_batch() {
 
   local batch_log
   batch_log=$(mktemp /tmp/xqts-batch.XXXXXX)
-  set +e
-  timeout --kill-after=15 300 "${cmd[@]}" > "$batch_log" 2>&1
-  exit_code=$?
-  set -e
-  tail -20 "$batch_log"
-  rm -f "$batch_log"
-  rm -rf "$exist_home"
+  # Capture exit code without toggling set -e — toggling errexit inside
+  # backgrounded subshells causes the entire stream to exit prematurely.
+  exit_code=0
+  timeout --kill-after=15 300 "${cmd[@]}" > "$batch_log" 2>&1 || exit_code=$?
+  tail -20 "$batch_log" 2>/dev/null || true
+  rm -f "$batch_log" 2>/dev/null || true
+  rm -rf "$exist_home" 2>/dev/null || true
 
   batch_end=$(date +%s)
   batch_elapsed=$((batch_end - batch_start))

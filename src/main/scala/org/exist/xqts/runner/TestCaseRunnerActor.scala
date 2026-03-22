@@ -313,8 +313,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     testCase.test match {
       case Some(test) =>
 
-        // get the XQuery to execute, normalizing old map syntax (:= to :)
-        val queryString: String = normalizeMapSyntax(test.map(_ => resolvedEnvironment.resolvedQuery.get).merge)
+        // get the XQuery to execute
+        val queryString: String = test.map(_ => resolvedEnvironment.resolvedQuery.get).merge
 
         // get the static baseURI for the XQuery
         val baseUri = testCase.environment
@@ -1027,11 +1027,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @return the test result from processing the assertion.
    */
   private def assert(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionBaseUri: Option[String] = None)(xpath: String, actual: ExistServer.QueryResult): TestResult = {
-    val normalizedXpath = normalizeMapSyntax(xpath)
     // Set context item only for single-item results (e.g., maps from parse-csv)
     // Multi-item sequences (e.g., from csv-to-arrays) would cause the xpath to run per-item
     val contextForAssert = if (actual.getItemCount == 1) Some(actual) else None
-    executeQueryWith$Result(connection, normalizedXpath, true, contextForAssert, actual, assertionBaseUri) match {
+    executeQueryWith$Result(connection, xpath, true, contextForAssert, actual, assertionBaseUri) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
@@ -1083,30 +1082,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @param actual          the actual result from executing the XQuery.
    * @return the test result from processing the assertion.
    */
-  /**
-   * Normalize old XQuery map syntax ({@code map{"key":=value}) to the
-   * current syntax ({@code map{"key":value}). The W3C XQTS 3.1 test suite
-   * uses the old {@code :=} syntax in some assertion expressions.
-   *
-   * Only replaces {@code :=} that appears inside map constructors, not
-   * variable assignment operators ({@code let $x := ...}).
-   * Heuristic: replace {@code :=} that is NOT preceded by whitespace
-   * (map entries have no space before {@code :=}, but {@code let/for}
-   * bindings always have a space: {@code $var :=}).
-   */
-  private def normalizeMapSyntax(expr: String): String = {
-    // Replace ":=" that is preceded by a non-whitespace char (map key:=value)
-    // but NOT preceded by whitespace (variable $x := value)
-    expr.replaceAll("(\\S):=", "$1:")
-  }
-
   private def assertDeepEquals(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionBaseUri: Option[String] = None)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    val normalizedExpected = normalizeMapSyntax(expected)
     val deepEqualQuery =
       s"""
          | declare variable $$result external;
          |
-         | deep-equal(($normalizedExpected), $$result)
+         | deep-equal(($expected), $$result)
          |""".stripMargin
     executeQueryWith$Result(connection, deepEqualQuery, true, None, actual, assertionBaseUri) match {
       case Left(existServerException) =>
@@ -1141,12 +1122,11 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @return the test result from processing the assertion.
    */
   private def assertEq(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionBaseUri: Option[String] = None)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    val normalizedExpected = normalizeMapSyntax(expected)
     val eqQuery =
       s"""
          | declare variable $$result external;
          |
-         | $normalizedExpected eq $$result
+         | $expected eq $$result
          |""".stripMargin
     executeQueryWith$Result(connection, eqQuery, false, None, actual, assertionBaseUri) match {
       case Left(existServerException) =>
@@ -1186,7 +1166,6 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @return the test result from processing the assertion.
    */
   private def assertPermutation(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionBaseUri: Option[String] = None)(expected: String, actual: ExistServer.QueryResult): TestResult = {
-    val normalizedExpected = normalizeMapSyntax(expected)
     val expectedQuery =
       s"""
          | declare variable $$result external;
@@ -1251,7 +1230,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
          |   local:xdm-type($$key) || "::" || fn:data($$key)
          | }
          | return
-         |   fn:deep-equal(fn:sort(($normalizedExpected), (), $$sort-key-fun), fn:sort($$result, (), $$sort-key-fun))
+         |   fn:deep-equal(fn:sort(($expected), (), $$sort-key-fun), fn:sort($$result, (), $$sort-key-fun))
          |""".stripMargin
     executeQueryWith$Result(connection, expectedQuery, true, None, actual, assertionBaseUri) match {
       case Left(existServerException) =>

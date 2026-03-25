@@ -168,7 +168,7 @@ run_batch() {
   exist_home=$(mktemp -d /tmp/xqts-stream.XXXXXX)
 
   # Build runner command
-  local cmd=("$JAVA_HOME/bin/java" "-Xmx${HEAP}"
+  local cmd=("$JAVA_HOME/bin/java" "-Xmx${HEAP}" "-XX:+ExitOnOutOfMemoryError"
     "-Dexist.home=$exist_home"
     "-jar" "$JAR"
     "--xqts-version" "$XQTS_VERSION"

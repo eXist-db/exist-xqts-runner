@@ -188,12 +188,38 @@ run_batch() {
   local batch_start batch_end batch_elapsed exit_code
   batch_start=$(date +%s)
 
-  local batch_log
+  local batch_log jstack_file
   batch_log=$(mktemp /tmp/xqts-batch.XXXXXX)
-  # Capture exit code without toggling set -e — toggling errexit inside
-  # backgrounded subshells causes the entire stream to exit prematurely.
+  jstack_file="$OUTPUT_DIR/jstack-batch-${batch_num}.txt"
+
+  # Run the batch in the background so we can monitor for timeouts
+  # and capture a thread dump before the hard kill.
+  timeout --kill-after=30 300 "${cmd[@]}" > "$batch_log" 2>&1 &
+  local batch_pid=$!
+
+  # Monitor: if still running 15s before timeout, capture jstack
+  (
+    sleep 285  # 300s timeout - 15s buffer
+    if kill -0 $batch_pid 2>/dev/null; then
+      echo "  Batch $batch_num approaching timeout — capturing thread dump..."
+      local java_pid
+      java_pid=$(pgrep -P $batch_pid java 2>/dev/null | head -1 || true)
+      if [[ -n "$java_pid" ]]; then
+        "$JAVA_HOME/bin/jstack" "$java_pid" > "$jstack_file" 2>&1 || true
+        echo "  Thread dump saved to $jstack_file"
+      fi
+    fi
+  ) &
+  local monitor_pid=$!
+
+  # Wait for the batch to complete (or timeout)
   exit_code=0
-  timeout --kill-after=15 300 "${cmd[@]}" > "$batch_log" 2>&1 || exit_code=$?
+  wait $batch_pid 2>/dev/null || exit_code=$?
+
+  # Clean up monitor
+  kill $monitor_pid 2>/dev/null || true
+  wait $monitor_pid 2>/dev/null || true
+
   tail -20 "$batch_log" 2>/dev/null || true
   rm -f "$batch_log" 2>/dev/null || true
   rm -rf "$exist_home" 2>/dev/null || true
@@ -205,6 +231,9 @@ run_batch() {
     echo "  Batch $batch_num completed in ${batch_elapsed}s [stream $stream_id]"
   elif [[ $exit_code -eq 124 || $exit_code -eq 137 ]]; then
     echo "  WARNING: Batch $batch_num TIMED OUT after 300s (exit $exit_code) [stream $stream_id]"
+    if [[ -f "$jstack_file" ]]; then
+      echo "  Thread dump: $jstack_file"
+    fi
     return 1
   else
     echo "  WARNING: Batch $batch_num exited with code $exit_code (${batch_elapsed}s) [stream $stream_id]"

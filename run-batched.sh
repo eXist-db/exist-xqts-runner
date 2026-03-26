@@ -132,6 +132,7 @@ TOTAL=${#SET_ARRAY[@]}
 BATCHES=$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE ))
 
 echo "=== XQTS Batch Runner ==="
+echo "Parser:     ${PARSER:-antlr2}"
 echo "Version:    $XQTS_VERSION"
 echo "Test sets:  $TOTAL"
 echo "Batch size: $BATCH_SIZE"
@@ -170,6 +171,7 @@ run_batch() {
   # Build runner command
   local cmd=("$JAVA_HOME/bin/java" "-Xmx${HEAP}" "-XX:+ExitOnOutOfMemoryError"
     "-Dexist.home=$exist_home"
+    "-Dexist.parser=${PARSER:-antlr2}"
     "-jar" "$JAR"
     "--xqts-version" "$XQTS_VERSION"
     "--test-set" "$batch_sets"

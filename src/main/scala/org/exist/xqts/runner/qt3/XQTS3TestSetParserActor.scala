@@ -580,10 +580,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_ASSERT_TRUE) =>
           currentResult = currentResult.map(addAssertion(_)(AssertTrue))
 
-        case END_ELEMENT if (asyncReader.getLocalName == ELEM_ALL_OF || asyncReader.getLocalName == ELEM_ANY_OF) =>
-          currentResult = currentResult.map(stepOutAssertions)
-
-        case END_ELEMENT if (asyncReader.getLocalName == ELEM_ALL_OF || asyncReader.getLocalName == ELEM_NOT) =>
+        case END_ELEMENT if (asyncReader.getLocalName == ELEM_ALL_OF || asyncReader.getLocalName == ELEM_ANY_OF || asyncReader.getLocalName == ELEM_NOT) =>
           currentResult = currentResult.map(stepOutAssertions)
 
         case START_ELEMENT if (currentResult.nonEmpty && asyncReader.getLocalName == ELEM_ERROR) =>
@@ -682,7 +679,8 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
     def stepOutAssertions(currentAssertions: Stack[Result]): Stack[Result] = {
       if (currentAssertions.size >= 2) {
-        if (currentAssertions.peek.isInstanceOf[Assertions]) {
+        val top = currentAssertions.peek
+        if (top.isInstanceOf[Assertions] || top.isInstanceOf[Not]) {
           val (prevHead, stack) = currentAssertions.pop()
           val head = stack.peek
           if (head.isInstanceOf[Assertions]) {

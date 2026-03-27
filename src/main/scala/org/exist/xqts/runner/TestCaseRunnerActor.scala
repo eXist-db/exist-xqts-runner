@@ -1653,14 +1653,19 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
 
       case Right(expectedRegexStr) =>
+        // Pass regex and flags as external variables to avoid eXist parser issues
+        // with special characters in backtick string constructors (e.g., <?xml
+        // triggers processing instruction parsing inside ``[...]``)
         val expectedQuery =
           s"""
              | declare variable $$result external;
+             | declare variable $$regex external;
+             | declare variable $$flags external;
              |
-             | fn:matches($$result, ``[$expectedRegexStr]``, "${flags.getOrElse("")}")
+             | fn:matches($$result, $$regex, $$flags)
              |""".stripMargin
         val actualStr = connection.sequenceToStringRaw(actual, serializationProperties)
-        executeQueryWith$Result(connection, expectedQuery, true, None, new StringValue(actualStr), assertionBaseUri) match {
+        connection.executeQuery(expectedQuery, true, assertionBaseUri, None, Seq.empty, Seq.empty, Seq.empty, Seq.empty, Seq(RESULT_VARIABLE_NAME -> new StringValue(actualStr), "regex" -> new StringValue(expectedRegexStr), "flags" -> new StringValue(flags.getOrElse("")))) match {
           case Left(existServerException) =>
             ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 

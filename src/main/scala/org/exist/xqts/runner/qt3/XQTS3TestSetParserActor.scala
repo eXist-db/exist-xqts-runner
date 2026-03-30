@@ -661,9 +661,21 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
     def addAssertion(currentAssertions: Stack[Result])(assertion: Result): Stack[Result] = {
       currentAssertions.peekOption match {
-        case Some(head) if (head.isInstanceOf[Assertions] && !assertion.isInstanceOf[Assertions]) =>
+        case Some(head: Assertions) if (!assertion.isInstanceOf[Assertions]) =>
           // head of the stack is itself a list of assertions, and the assertion to add is not a list of assertions
-          currentAssertions.replace(head.asInstanceOf[Assertions] :+ assertion)
+          // Check if the last element in the list is a Not(None) that needs filling
+          head.assertions.lastOption match {
+            case Some(Not(None)) =>
+              // Fill the empty Not with this assertion
+              val updatedAssertions = head.assertions.init :+ Not(Some(assertion))
+              val updatedHead = head match {
+                case AllOf(_) => AllOf(updatedAssertions)
+                case AnyOf(_) => AnyOf(updatedAssertions)
+              }
+              currentAssertions.replace(updatedHead)
+            case _ =>
+              currentAssertions.replace(head :+ assertion)
+          }
 
         case Some(Not(None)) =>
           // head of the stack is a Not assertion which is empty, so wrap this assertion in the Not assertion

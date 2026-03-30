@@ -372,10 +372,11 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker], contextAttributesSuppli
                  ): IO[Either[ExistServerException, Result]] = {
         IO.delay {
           try {
-            val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.orNull)
-            // Extract serialization properties from the query context (e.g. declare option output:method "json")
+            // Pass outputProperties to execute() so eXist extracts serialization
+            // options (e.g., declare option output:method "html") BEFORE calling
+            // context.reset(), which clears them.
             val serializationProps = new Properties()
-            compiledQuery.xqueryContext.checkOptions(serializationProps)
+            val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.orNull, serializationProps)
             val result = Result(resultSequence, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime)
             result.serializationProperties = serializationProps
             Right(result)

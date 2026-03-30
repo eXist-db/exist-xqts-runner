@@ -13,6 +13,7 @@
 #   --xqts-version VERSION   3.1, HEAD, QT4, or FTTS (default: QT4)
 #   --batch-size N           test sets per batch (default: 50)
 #   --heap SIZE              JVM heap size (default: 4g)
+#   --timeout SECS           per-batch timeout in seconds (default: 180)
 #   --output-dir DIR         output directory (default: target)
 #   --test-set-pattern PAT   regex filter for test set names
 #   --exclude-test-set SETS  comma-separated test sets to exclude
@@ -33,6 +34,7 @@ set -euo pipefail
 XQTS_VERSION="QT4"
 BATCH_SIZE=50
 HEAP="4g"
+BATCH_TIMEOUT=180
 OUTPUT_DIR="target"
 TEST_SET_PATTERN=""
 EXCLUDE_TEST_SETS=""
@@ -51,6 +53,7 @@ while [[ $# -gt 0 ]]; do
     --xqts-version) XQTS_VERSION="$2"; shift 2 ;;
     --batch-size)   BATCH_SIZE="$2"; shift 2 ;;
     --heap)         HEAP="$2"; shift 2 ;;
+    --timeout)      BATCH_TIMEOUT="$2"; shift 2 ;;
     --output-dir)   OUTPUT_DIR="$2"; shift 2 ;;
     --test-set-pattern) TEST_SET_PATTERN="$2"; shift 2 ;;
     --exclude-test-set) EXCLUDE_TEST_SETS="$2"; shift 2 ;;
@@ -139,6 +142,7 @@ echo "Batch size: $BATCH_SIZE"
 echo "Batches:    $BATCHES"
 echo "Parallel:   $PARALLEL"
 echo "Heap:       $HEAP"
+echo "Timeout:    ${BATCH_TIMEOUT}s"
 echo "Output:     $OUTPUT_DIR"
 echo "JAR:        $JAR"
 echo ""
@@ -196,12 +200,16 @@ run_batch() {
 
   # Run the batch in the background so we can monitor for timeouts
   # and capture a thread dump before the hard kill.
-  timeout --kill-after=30 300 "${cmd[@]}" > "$batch_log" 2>&1 &
+  local jstack_buffer=15
+  local jstack_delay=$((BATCH_TIMEOUT - jstack_buffer))
+  if (( jstack_delay < 10 )); then jstack_delay=$((BATCH_TIMEOUT / 2)); fi
+
+  timeout --kill-after=30 "$BATCH_TIMEOUT" "${cmd[@]}" > "$batch_log" 2>&1 &
   local batch_pid=$!
 
-  # Monitor: if still running 15s before timeout, capture jstack
+  # Monitor: if still running near timeout, capture jstack
   (
-    sleep 285  # 300s timeout - 15s buffer
+    sleep "$jstack_delay"
     if kill -0 $batch_pid 2>/dev/null; then
       echo "  Batch $batch_num approaching timeout — capturing thread dump..."
       local java_pid
@@ -218,12 +226,16 @@ run_batch() {
   exit_code=0
   wait $batch_pid 2>/dev/null || exit_code=$?
 
-  # Clean up monitor
+  # Clean up monitor and any lingering Java processes
   kill $monitor_pid 2>/dev/null || true
   wait $monitor_pid 2>/dev/null || true
 
   tail -20 "$batch_log" 2>/dev/null || true
   rm -f "$batch_log" 2>/dev/null || true
+
+  # Kill any lingering Java processes from this batch (BrokerPool shutdown hangs)
+  pkill -9 -f "exist.home=$exist_home" 2>/dev/null || true
+  sleep 1
   rm -rf "$exist_home" 2>/dev/null || true
 
   batch_end=$(date +%s)
@@ -232,7 +244,7 @@ run_batch() {
   if [[ $exit_code -eq 0 ]]; then
     echo "  Batch $batch_num completed in ${batch_elapsed}s [stream $stream_id]"
   elif [[ $exit_code -eq 124 || $exit_code -eq 137 ]]; then
-    echo "  WARNING: Batch $batch_num TIMED OUT after 300s (exit $exit_code) [stream $stream_id]"
+    echo "  WARNING: Batch $batch_num TIMED OUT after ${BATCH_TIMEOUT}s (exit $exit_code) [stream $stream_id]"
     if [[ -f "$jstack_file" ]]; then
       echo "  Thread dump: $jstack_file"
     fi

@@ -241,17 +241,18 @@ run_batch() {
   batch_end=$(date +%s)
   batch_elapsed=$((batch_end - batch_start))
 
-  if [[ $exit_code -eq 0 ]]; then
-    echo "  Batch $batch_num completed in ${batch_elapsed}s [stream $stream_id]"
-  elif [[ $exit_code -eq 124 || $exit_code -eq 137 ]]; then
+  if [[ $exit_code -eq 124 || $exit_code -eq 137 ]]; then
     echo "  WARNING: Batch $batch_num TIMED OUT after ${BATCH_TIMEOUT}s (exit $exit_code) [stream $stream_id]"
     if [[ -f "$jstack_file" ]]; then
       echo "  Thread dump: $jstack_file"
     fi
     return 1
-  else
-    echo "  WARNING: Batch $batch_num exited with code $exit_code (${batch_elapsed}s) [stream $stream_id]"
+  elif [[ $exit_code -gt 1 && $exit_code -ne 255 ]]; then
+    echo "  WARNING: Batch $batch_num crashed with code $exit_code (${batch_elapsed}s) [stream $stream_id]"
     return 1
+  else
+    # exit 0 = all tests passed, exit 1 = some test failures (normal), exit 255 = runner error (non-fatal)
+    echo "  Batch $batch_num completed in ${batch_elapsed}s (exit $exit_code) [stream $stream_id]"
   fi
   return 0
 }

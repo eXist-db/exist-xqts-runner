@@ -65,7 +65,7 @@ libraryDependencies ++= {
     "org.parboiled" %% "parboiled" % "2.5.1",
     "org.apache.ant" % "ant-junit" % "1.10.15", // used for formatting junit style report
 
-    "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
+    "net.sf.saxon" % "Saxon-HE" % "12.5",
     "org.exist-db" % "exist-core" % existV changing(),
     "org.exist-db" % "exist-expath" % existV changing(),
     "org.xmlunit" % "xmlunit-core" % "2.11.0",

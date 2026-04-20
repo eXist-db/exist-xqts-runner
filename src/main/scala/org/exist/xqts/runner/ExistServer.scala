@@ -503,7 +503,20 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker], contextAttributesSuppli
       context
     }
 
-    val source = new StringSource(query)
+    // If the query has no version declaration and we're running with QT4
+    // (indicated by exist.xqts.default-version=4.0 system property), prepend
+    // "xquery version '4.0';" so XQ4 syntax (=!>, ->, etc.) is accepted.
+    // If the query has no version declaration and exist.xqts.default-version=4.0,
+    // prepend "xquery version '4.0';" so XQ4 syntax is accepted.
+    // Match version declaration even after leading comments.
+    val hasVersionDecl = query.contains("xquery version") || query.contains("module namespace")
+    val defaultVersion = System.getProperty("exist.xqts.default-version", "")
+    val effectiveQuery = if (!hasVersionDecl && defaultVersion == "4.0") {
+      "xquery version \"4.0\";\n" + query
+    } else {
+      query
+    }
+    val source = new StringSource(effectiveQuery)
     val fnConfigureContext: XQueryContext => XQueryContext = { ctx =>
       val configured = setupContext(ctx)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
       // Set global context attributes (e.g., ft.stopWordURIMap, ft.thesaurusURIMap from XQFTTS catalog)

@@ -92,7 +92,8 @@ object XQTSRunner {
     XPath_1_0_Compatibility,
     TransformXSLT,
     TransformXSLT_30,
-    XQUpdate
+    XQUpdate,
+    Binary
   )
 
   /**

@@ -495,9 +495,17 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker], contextAttributesSuppli
       }
 
       for (module <- modules) {
-        val fileUri: XmldbURI = XmldbURI.createInternal(module.file.toAbsolutePath.toUri.toString)
-        val locations: Array[AnyURIValue] = Array(new AnyURIValue(fileUri))
-        context.importModule(module.uri.getStringValue, null, locations)
+        val fileUri: String = module.file.toAbsolutePath.toUri.toString
+        // Register the location hint so sub-modules can find it during compilation
+        context.addModuleLocationHint(module.uri.getStringValue, fileUri)
+        // Try to eagerly import the module; ignore XQST0059 namespace mismatches
+        // (the XQTS catalog may map a namespace to a file declaring a different namespace)
+        try {
+          val locations: Array[AnyURIValue] = Array(new AnyURIValue(fileUri))
+          context.importModule(module.uri.getStringValue, null, locations)
+        } catch {
+          case _: org.exist.xquery.XPathException => // ignore namespace mismatch or load errors
+        }
       }
 
       context

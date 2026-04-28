@@ -496,8 +496,15 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker], contextAttributesSuppli
 
       for (module <- modules) {
         val fileUri: String = module.file.toAbsolutePath.toUri.toString
-        // Register the location hint so sub-modules can find it during compilation
-        context.addModuleLocationHint(module.uri.getStringValue, fileUri)
+        // Register the location hint so sub-modules can find it during compilation.
+        // addModuleLocationHint was added on a newer exist-core branch; older branches
+        // (e.g. v2/* worktrees) lack this method, so call it reflectively when present.
+        try {
+          val m = context.getClass.getMethod("addModuleLocationHint", classOf[String], classOf[String])
+          m.invoke(context, module.uri.getStringValue, fileUri)
+        } catch {
+          case _: NoSuchMethodException => // older exist-core: the method is unavailable; importModule below still works
+        }
         // Try to eagerly import the module; ignore XQST0059 namespace mismatches
         // (the XQTS catalog may map a namespace to a file declaring a different namespace)
         try {

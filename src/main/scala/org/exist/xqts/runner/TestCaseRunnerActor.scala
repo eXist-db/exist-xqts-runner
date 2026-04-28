@@ -306,6 +306,45 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
+   * Prepend `xquery version "..."` to the test query, picking the right version
+   * from the test's spec dependencies.
+   *
+   * Why this exists: tests need a version declaration so eXist applies
+   * version-specific semantics. Strict deps like `XQ10 XQ30 XQ31` (no plus form)
+   * mark tests authored before XQuery 4.0 — running them as XQ4 trips changed
+   * rules (reserved function names, unprefixed default namespace, default param
+   * values, etc.). The qt4-xquery-update runner branch does not auto-prepend in
+   * ExistServer, so we do it here based on the test's declared compatibility.
+   *
+   * Algorithm:
+   *   - If the query already declares a version, leave it alone.
+   *   - If any spec dep uses "+" form (e.g. XQ31+, XQ40+), prepend "4.0".
+   *   - Otherwise, pick the highest strict spec (XQ40 > XQ31 > XQ30 > XQ10).
+   *   - If no XQ spec dep exists, leave unchanged.
+   */
+  private def applyVersionHint(query: String, deps: Seq[Dependency]): String = {
+    if (query.contains("xquery version") || query.contains("module namespace")) {
+      return query
+    }
+    val specDeps = deps.filter(d => d.`type` == DependencyType.Spec && d.satisfied)
+    if (specDeps.isEmpty) {
+      return query
+    }
+    val acceptsXQ4 = specDeps.exists(_.value.contains("+"))
+    val specs = specDeps.flatMap(_.value.split(' ').toSeq).filter(_.nonEmpty).toSet
+    val version =
+      if (acceptsXQ4 || specs.contains("XQ40")) Some("4.0")
+      else if (specs.contains("XQ31")) Some("3.1")
+      else if (specs.contains("XQ30")) Some("3.0")
+      else if (specs.contains("XQ10")) Some("1.0")
+      else None
+    version match {
+      case Some(v) => "xquery version \"" + v + "\";\n" + query
+      case None    => query
+    }
+  }
+
+  /**
    * Run a non-update (standard) XQTS test-case.
    */
   @throws(classOf[OutOfMemoryError])
@@ -313,8 +352,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     testCase.test match {
       case Some(test) =>
 
-        // get the XQuery to execute
-        val queryString: String = test.map(_ => resolvedEnvironment.resolvedQuery.get).merge
+        // get the XQuery to execute, applying a version prepend hint when the test's
+        // strict spec dependencies indicate a version older than the runner default.
+        val rawQuery: String = test.map(_ => resolvedEnvironment.resolvedQuery.get).merge
+        val queryString = applyVersionHint(rawQuery, testCase.dependencies)
 
         // get the static baseURI for the XQuery
         val baseUri = testCase.environment

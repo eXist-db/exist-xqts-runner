@@ -17,6 +17,9 @@
 #   --output-dir DIR         output directory (default: target)
 #   --test-set-pattern PAT   regex filter for test set names
 #   --exclude-test-set SETS  comma-separated test sets to exclude
+#   --exclude-test-case CASES  comma-separated test cases to exclude
+#                              (QT4 defaults to a list of known OOM-prone op-to
+#                              cases; pass an empty string to disable)
 #   --enable-feature FEATS   comma-separated features to enable
 #   --parallel N             run N batch streams in parallel (default: 1)
 #   --resume                 skip test sets that already have result XML
@@ -38,11 +41,21 @@ BATCH_TIMEOUT=300
 OUTPUT_DIR="target"
 TEST_SET_PATTERN=""
 EXCLUDE_TEST_SETS=""
+EXCLUDE_TEST_CASES="__DEFAULT__"
 ENABLE_FEATURES=""
 PARALLEL=1
 RESUME=false
 DRY_RUN=false
 EXTRA_ARGS=()
+
+# QT4 op-to test cases that allocate >100M-item integer sequences (typically
+# via reverse() of a 100B-item range, which materializes all items, or via
+# `=`/`<` against a huge range where the matching value is at the far end so
+# no short-circuit helps). They reliably OOM the JVM at any reasonable heap
+# size and abort the entire batch, losing the other ~49 test sets in batch-9.
+# Excluding them costs ~14 individual test cases out of QT4's ~36k total.
+# See: op/to.xml RangeExpr-408f-k, 409c-d, 410f-k.
+QT4_OOM_PRONE_TEST_CASES="RangeExpr-408f,RangeExpr-408g,RangeExpr-408h,RangeExpr-408i,RangeExpr-408j,RangeExpr-408k,RangeExpr-409c,RangeExpr-409d,RangeExpr-410f,RangeExpr-410g,RangeExpr-410h,RangeExpr-410i,RangeExpr-410j,RangeExpr-410k"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 JAR="$SCRIPT_DIR/exist-xqts-runner-assembly-2.0.0-SNAPSHOT.jar"
 JAVA_HOME="${JAVA_HOME:-/Users/wicentowskijc/.asdf/installs/java/zulu-21.38.21}"
@@ -57,7 +70,9 @@ while [[ $# -gt 0 ]]; do
     --output-dir)   OUTPUT_DIR="$2"; shift 2 ;;
     --test-set-pattern) TEST_SET_PATTERN="$2"; shift 2 ;;
     --exclude-test-set) EXCLUDE_TEST_SETS="$2"; shift 2 ;;
+    --exclude-test-case) EXCLUDE_TEST_CASES="$2"; shift 2 ;;
     --enable-feature)   ENABLE_FEATURES="$2"; shift 2 ;;
+    --parser)       PARSER="$2"; shift 2 ;;
     --parallel)     PARALLEL="$2"; shift 2 ;;
     --resume)       RESUME=true; shift ;;
     --dry-run)      DRY_RUN=true; shift ;;
@@ -84,6 +99,18 @@ fi
 if [[ ! -f "$JAR" ]]; then
   echo "ERROR: Runner JAR not found: $JAR"
   exit 1
+fi
+
+# Apply default OOM-prone test-case exclusions for QT4 if the user didn't
+# override them via --exclude-test-case. Pass `--exclude-test-case ''` to
+# disable the defaults explicitly (e.g. when running op-to in isolation
+# with a large heap to investigate the underlying eXist behavior).
+if [[ "$EXCLUDE_TEST_CASES" == "__DEFAULT__" ]]; then
+  if [[ "$XQTS_VERSION" == "QT4" ]]; then
+    EXCLUDE_TEST_CASES="$QT4_OOM_PRONE_TEST_CASES"
+  else
+    EXCLUDE_TEST_CASES=""
+  fi
 fi
 
 # === Extract test set names from catalog ===
@@ -173,15 +200,26 @@ run_batch() {
   exist_home=$(mktemp -d /tmp/xqts-stream.XXXXXX)
 
   # Build runner command
+  # For QT4 tests, set default XQuery version to 4.0 so tests without
+  # version declarations get xq4Enabled=true in the ANTLR parser.
+  local version_prop=""
+  if [[ "$XQTS_VERSION" == "QT4" ]]; then
+    version_prop="-Dexist.xqts.default-version=4.0"
+  fi
   local cmd=("$JAVA_HOME/bin/java" "-Xmx${HEAP}" "-XX:+ExitOnOutOfMemoryError"
     "-Dexist.home=$exist_home"
     "-Dexist.parser=${PARSER:-antlr2}"
+    ${version_prop:+"$version_prop"}
     "-jar" "$JAR"
     "--xqts-version" "$XQTS_VERSION"
     "--test-set" "$batch_sets"
     "--local-dir" "$SCRIPT_DIR/work"
     "--output-dir" "$OUTPUT_DIR"
   )
+
+  if [[ -n "$EXCLUDE_TEST_CASES" ]]; then
+    cmd+=("--exclude-test-case" "$EXCLUDE_TEST_CASES")
+  fi
 
   if [[ -n "$ENABLE_FEATURES" ]]; then
     cmd+=("--enable-feature" "$ENABLE_FEATURES")

@@ -66,6 +66,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   private var awaitingQueryStr: Map[Path, Seq[TestCaseId]] = Map.empty
   private var pendingTestCases: Map[TestCaseId, PendingTestCase] = Map.empty
 
+  // Namespaces declared by the current test case's <environment>. These need
+  // to be visible to assertion XPath queries (e.g. `j:` prefix in
+  // fn-json-to-xml tests). Set when an assertion is dispatched and consulted
+  // by executeQueryWith$Result. Actors are single-threaded so this is safe.
+  private var assertionNamespaces: Seq[XQTSParserActor.Namespace] = Seq.empty
+
   override def receive: Receive = {
 
     case rtc@RunTestCase(testSetRef, testCase, manager) =>
@@ -423,7 +429,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                     FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(connection)(expectedError, queryResult))
 
                   case (Some(expectedResult)) =>
-                    processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, queryResultObj.serializationProperties, baseUri)(expectedResult, queryResult)
+                    assertionNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
+                    try {
+                      processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, queryResultObj.serializationProperties, baseUri)(expectedResult, queryResult)
+                    } finally {
+                      assertionNamespaces = Seq.empty
+                    }
 
                   case None =>
                     ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("No defined expected result"))
@@ -602,7 +613,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                           case Some(expectedError: Error) =>
                             FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(connection)(expectedError, queryResult))
                           case Some(expectedResult) =>
-                            processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, assertionBaseUri = baseUri)(expectedResult, queryResult)
+                            assertionNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
+                            try {
+                              processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, assertionBaseUri = baseUri)(expectedResult, queryResult)
+                            } finally {
+                              assertionNamespaces = Seq.empty
+                            }
                           case None =>
                             ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("No defined expected result"))
                         }
@@ -617,7 +633,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                     FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, failureMessage(connection)(expectedError, new org.exist.xquery.value.EmptySequence()))
                   case Some(expectedResult) if lastUpdateResult.isDefined =>
                     // Copy-modify-return: use the update expression's return value for assertion
-                    processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, assertionBaseUri = baseUri)(expectedResult, lastUpdateResult.get)
+                    assertionNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
+                    try {
+                      processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, assertionBaseUri = baseUri)(expectedResult, lastUpdateResult.get)
+                    } finally {
+                      assertionNamespaces = Seq.empty
+                    }
                   case Some(_) =>
                     // Expected a non-error result with no verification query and no update result
                     FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, s"Expected a result but no verification query defined")
@@ -1829,7 +1850,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @return the result or executing the query, or an exception.
    */
   private def executeQueryWith$Result(connection: ExistConnection, query: String, cacheCompiled: Boolean, contextSequence: Option[Sequence], $result: Sequence, staticBaseUri: Option[String] = None) = {
-    connection.executeQuery(query, cacheCompiled, staticBaseUri, contextSequence, Seq.empty, Seq.empty, Seq.empty, Seq.empty, Seq(RESULT_VARIABLE_NAME -> $result))
+    connection.executeQuery(query, cacheCompiled, staticBaseUri, contextSequence, Seq.empty, Seq.empty, Seq.empty, assertionNamespaces, Seq(RESULT_VARIABLE_NAME -> $result))
   }
 
   /**

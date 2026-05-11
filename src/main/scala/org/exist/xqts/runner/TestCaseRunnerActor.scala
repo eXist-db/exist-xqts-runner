@@ -343,8 +343,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     val acceptsAnyLater = specDeps.exists(_.value.contains("+"))
     val specs = specDeps.flatMap(_.value.split(' ').toSeq).filter(_.nonEmpty).toSet
     val plusFormVersion = xqtsVersion match {
-      case XQTS_3_1 => "3.1"
-      case _        => "4.0"
+      case XQTS_3_1  => "3.1"
+      case XQTS_HEAD => "3.1"  // HEAD is the live qt3tests master = final XQ 3.1 Rec + corrections; cap "+" deps at 3.1 to measure XQ 3.1 conformance
+      case _         => "4.0"
     }
     val version =
       if (specs.contains("XQ40")) Some("4.0")

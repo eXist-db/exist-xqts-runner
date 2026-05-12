@@ -77,6 +77,17 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   private var watchdogStalledTicks = 0
   private var startedTestCases: Map[TestSetRef, Set[String]] = Map.empty
 
+  // Forced-shutdown drain state. Once `forceSerializeAndShutdown` has been
+  // called, we send any pending TestSetResults and then wait for their
+  // SerializedTestSetResults acks before triggering actor-system termination —
+  // otherwise the children get killed mid-write and the in-flight results land
+  // in deadLetters. The deadline thread is the hard backstop in case the
+  // serializer itself is wedged.
+  private var forcedShutdown = false
+  private var finalizeSent = false
+  /** Hard deadline (ms) for the forced-shutdown drain before we give up and terminate anyway. */
+  private val FORCED_DRAIN_DEADLINE_MS = 60000L
+
   override def receive: Receive = {
 
     case RunXQTS(xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, maxCacheBytes, testSets, testCases, excludeTestSets, excludeTestCases) =>
@@ -201,8 +212,15 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
 
     case SerializedTestSetResults(testSetRef) =>
       unserializedTestSets -= testSetRef
-      if (allTestSetsCompleted()) {
-        // all TestSet results have been sent to the serializer
+      // Under a forced shutdown, hung-but-never-completed test cases mean
+      // `allTestSetsCompleted()` will never be true; relax to "all serialization
+      // acks received" so the drain can finalize. Also guard against sending
+      // FinalizeSerialization more than once.
+      val readyToFinalize =
+        !finalizeSent &&
+          (allTestSetsCompleted() || (forcedShutdown && unserializedTestSets.isEmpty))
+      if (readyToFinalize) {
+        finalizeSent = true
         resultsSerializerRouter ! FinalizeSerialization
       }
 
@@ -213,19 +231,63 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   }
 
   private def forceSerializeAndShutdown(): Unit = {
-    // Serialize any completed but unsent test sets before shutting down
+    // Idempotent: a second watchdog tick (or a re-entry from another path)
+    // must not start a parallel drain.
+    if (forcedShutdown) {
+      return
+    }
+    forcedShutdown = true
+
+    // Stop the watchdog now that we're committed to draining; we don't want
+    // another stall tick to log "Forcing shutdown" while serialization is
+    // already in progress.
+    timers.cancel(TimerWatchdogKey)
+
+    // Serialize any completed but unsent test sets.
     for {
       (testSetRef, _) <- this.testCases
       if !unserializedTestSets.contains(testSetRef)
+      results <- completedTestCases.get(testSetRef)
     } {
-      completedTestCases.get(testSetRef).foreach { results =>
-        resultsSerializerRouter ! TestSetResults(testSetRef, results.values.toSeq)
-      }
+      resultsSerializerRouter ! TestSetResults(testSetRef, results.values.toSeq)
+      unserializedTestSets += testSetRef
     }
-    shutdown()
+
+    if (unserializedTestSets.isEmpty) {
+      // Nothing in flight — fall straight through the normal finalize/finish
+      // handshake so the serializer router gets a chance to flush its own state.
+      if (!finalizeSent) {
+        finalizeSent = true
+        resultsSerializerRouter ! FinalizeSerialization
+      }
+    } else {
+      logger.info(s"Draining ${unserializedTestSets.size} in-flight TestSetResults before shutdown (deadline ${FORCED_DRAIN_DEADLINE_MS / 1000}s)")
+    }
+
+    // Hard backstop: if the serializer never acks (e.g. wedged write), give
+    // up on the drain after FORCED_DRAIN_DEADLINE_MS and shut down anyway.
+    // The 30s deadline thread inside shutdown() is a separate backstop for
+    // actor-system termination itself.
+    val backstop = new Thread(() => {
+      try {
+        Thread.sleep(FORCED_DRAIN_DEADLINE_MS)
+        logger.warn(s"Forced-shutdown drain did not complete within ${FORCED_DRAIN_DEADLINE_MS / 1000}s; terminating anyway (${unserializedTestSets.size} TestSetResults still unacked)")
+        // Re-enter via a self-message so shutdown() runs on the actor thread.
+        self ! FinishedSerialization
+      } catch {
+        case _: InterruptedException =>
+      }
+    }, "xqts-forced-drain-backstop")
+    backstop.setDaemon(true)
+    backstop.start()
   }
 
+  private var shutdownCalled = false
   private def shutdown(): Unit = {
+    if (shutdownCalled) {
+      return
+    }
+    shutdownCalled = true
     timers.cancel(TimerWatchdogKey)
     if (logger.isDebugEnabled()) {
       timers.cancel(TimerStatsKey)

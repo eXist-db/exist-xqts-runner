@@ -294,6 +294,7 @@ object XQTSParserActor {
     val TransformXSLT = FeatureVal("fn-transform-XSLT")
     val TransformXSLT_30 = FeatureVal("fn-transform-XSLT30")
     val XQUpdate = FeatureVal("XQUpdate")
+    val Binary = FeatureVal("binary")
   }
 
   /**

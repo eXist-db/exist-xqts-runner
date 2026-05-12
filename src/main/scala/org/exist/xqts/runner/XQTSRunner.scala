@@ -92,7 +92,8 @@ object XQTSRunner {
     XPath_1_0_Compatibility,
     TransformXSLT,
     TransformXSLT_30,
-    XQUpdate
+    XQUpdate,
+    Binary
   )
 
   /**
@@ -333,7 +334,7 @@ private class XQTSRunner {
             val parserActorClass = getParserActorClass(cmdConfig.xqtsVersion)
             val serializerActorClass = getSerializerActorClass()
             val xqtsRunner = system.actorOf(Props(classOf[XQTSRunnerActor], settings.xmlParserBufferSize, server, parserActorClass, serializerActorClass, styleDir, cmdConfig.outputDir.getOrElse(Paths.get(settings.outputDir))), name = "XQTSRunner")
-            xqtsRunner ! RunXQTS(cmdConfig.xqtsVersion, localXqtsDir, getEnabled(DEFAULT_FEATURES)(cmdConfig.enableFeatures, cmdConfig.disableFeatures).toSet, getEnabled(DEFAULT_SPECS)(cmdConfig.enableSpecs, cmdConfig.disableSpecs).toSet, getEnabled(DEFAULT_XML_VERSIONS)(cmdConfig.enableXmlVersions, cmdConfig.disableXmlVersions).toSet, getEnabled(DEFAULT_XSD_VERSIONS)(cmdConfig.enableXsdVersions, cmdConfig.disableXsdVersions).toSet, settings.commonResourceCacheMaxSize, cmdConfig.testSetPattern.map(Right(_)).getOrElse(Left(cmdConfig.testSets.toSet)), cmdConfig.testCasePattern.map(Right(_)).getOrElse(Left(cmdConfig.testCases.toSet)), cmdConfig.excludeTestSets.toSet, cmdConfig.excludeTestCases.toSet)
+            xqtsRunner ! RunXQTS(cmdConfig.xqtsVersion, localXqtsDir, getEnabled(DEFAULT_FEATURES)(cmdConfig.enableFeatures, cmdConfig.disableFeatures).toSet, getEnabled(defaultSpecsFor(cmdConfig.xqtsVersion))(cmdConfig.enableSpecs, cmdConfig.disableSpecs).toSet, getEnabled(DEFAULT_XML_VERSIONS)(cmdConfig.enableXmlVersions, cmdConfig.disableXmlVersions).toSet, getEnabled(DEFAULT_XSD_VERSIONS)(cmdConfig.enableXsdVersions, cmdConfig.disableXsdVersions).toSet, settings.commonResourceCacheMaxSize, cmdConfig.testSetPattern.map(Right(_)).getOrElse(Left(cmdConfig.testSets.toSet)), cmdConfig.testCasePattern.map(Right(_)).getOrElse(Left(cmdConfig.testCases.toSet)), cmdConfig.excludeTestSets.toSet, cmdConfig.excludeTestCases.toSet)
 
           case Left(throwable) =>
             logger.error("Unable to start eXist-db Server", throwable)
@@ -352,6 +353,20 @@ private class XQTSRunner {
    */
   private def getEnabled[T](defaultEnabled: Seq[T])(enable: Seq[T], disable: Seq[T]): Seq[T] = {
     (defaultEnabled ++ enable).filterNot(disable.contains(_)).toSet.toSeq
+  }
+
+  /**
+   * Returns the spec versions enabled by default for the given XQTS version.
+   * Tests carrying a strict (non-"+") spec dependency are filtered out unless
+   * the runner's target spec is in the dependency's value list. For QT4 we
+   * target XQ40/XP40 only -- tests declaring e.g. `XQ10 XQ30 XQ31` (no XQ40)
+   * are skipped, because the runner prepends `xquery version "4.0"` and so
+   * cannot reproduce their pre-XQ40 semantics. Other XQTS versions keep the
+   * historical "all specs enabled" behavior.
+   */
+  private def defaultSpecsFor(xqtsVersion: XQTSVersion): Seq[Spec] = xqtsVersion match {
+    case XQTS_QT4 => Seq(XP40, XQ40)
+    case _ => DEFAULT_SPECS
   }
 
   /**

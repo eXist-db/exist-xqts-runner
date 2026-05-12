@@ -372,10 +372,11 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker], contextAttributesSuppli
                  ): IO[Either[ExistServerException, Result]] = {
         IO.delay {
           try {
-            val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.orNull)
-            // Extract serialization properties from the query context (e.g. declare option output:method "json")
+            // Pass outputProperties to execute() so eXist extracts serialization
+            // options (e.g., declare option output:method "html") BEFORE calling
+            // context.reset(), which clears them.
             val serializationProps = new Properties()
-            compiledQuery.xqueryContext.checkOptions(serializationProps)
+            val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.orNull, serializationProps)
             val result = Result(resultSequence, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime)
             result.serializationProperties = serializationProps
             Right(result)
@@ -494,15 +495,36 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker], contextAttributesSuppli
       }
 
       for (module <- modules) {
-        val fileUri: XmldbURI = XmldbURI.createInternal(module.file.toAbsolutePath.toUri.toString)
-        val locations: Array[AnyURIValue] = Array(new AnyURIValue(fileUri))
-        context.importModule(module.uri.getStringValue, null, locations)
+        val fileUri: String = module.file.toAbsolutePath.toUri.toString
+        // Register the location hint so sub-modules can find it during compilation
+        context.addModuleLocationHint(module.uri.getStringValue, fileUri)
+        // Try to eagerly import the module; ignore XQST0059 namespace mismatches
+        // (the XQTS catalog may map a namespace to a file declaring a different namespace)
+        try {
+          val locations: Array[AnyURIValue] = Array(new AnyURIValue(fileUri))
+          context.importModule(module.uri.getStringValue, null, locations)
+        } catch {
+          case _: org.exist.xquery.XPathException => // ignore namespace mismatch or load errors
+        }
       }
 
       context
     }
 
-    val source = new StringSource(query)
+    // If the query has no version declaration and we're running with QT4
+    // (indicated by exist.xqts.default-version=4.0 system property), prepend
+    // "xquery version '4.0';" so XQ4 syntax (=!>, ->, etc.) is accepted.
+    // If the query has no version declaration and exist.xqts.default-version=4.0,
+    // prepend "xquery version '4.0';" so XQ4 syntax is accepted.
+    // Match version declaration even after leading comments.
+    val hasVersionDecl = query.contains("xquery version") || query.contains("module namespace")
+    val defaultVersion = System.getProperty("exist.xqts.default-version", "")
+    val effectiveQuery = if (!hasVersionDecl && defaultVersion == "4.0") {
+      "xquery version \"4.0\";\n" + query
+    } else {
+      query
+    }
+    val source = new StringSource(effectiveQuery)
     val fnConfigureContext: XQueryContext => XQueryContext = { ctx =>
       val configured = setupContext(ctx)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
       // Set global context attributes (e.g., ft.stopWordURIMap, ft.thesaurusURIMap from XQFTTS catalog)

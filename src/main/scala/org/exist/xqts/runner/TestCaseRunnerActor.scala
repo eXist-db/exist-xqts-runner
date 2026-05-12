@@ -66,6 +66,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   private var awaitingQueryStr: Map[Path, Seq[TestCaseId]] = Map.empty
   private var pendingTestCases: Map[TestCaseId, PendingTestCase] = Map.empty
 
+  // Namespaces declared by the current test case's <environment>. These need
+  // to be visible to assertion XPath queries (e.g. `j:` prefix in
+  // fn-json-to-xml tests). Set when an assertion is dispatched and consulted
+  // by executeQueryWith$Result. Actors are single-threaded so this is safe.
+  private var assertionNamespaces: Seq[XQTSParserActor.Namespace] = Seq.empty
+
   override def receive: Receive = {
 
     case rtc@RunTestCase(testSetRef, testCase, manager) =>
@@ -306,6 +312,45 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
+   * Prepend `xquery version "..."` to the test query, picking the right version
+   * from the test's spec dependencies.
+   *
+   * Why this exists: tests need a version declaration so eXist applies
+   * version-specific semantics. Strict deps like `XQ10 XQ30 XQ31` (no plus form)
+   * mark tests authored before XQuery 4.0 — running them as XQ4 trips changed
+   * rules (reserved function names, unprefixed default namespace, default param
+   * values, etc.). The qt4-xquery-update runner branch does not auto-prepend in
+   * ExistServer, so we do it here based on the test's declared compatibility.
+   *
+   * Algorithm:
+   *   - If the query already declares a version, leave it alone.
+   *   - If any spec dep uses "+" form (e.g. XQ31+, XQ40+), prepend "4.0".
+   *   - Otherwise, pick the highest strict spec (XQ40 > XQ31 > XQ30 > XQ10).
+   *   - If no XQ spec dep exists, leave unchanged.
+   */
+  private def applyVersionHint(query: String, deps: Seq[Dependency]): String = {
+    if (query.contains("xquery version") || query.contains("module namespace")) {
+      return query
+    }
+    val specDeps = deps.filter(d => d.`type` == DependencyType.Spec && d.satisfied)
+    if (specDeps.isEmpty) {
+      return query
+    }
+    val acceptsXQ4 = specDeps.exists(_.value.contains("+"))
+    val specs = specDeps.flatMap(_.value.split(' ').toSeq).filter(_.nonEmpty).toSet
+    val version =
+      if (acceptsXQ4 || specs.contains("XQ40")) Some("4.0")
+      else if (specs.contains("XQ31")) Some("3.1")
+      else if (specs.contains("XQ30")) Some("3.0")
+      else if (specs.contains("XQ10")) Some("1.0")
+      else None
+    version match {
+      case Some(v) => "xquery version \"" + v + "\";\n" + query
+      case None    => query
+    }
+  }
+
+  /**
    * Run a non-update (standard) XQTS test-case.
    */
   @throws(classOf[OutOfMemoryError])
@@ -313,8 +358,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     testCase.test match {
       case Some(test) =>
 
-        // get the XQuery to execute
-        val queryString: String = test.map(_ => resolvedEnvironment.resolvedQuery.get).merge
+        // get the XQuery to execute, applying a version prepend hint when the test's
+        // strict spec dependencies indicate a version older than the runner default.
+        val rawQuery: String = test.map(_ => resolvedEnvironment.resolvedQuery.get).merge
+        val queryString = applyVersionHint(rawQuery, testCase.dependencies)
 
         // get the static baseURI for the XQuery
         val baseUri = testCase.environment
@@ -382,7 +429,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                     FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(connection)(expectedError, queryResult))
 
                   case (Some(expectedResult)) =>
-                    processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, queryResultObj.serializationProperties, baseUri)(expectedResult, queryResult)
+                    assertionNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
+                    try {
+                      processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, queryResultObj.serializationProperties, baseUri)(expectedResult, queryResult)
+                    } finally {
+                      assertionNamespaces = Seq.empty
+                    }
 
                   case None =>
                     ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("No defined expected result"))
@@ -561,7 +613,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                           case Some(expectedError: Error) =>
                             FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(connection)(expectedError, queryResult))
                           case Some(expectedResult) =>
-                            processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, assertionBaseUri = baseUri)(expectedResult, queryResult)
+                            assertionNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
+                            try {
+                              processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, assertionBaseUri = baseUri)(expectedResult, queryResult)
+                            } finally {
+                              assertionNamespaces = Seq.empty
+                            }
                           case None =>
                             ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("No defined expected result"))
                         }
@@ -576,7 +633,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                     FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, failureMessage(connection)(expectedError, new org.exist.xquery.value.EmptySequence()))
                   case Some(expectedResult) if lastUpdateResult.isDefined =>
                     // Copy-modify-return: use the update expression's return value for assertion
-                    processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, assertionBaseUri = baseUri)(expectedResult, lastUpdateResult.get)
+                    assertionNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
+                    try {
+                      processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, assertionBaseUri = baseUri)(expectedResult, lastUpdateResult.get)
+                    } finally {
+                      assertionNamespaces = Seq.empty
+                    }
                   case Some(_) =>
                     // Expected a non-error result with no verification query and no update result
                     FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, s"Expected a result but no verification query defined")
@@ -1269,22 +1331,31 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     val serializationQuery = if (serializationProperties.isEmpty || !serializationProperties.containsKey(OutputKeys.METHOD)) {
       QUERY_ASSERT_XML_SERIALIZATION
     } else {
-      val method = serializationProperties.getProperty(OutputKeys.METHOD, "xml")
-      val indent = serializationProperties.getProperty(OutputKeys.INDENT, "no")
+      // Build a map with all serialization properties from the query context
+      val mapEntries = new StringBuilder()
+      val propNames = serializationProperties.propertyNames()
+      while (propNames.hasMoreElements) {
+        val key = propNames.nextElement().asInstanceOf[String]
+        val value = serializationProperties.getProperty(key)
+        if (mapEntries.nonEmpty) mapEntries.append(", ")
+        // Boolean-valued properties need xs:boolean, not string
+        val booleanProps = Set("indent", "omit-xml-declaration", "include-content-type",
+          "escape-uri-attributes", "undeclare-prefixes", "byte-order-mark", "allow-duplicate-names")
+        if (booleanProps.contains(key) && (value == "yes" || value == "no")) {
+          mapEntries.append(s"'$key': ${value == "yes"}")
+        } else {
+          mapEntries.append(s"'$key': '${value.replace("'", "''")}'")
+        }
+      }
+      // Always include omit-xml-declaration unless already set
+      if (!serializationProperties.containsKey("omit-xml-declaration")) {
+        if (mapEntries.nonEmpty) mapEntries.append(", ")
+        mapEntries.append("'omit-xml-declaration': true()")
+      }
       s"""
-         |xquery version "3.1";
-         |declare namespace output = "http://www.w3.org/2010/xslt-xquery-serialization";
-         |
-         |declare variable $$local:serialization :=
-         |  <output:serialization-parameters>
-         |    <output:method value="$method"/>
-         |    <output:indent value="$indent"/>
-         |    <output:omit-xml-declaration value="yes"/>
-         |  </output:serialization-parameters>;
-         |
          |declare variable $$result external;
          |
-         |fn:serialize($$result, $$local:serialization)
+         |fn:serialize($$result, map { $mapEntries })
          |""".stripMargin
     }
     executeQueryWith$Result(connection, serializationQuery, true, None, actual, assertionBaseUri) match {
@@ -1644,14 +1715,19 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
 
       case Right(expectedRegexStr) =>
+        // Pass regex and flags as external variables to avoid eXist parser issues
+        // with special characters in backtick string constructors (e.g., <?xml
+        // triggers processing instruction parsing inside ``[...]``)
         val expectedQuery =
           s"""
              | declare variable $$result external;
+             | declare variable $$regex external;
+             | declare variable $$flags external;
              |
-             | fn:matches($$result, ``[$expectedRegexStr]``, "${flags.getOrElse("")}")
+             | fn:matches($$result, $$regex, $$flags)
              |""".stripMargin
         val actualStr = connection.sequenceToStringRaw(actual, serializationProperties)
-        executeQueryWith$Result(connection, expectedQuery, true, None, new StringValue(actualStr), assertionBaseUri) match {
+        connection.executeQuery(expectedQuery, true, assertionBaseUri, None, Seq.empty, Seq.empty, Seq.empty, Seq.empty, Seq(RESULT_VARIABLE_NAME -> new StringValue(actualStr), "regex" -> new StringValue(expectedRegexStr), "flags" -> new StringValue(flags.getOrElse("")))) match {
           case Left(existServerException) =>
             ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
@@ -1774,7 +1850,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @return the result or executing the query, or an exception.
    */
   private def executeQueryWith$Result(connection: ExistConnection, query: String, cacheCompiled: Boolean, contextSequence: Option[Sequence], $result: Sequence, staticBaseUri: Option[String] = None) = {
-    connection.executeQuery(query, cacheCompiled, staticBaseUri, contextSequence, Seq.empty, Seq.empty, Seq.empty, Seq.empty, Seq(RESULT_VARIABLE_NAME -> $result))
+    connection.executeQuery(query, cacheCompiled, staticBaseUri, contextSequence, Seq.empty, Seq.empty, Seq.empty, assertionNamespaces, Seq(RESULT_VARIABLE_NAME -> $result))
   }
 
   /**

@@ -71,10 +71,22 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   private var previousStats: Stats = Stats(0, (0, 0), (0, 0), 0)
   private var unchangedStatsTicks = 0;
 
-  /** Number of consecutive watchdog ticks with no progress before forcing shutdown. 10s tick x 60 = 600s stall timeout. */
-  private val STALL_TIMEOUT_TICKS = 60
+  /** Number of consecutive watchdog ticks with no progress before forcing shutdown. 10s tick x 6 = 60s stall timeout. */
+  private val STALL_TIMEOUT_TICKS = 6
   private var watchdogPreviousCompletedCount = 0
   private var watchdogStalledTicks = 0
+  private var startedTestCases: Map[TestSetRef, Set[String]] = Map.empty
+
+  // Forced-shutdown drain state. Once `forceSerializeAndShutdown` has been
+  // called, we send any pending TestSetResults and then wait for their
+  // SerializedTestSetResults acks before triggering actor-system termination —
+  // otherwise the children get killed mid-write and the in-flight results land
+  // in deadLetters. The deadline thread is the hard backstop in case the
+  // serializer itself is wedged.
+  private var forcedShutdown = false
+  private var finalizeSent = false
+  /** Hard deadline (ms) for the forced-shutdown drain before we give up and terminate anyway. */
+  private val FORCED_DRAIN_DEADLINE_MS = 60000L
 
   override def receive: Receive = {
 
@@ -141,19 +153,17 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
 
       if (watchdogStalledTicks >= STALL_TIMEOUT_TICKS) {
         val totalCases = this.testCases.values.foldLeft(0)(_ + _.size)
+        // Identify which test cases started but never completed (hung tests)
+        val hungTests = for {
+          (testSetRef, started) <- startedTestCases
+          completed = completedTestCases.getOrElse(testSetRef, Map.empty).keySet
+          testCase <- started -- completed
+        } yield s"${testSetRef.name}/$testCase"
         logger.warn(s"Watchdog: no progress for ${STALL_TIMEOUT_TICKS * 10}s ($currentCompletedCount/$totalCases cases completed, ${unserializedTestSets.size} unserialized). Forcing shutdown.")
-
-        // Serialize any completed but unsent test sets before shutting down
-        for {
-          (testSetRef, _) <- this.testCases
-          if isTestSetCompleted(testSetRef) && !unserializedTestSets.contains(testSetRef)
-        } {
-          completedTestCases.get(testSetRef).foreach { results =>
-            resultsSerializerRouter ! TestSetResults(testSetRef, results.values.toSeq)
-          }
+        if (hungTests.nonEmpty) {
+          logger.warn(s"Hung test cases (started but never completed): ${hungTests.mkString(", ")}")
         }
-
-        shutdown()
+        forceSerializeAndShutdown()
       }
 
     case ParseComplete(xqtsVersion, _, matchedTestSets) =>
@@ -171,7 +181,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       unparsedTestSets -= testSetRef
 
       // have we completed testing an entire TestSet? NOTE: tests could have finished executing before parse complete message arrives!
-      if (isTestSetCompleted(testSetRef)) {
+      if (!unserializedTestSets.contains(testSetRef) && isTestSetCompleted(testSetRef)) {
         // serialize the TestSet results
         resultsSerializerRouter ! TestSetResults(testSetRef, completedTestCases(testSetRef).values.toSeq)
         unserializedTestSets += testSetRef
@@ -180,22 +190,37 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     case RunningTestCase(testSetRef, testCase) =>
       logger.info(s"Starting execution of Test Case: ${testSetRef.name}/${testCase}...")
       testCases = addTestCase(testCases, testSetRef, testCase)
+      startedTestCases = addTestCase(startedTestCases, testSetRef, testCase)
 
     case RanTestCase(testSetRef, testResult) =>
       logger.info(s"Finished execution of Test Case: ${testSetRef.name}/${testResult.testCase}.")
       completedTestCases = mergeTestCases(completedTestCases, testSetRef, testResult)
 
       // have we completed testing an entire TestSet?
-      if (isTestSetCompleted(testSetRef)) {
+      if (!unserializedTestSets.contains(testSetRef) && isTestSetCompleted(testSetRef)) {
         // serialize the TestSet results
+        resultsSerializerRouter ! TestSetResults(testSetRef, completedTestCases(testSetRef).values.toSeq)
+        unserializedTestSets += testSetRef
+      } else if (!unserializedTestSets.contains(testSetRef) && isTestSetCompletedByStarted(testSetRef)) {
+        // All started test cases completed, but ParsedTestSet hasn't been processed
+        // yet (still in unparsedTestSets). This happens when BrokerPool threads block
+        // the Pekko dispatcher, preventing the ParsedTestSet message from being delivered.
+        logger.info(s"Test set ${testSetRef.name} completed (all started cases finished, ParsedTestSet pending). Serializing results.")
         resultsSerializerRouter ! TestSetResults(testSetRef, completedTestCases(testSetRef).values.toSeq)
         unserializedTestSets += testSetRef
       }
 
     case SerializedTestSetResults(testSetRef) =>
       unserializedTestSets -= testSetRef
-      if (allTestSetsCompleted()) {
-        // all TestSet results have been sent to the serializer
+      // Under a forced shutdown, hung-but-never-completed test cases mean
+      // `allTestSetsCompleted()` will never be true; relax to "all serialization
+      // acks received" so the drain can finalize. Also guard against sending
+      // FinalizeSerialization more than once.
+      val readyToFinalize =
+        !finalizeSent &&
+          (allTestSetsCompleted() || (forcedShutdown && unserializedTestSets.isEmpty))
+      if (readyToFinalize) {
+        finalizeSent = true
         resultsSerializerRouter ! FinalizeSerialization
       }
 
@@ -205,26 +230,106 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       shutdown()
   }
 
+  private def forceSerializeAndShutdown(): Unit = {
+    // Idempotent: a second watchdog tick (or a re-entry from another path)
+    // must not start a parallel drain.
+    if (forcedShutdown) {
+      return
+    }
+    forcedShutdown = true
+
+    // Stop the watchdog now that we're committed to draining; we don't want
+    // another stall tick to log "Forcing shutdown" while serialization is
+    // already in progress.
+    timers.cancel(TimerWatchdogKey)
+
+    // Serialize any completed but unsent test sets.
+    for {
+      (testSetRef, _) <- this.testCases
+      if !unserializedTestSets.contains(testSetRef)
+      results <- completedTestCases.get(testSetRef)
+    } {
+      resultsSerializerRouter ! TestSetResults(testSetRef, results.values.toSeq)
+      unserializedTestSets += testSetRef
+    }
+
+    if (unserializedTestSets.isEmpty) {
+      // Nothing in flight — fall straight through the normal finalize/finish
+      // handshake so the serializer router gets a chance to flush its own state.
+      if (!finalizeSent) {
+        finalizeSent = true
+        resultsSerializerRouter ! FinalizeSerialization
+      }
+    } else {
+      logger.info(s"Draining ${unserializedTestSets.size} in-flight TestSetResults before shutdown (deadline ${FORCED_DRAIN_DEADLINE_MS / 1000}s)")
+    }
+
+    // Hard backstop: if the serializer never acks (e.g. wedged write), give
+    // up on the drain after FORCED_DRAIN_DEADLINE_MS and shut down anyway.
+    // The 30s deadline thread inside shutdown() is a separate backstop for
+    // actor-system termination itself.
+    val backstop = new Thread(() => {
+      try {
+        Thread.sleep(FORCED_DRAIN_DEADLINE_MS)
+        logger.warn(s"Forced-shutdown drain did not complete within ${FORCED_DRAIN_DEADLINE_MS / 1000}s; terminating anyway (${unserializedTestSets.size} TestSetResults still unacked)")
+        // Re-enter via a self-message so shutdown() runs on the actor thread.
+        self ! FinishedSerialization
+      } catch {
+        case _: InterruptedException =>
+      }
+    }, "xqts-forced-drain-backstop")
+    backstop.setDaemon(true)
+    backstop.start()
+  }
+
+  private var shutdownCalled = false
   private def shutdown(): Unit = {
+    if (shutdownCalled) {
+      return
+    }
+    shutdownCalled = true
     timers.cancel(TimerWatchdogKey)
     if (logger.isDebugEnabled()) {
       timers.cancel(TimerStatsKey)
     }
+    // Hard deadline: force exit if actor system termination hangs.
+    // BrokerPool threads can block the Pekko dispatcher, preventing
+    // CoordinatedShutdown from completing. This standalone thread
+    // runs outside Pekko and forces JVM exit after 30 seconds.
+    logger.info("Starting 30-second shutdown deadline thread")
+    val deadline = new Thread(() => {
+      try {
+        Thread.sleep(30000)
+        logger.warn("Actor system shutdown did not complete within 30 seconds, forcing exit")
+        Runtime.getRuntime.halt(0)
+      } catch {
+        case _: InterruptedException =>
+          logger.info("Shutdown deadline thread interrupted (clean exit)")
+      }
+    }, "xqts-shutdown-deadline")
+    deadline.setDaemon(true)
+    deadline.start()
     context.stop(self)
     context.system.terminate()
   }
 
   private def isTestSetCompleted(testSetRef: TestSetRef): Boolean = {
     unparsedTestSets.contains(testSetRef) == false &&
-      completedTestCases.get(testSetRef).map(_.keySet)
-        .flatMap(completed => testCases.get(testSetRef).map(_ == completed))
-        .getOrElse(false)
+      isTestSetCompletedByStarted(testSetRef)
+  }
+
+  /** Check if all STARTED test cases have completed, ignoring ParsedTestSet status. */
+  private def isTestSetCompletedByStarted(testSetRef: TestSetRef): Boolean = {
+    completedTestCases.get(testSetRef).map(_.keySet)
+      .flatMap(completed => startedTestCases.get(testSetRef).map(started => started.nonEmpty && started == completed))
+      .getOrElse(false)
   }
 
   private def allTestSetsCompleted(): Boolean = {
-    unserializedTestSets.isEmpty &&
-      unparsedTestSets.isEmpty &&
-      !testCases.keySet.map(isTestSetCompleted(_)).contains(false)
+    unserializedTestSets.isEmpty && {
+      val testSetRefs = if (startedTestCases.nonEmpty) startedTestCases.keySet else testCases.keySet
+      testSetRefs.forall(ref => isTestSetCompleted(ref) || isTestSetCompletedByStarted(ref))
+    }
   }
 
   @unused

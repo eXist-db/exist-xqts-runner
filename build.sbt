@@ -65,9 +65,11 @@ libraryDependencies ++= {
     "org.parboiled" %% "parboiled" % "2.5.1",
     "org.apache.ant" % "ant-junit" % "1.10.15", // used for formatting junit style report
 
-    "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
+    "net.sf.saxon" % "Saxon-HE" % "12.5",
     "org.exist-db" % "exist-core" % existV changing(),
     "org.exist-db" % "exist-expath" % existV changing(),
+    "org.exist-db" % "exist-expath-file" % existV changing(),
+    "org.exist-db" % "exist-expath-binary" % existV changing(),
     "org.xmlunit" % "xmlunit-core" % "2.11.0",
 
     "org.slf4j" % "slf4j-api" % "2.0.17",
@@ -77,10 +79,16 @@ libraryDependencies ++= {
 
 autoAPIMappings := true
 
-// we prefer Saxon over Xalan
+// Exclude transitive dependencies the runner doesn't need.
+// Jetty exclusions allow building against both Jetty 11 (develop) and Jetty 12 (next) —
+// Ivy can't resolve Jetty 12 Maven POM constructs, and the runner doesn't use Jetty anyway.
 excludeDependencies ++= Seq(
   ExclusionRule("xalan", "xalan"),
-  ExclusionRule("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
+  ExclusionRule("org.eclipse.jetty"),
+  ExclusionRule("org.eclipse.jetty.toolchain"),
+  ExclusionRule("org.eclipse.jetty.websocket"),
+  ExclusionRule("org.eclipse.jetty.ee10"),
+  ExclusionRule("org.eclipse.jetty.ee10.websocket"),
 
   ExclusionRule("org.hamcrest", "hamcrest-core"),
   ExclusionRule("org.hamcrest", "hamcrest-library")
@@ -149,7 +157,10 @@ assembly / assemblyMergeStrategy := {
 // make the assembly executable with basic shell scripts
 import sbtassembly.AssemblyPlugin.defaultUniversalScript
 
-assemblyPrependShellScript := Some(defaultUniversalScript(shebang = false))
+// Skip prepend script in CI — the prepended shell script can corrupt the ZIP
+// central directory offsets on certain platforms, causing "An unexpected error
+// occurred while trying to open file" from the Java launcher.
+assemblyPrependShellScript := (if (sys.env.contains("CI")) None else Some(defaultUniversalScript(shebang = false)))
 
 
 // Add assembly to publish step

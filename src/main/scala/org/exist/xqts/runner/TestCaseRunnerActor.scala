@@ -184,21 +184,23 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     case RunTestCaseInternal(RunTestCase(testSetRef, testCase, manager), resolvedEnvironment) =>
       manager ! RunningTestCase(testSetRef, testCase.name)
       // actually run the test case!
-      val result = runTestCaseWithExist(testSetRef.name, testCase, resolvedEnvironment)
+      val result = runTestCaseWithExist(testSetRef.xqtsVersion, testSetRef.name, testCase, resolvedEnvironment)
       manager ! RanTestCase(testSetRef, result)
   }
 
   /**
    * Execute an XQTS test-case against eXist-db.
    *
+   * @param xqtsVersion         the XQTS version being run (used to pick a default
+   *                            `xquery version` for `+`-form spec deps).
    * @param testSetName         the name of the test-set of which the test-case is a part.
    * @param testCase            the test-case to execute.
    * @param resolvedEnvironment the environment resources for the test-case.
    * @return the result of executing the XQTS test-case.
    */
-  private def runTestCaseWithExist(testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
+  private def runTestCaseWithExist(xqtsVersion: XQTSVersion, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
     try {
-      runTestCase(existServer.getConnection(), testSetName, testCase, resolvedEnvironment)
+      runTestCase(existServer.getConnection(), xqtsVersion, testSetName, testCase, resolvedEnvironment)
     } catch {
       case e: java.lang.OutOfMemoryError =>
         System.err.println(s"OutOfMemoryError: $testSetName ${testCase.name}")
@@ -207,21 +209,71 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
+   * Prepend `xquery version "..."` to the test query, picking the right version
+   * from the test's spec dependencies and the XQTS suite being run.
+   *
+   * Tests need a version declaration so eXist applies version-specific semantics.
+   * Strict deps like `XQ10 XQ30 XQ31` (no plus form) mark tests authored before
+   * XQuery 4.0; running them as XQ4 trips changed rules. The `+` form means
+   * "this version or any later" — for XQ 3.1 / live HEAD measurements we cap
+   * it at "3.1" so engines that don't accept `xquery version "4.0"` (develop's
+   * exist-core) don't reject `+`-form tests at parse time.
+   *
+   *   - If the query already declares a version, leave it alone.
+   *   - If a spec dep names `XQ40` explicitly, prepend "4.0".
+   *   - If a spec dep uses the `+` form, prepend the suite's own floor:
+   *     "3.1" for XQTS_3_1 / XQTS_HEAD, "4.0" otherwise.
+   *   - Otherwise, pick the highest strict spec (XQ31 > XQ30 > XQ10).
+   *   - If no XQ spec dep exists, leave unchanged.
+   */
+  private def applyVersionHint(query: String, deps: Seq[Dependency], xqtsVersion: XQTSVersion): String = {
+    if (query.contains("xquery version") || query.contains("module namespace")) {
+      return query
+    }
+    val specDeps = deps.filter(d => d.`type` == DependencyType.Spec && d.satisfied)
+    if (specDeps.isEmpty) {
+      return query
+    }
+    val acceptsAnyLater = specDeps.exists(_.value.contains("+"))
+    val specs = specDeps.flatMap(_.value.split(' ').toSeq).filter(_.nonEmpty).toSet
+    val plusFormVersion = xqtsVersion match {
+      case XQTS_3_1  => "3.1"
+      case XQTS_HEAD => "3.1"  // HEAD = live qt3tests master = final XQ 3.1 Rec + corrections
+      case _         => "4.0"
+    }
+    val version =
+      if (specs.contains("XQ40")) Some("4.0")
+      else if (acceptsAnyLater) Some(plusFormVersion)
+      else if (specs.contains("XQ31")) Some("3.1")
+      else if (specs.contains("XQ30")) Some("3.0")
+      else if (specs.contains("XQ10")) Some("1.0")
+      else None
+    version match {
+      case Some(v) => "xquery version \"" + v + "\";\n" + query
+      case None    => query
+    }
+  }
+
+  /**
    * Run's an XQTS test-case against eXist-db.
    *
    * @param connection          a connection to an eXist-db server.
+   * @param xqtsVersion         the XQTS version being run (used to pick a default
+   *                            `xquery version` for `+`-form spec deps).
    * @param testSetName         the name of the test-set of which the test-case is a part.
    * @param testCase            the test-case to execute.
    * @param resolvedEnvironment the environment resources for the test-case.
    * @return the result of executing the XQTS test-case.
    */
   @throws(classOf[OutOfMemoryError])
-  private def runTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
+  private def runTestCase(connection: ExistConnection, xqtsVersion: XQTSVersion, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
     testCase.test match {
       case Some(test) =>
 
-        // get the XQuery to execute
-        val queryString: String = test.map(_ => resolvedEnvironment.resolvedQuery.get).merge
+        // get the XQuery to execute, prepending a version declaration when the
+        // test's spec dependencies indicate a version older than the runner default.
+        val rawQuery: String = test.map(_ => resolvedEnvironment.resolvedQuery.get).merge
+        val queryString = applyVersionHint(rawQuery, testCase.dependencies, xqtsVersion)
 
         // get the static baseURI for the XQuery
         val baseUri = testCase.environment

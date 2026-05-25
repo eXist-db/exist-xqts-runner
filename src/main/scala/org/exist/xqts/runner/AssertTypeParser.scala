@@ -77,6 +77,13 @@ object AssertTypeParser {
         name.localName.equals("function") || name.localName.equals("map") || name.localName.equals("array")
       }
 
+      def isNodeKindTest(name: TypeNameNode): Boolean = {
+        val n = name.localName
+        n.equals("element") || n.equals("attribute") || n.equals("document-node") ||
+          n.equals("schema-element") || n.equals("schema-attribute") ||
+          n.equals("processing-instruction") || n.equals("namespace-node")
+      }
+
       val existType = ExistType.getType(
         typeParameters.flatMap { parametersNode =>
           if (isFunctionType(name) || (parametersNode.parameters.size == 1 && parametersNode.parameters.head == WildcardTypeNode)) {
@@ -87,17 +94,18 @@ object AssertTypeParser {
         }.getOrElse(name.asXdmTypeName)
       )
 
-      //      match {
-      //          case "node()" =>
-      //            // NOTE: for some reason eXist-db does not support looking up Node type by name?!?
-      //            ExistType.NODE
-      //          case typeName =>
-      //            ExistType.getType(typeName)
-      //        }
+      // For node kind tests like element(name), attribute(name), the parameters
+      // are element/attribute names, not type references. Skip parameter resolution
+      // for these since eXist-db doesn't support parameterized node kind tests anyway.
+      val resolvedParams = if (isNodeKindTest(name)) {
+        None
+      } else {
+        typeParameters.map(x => x.parameters.map(y => y.asExistTypeDescription))
+      }
 
       ExplicitExistTypeDescription(
         existType,
-        typeParameters.map(x => x.parameters.map(y => y.asExistTypeDescription)),
+        resolvedParams,
         cardinality.map(_.cardinality match {
           case TypeCardinality.* => ExistCardinality.ZERO_OR_MORE
           case TypeCardinality.+ => ExistCardinality.ONE_OR_MORE

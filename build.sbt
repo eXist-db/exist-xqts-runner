@@ -124,6 +124,10 @@ assembly / assemblyMergeStrategy := {
   case PathList("META-INF", "versions", "9" ,"module-info.class") => MergeStrategy.discard
   case PathList("org", "exist", "xquery", "lib", "xqsuite", "xqsuite.xql") => MergeStrategy.first
   case x if x.equals("module-info.class") || x.endsWith(s"${java.io.File.separatorChar}module-info.class") => MergeStrategy.discard
+  // jline 4.1.0 and jansi 4.0.14 (both transitive via exist-core 7.0.0-SNAPSHOT)
+  // ship overlapping org/jline/** classes with differing bytecode; jline is only
+  // used for terminal output here, so taking the first copy is safe.
+  case PathList("org", "jline", _*) => MergeStrategy.first
   case x =>
     val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)

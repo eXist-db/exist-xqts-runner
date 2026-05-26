@@ -60,7 +60,7 @@ libraryDependencies ++= {
     "org.apache.ant" % "ant-junit" % "1.10.15", // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
-    "org.exist-db" % "exist-core" % existV changing() exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
+    "org.exist-db" % "exist-core" % existV changing(), // exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
     "org.xmlunit" % "xmlunit-core" % "2.11.0",
 
     "org.slf4j" % "slf4j-api" % "2.0.17",
@@ -79,9 +79,10 @@ excludeDependencies ++= Seq(
 )
 
 resolvers ++= Seq(
-  Resolver.mavenLocal,
+  // Resolver.mavenLocal,
   "eXist-db Releases" at "https://repo.exist-db.org/repository/exist-db/",
-  "Github Package Registry" at "https://maven.pkg.github.com/exist-db/exist",
+  "Github Registry - eXist-db" at "https://maven.pkg.github.com/exist-db/exist",
+  // "GitHub Registry - jackrabbit-webdav-jakarta" at "https://maven.pkg.github.com/eXist-db/jackrabbit-webdav-jakarta",
 )
 
 javacOptions ++= Seq("-source", "21", "-target", "21")

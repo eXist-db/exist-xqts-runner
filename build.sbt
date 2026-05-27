@@ -59,8 +59,8 @@ libraryDependencies ++= {
     "org.parboiled" %% "parboiled" % "2.5.1",
     "org.apache.ant" % "ant-junit" % "1.10.15", // used for formatting junit style report
 
-    "net.sf.saxon" % "Saxon-HE" % "9.9.1-8",
-    "org.exist-db" % "exist-core" % existV changing() exclude("org.eclipse.jetty.toolchain", "jetty-jakarta-servlet-api"),
+    "net.sf.saxon" % "Saxon-HE" % "12.5",
+    "org.exist-db" % "exist-core" % existV changing(),
     "org.xmlunit" % "xmlunit-core" % "2.11.0",
 
     "org.slf4j" % "slf4j-api" % "2.0.17",
@@ -70,9 +70,17 @@ libraryDependencies ++= {
 
 autoAPIMappings := true
 
-// we prefer Saxon over Xalan
+// Exclude transitive dependencies the runner doesn't need.
+// Jetty exclusions allow building against both Jetty 11 (develop) and Jetty 12 (next) —
+// Ivy can't resolve Jetty 12 Maven POM constructs, and the runner doesn't use Jetty anyway.
 excludeDependencies ++= Seq(
   ExclusionRule("xalan", "xalan"),
+
+  ExclusionRule("org.eclipse.jetty"),
+  ExclusionRule("org.eclipse.jetty.toolchain"),
+  ExclusionRule("org.eclipse.jetty.websocket"),
+  ExclusionRule("org.eclipse.jetty.ee10"),
+  ExclusionRule("org.eclipse.jetty.ee10.websocket"),
 
   ExclusionRule("org.hamcrest", "hamcrest-core"),
   ExclusionRule("org.hamcrest", "hamcrest-library")

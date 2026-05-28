@@ -173,7 +173,7 @@ publishTo := {
     } else if (useGitHub) {
       Some("releases" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
     } else {
-      Some(Opts.resolver.sonatypeStaging)
+      localStaging.value
     }
 }
   

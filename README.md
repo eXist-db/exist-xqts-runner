@@ -65,18 +65,26 @@ Given the standalone application, you can execute it by running either:
 
 ## Publishing 
 
-Releases are published to  Maven Central
-Snaphots are published to Github Maven Package repository
+Releases are published to Maven Central by default but can also be published to Github Maven Package repository by setting the environment variable `PUBLISH_TO_GITHUB`.
+
+Snaphots are __always__ published to Github Maven Package repository
+
+You can also publish to your local m2 repository. This is useful for testing new builds within existdb's xqts-runner sub-project.
+
+### Maven Central
 
 1. Run `sbt clean release`
 2. Answer the questions
 3. Login to https://oss.sonatype.org/ then Close, and Release the Staging Repository
 
-You can also publish to your local m2 repository which is useful for testing new builds within existdb's xqts-runner sub-project.
+### Github Package Repository (GHP)
 
-```sh
-sbt publishM2
-```
+1. Run `sbt clean release` if you publish a snapshot or `PUBLISH_TO_GITHUB=true sbt clean release` to force release to GHP
+2. Answer the questions
+
+### Publish to local M2
+
+1. run `sbt publishM2`
 
 ## XQTS Results
 The results of executing the XQTS will be formatted as JUnit test output.

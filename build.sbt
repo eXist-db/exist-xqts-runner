@@ -167,12 +167,16 @@ credentials += {
 }
 
 publishTo := {
-  if (isSnapshot.value)
-    Some("snapshots" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
-  else
-    Some(Opts.resolver.sonatypeStaging)
+  val useGitHub = sys.env.get("PUBLISH_TO_GITHUB").isDefined
+    if (isSnapshot.value) {
+      Some("snapshots" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
+    } else if (useGitHub) {
+      Some("releases" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
+    } else {
+      localStaging.value
+    }
 }
-
+  
 Test / publishArtifact := false
 
 releaseCrossBuild := false

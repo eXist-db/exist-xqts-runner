@@ -22,7 +22,12 @@ jobs:
           cache: sbt
       - uses: sbt/setup-sbt@v1
         with:
-          sbt-runner-version: '1.10.11'
+          sbt-runner-version: '1.12.11'
+      - name: List Dependencies
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: sbt dependencyTree
       - name: Build
         shell: bash
         env:

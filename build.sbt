@@ -166,15 +166,17 @@ credentials += {
   }
 }
 
+// Toggle publishing target via environment variable
+val useGitHub = sys.env.get("PUBLISH_TO_GITHUB").isDefined
+
 publishTo := {
-  val useGitHub = sys.env.get("PUBLISH_TO_GITHUB").isDefined
-    if (isSnapshot.value) {
-      Some("snapshots" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
-    } else if (useGitHub) {
-      Some("releases" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
-    } else {
-      localStaging.value
-    }
+  if (isSnapshot.value) {
+    Some("snapshots" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
+  } else if (useGitHub) {
+    Some("releases" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
+  } else {
+    localStaging.value
+  }
 }
   
 Test / publishArtifact := false
@@ -187,18 +189,22 @@ releaseTagName := s"${if (releaseUseGlobalVersion.value) (ThisBuild / version).v
 
 releaseIgnoreUntrackedFiles := true
 
-releaseProcess := Seq[ReleaseStep](
-  checkSnapshotDependencies,
-  inquireVersions,
-  runClean,
-  runTest,
-  setReleaseVersion,
-  commitReleaseVersion,
-  tagRelease,
-  releaseStepCommand("publishSigned"),
-  setNextVersion,
-  commitNextVersion,
-  pushChanges
-)
+releaseProcess := {
+  val base = Seq[ReleaseStep](
+    inquireVersions,
+    runClean,
+    runTest,
+    setReleaseVersion,
+    commitReleaseVersion,
+    tagRelease,
+    releaseStepCommand("publishSigned"),
+    setNextVersion,
+    commitNextVersion,
+    pushChanges
+  )
+
+  if (useGitHub) base
+  else checkSnapshotDependencies +: base
+}
 
 useCoursier := false

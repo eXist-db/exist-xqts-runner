@@ -270,6 +270,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                         PassResult(testSetName, testCase.name, compilationTime, executionTime)
                       case anyOf@AnyOf(_) if (anyOfContainsError(anyOf, queryError.errorCode)) =>
                         PassResult(testSetName, testCase.name, compilationTime, executionTime)
+                      case allOf@AllOf(_) if (allOfContainsError(allOf, queryError.errorCode)) =>
+                        PassResult(testSetName, testCase.name, compilationTime, executionTime)
                       case _ =>
                         FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(expectedResult, queryError))
                     }
@@ -526,6 +528,29 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     }
 
     anyOf.assertions.map(expand).flatten
+      .filter(_.isInstanceOf[Error])
+      .map(_.asInstanceOf[Error])
+      .find(_.expected == expectedError)
+      .nonEmpty
+  }
+
+  /**
+   * Checks if an XQTS all-of assertion contains a specific error assertion.
+   *
+   * @param allOf         the all-of assertion.
+   * @param expectedError the error to search for in the all-of
+   * @return true if the all-of contains the error, false otherwise.
+   */
+  private def allOfContainsError(allOf: AllOf, expectedError: String): Boolean = {
+    def expand(result: XQTSParserActor.Result): List[XQTSParserActor.Result] = {
+      Some(result)
+        .filter(_.isInstanceOf[Assertions])
+        .map(_.asInstanceOf[Assertions])
+        .map(_.assertions)
+        .getOrElse(List(result))
+    }
+
+    allOf.assertions.map(expand).flatten
       .filter(_.isInstanceOf[Error])
       .map(_.asInstanceOf[Error])
       .find(_.expected == expectedError)

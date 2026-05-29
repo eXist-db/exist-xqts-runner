@@ -1376,8 +1376,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     try {
       val expectedSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expected</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
       val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
-      val diff = DiffBuilder.compare(actualSource)
-        .withTest(expectedSource)
+      val diff = DiffBuilder.compare(expectedSource)
+        .withTest(actualSource)
+        .withNodeFilter(new org.xmlunit.util.Predicate[org.w3c.dom.Node] {
+          override def test(node: org.w3c.dom.Node): Boolean =
+            !(node.getNodeType == org.w3c.dom.Node.TEXT_NODE && node.getTextContent.trim.isEmpty)
+        })
         .checkForIdentical()
         .withComparisonFormatter(ignorableWrapperComparisonFormatter)
         .checkForSimilar()

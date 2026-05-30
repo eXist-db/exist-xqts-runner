@@ -53,12 +53,29 @@ object ExistServer {
     def apply(queryResult: QueryResult, compilationTime: CompilationTime, executionTime: ExecutionTime) = new Result(Right(queryResult), compilationTime, executionTime)
   }
 
-  case class Result(result: Either[QueryError, QueryResult], compilationTime: CompilationTime, executionTime: ExecutionTime)
+  case class Result(result: Either[QueryError, QueryResult], compilationTime: CompilationTime, executionTime: ExecutionTime) {
+    /** Serialization properties extracted from the query context (e.g. declare option output:method "json") */
+    var serializationProperties: Properties = new Properties()
+  }
 
   type QueryResult = Sequence
 
   object QueryError {
-    def apply(xpathException: XPathException) = new QueryError(xpathException.getErrorCode.getErrorQName.getLocalPart, xpathException.getMessage)
+    private val STANDARD_ERROR_NAMESPACES = Set(
+      "http://www.w3.org/2005/xqt-errors",
+      "http://www.exist-db.org/xqt-errors/"
+    )
+
+    def apply(xpathException: XPathException) = {
+      val qname = xpathException.getErrorCode.getErrorQName
+      val ns = qname.getNamespaceURI
+      val code = if (ns != null && ns.nonEmpty && !STANDARD_ERROR_NAMESPACES.contains(ns)) {
+        s"Q{$ns}${qname.getLocalPart}"
+      } else {
+        qname.getLocalPart
+      }
+      new QueryError(code, xpathException.getMessage)
+    }
   }
 
   case class QueryError(errorCode: String, message: String)
@@ -106,7 +123,7 @@ class ExistServer {
   def getConnection(): ExistConnection = {
     val brokerRes = Resource.make {
       // build
-      IO.delay(existServer.getBrokerPool.getBroker)
+      IO.delay(existServer.getBrokerPool.authenticate("admin", ""))
       //        .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Acquire"))  // enable for debugging
     } {
       // release
@@ -338,7 +355,12 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
         IO.delay {
           try {
             val resultSequence = xqueryService.execute(broker, compiledQuery.compiledXquery, contextSequence.orNull)
-            Right(Result(resultSequence, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime))
+            // Extract serialization properties from the query context (e.g. declare option output:method "json")
+            val serializationProps = new Properties()
+            compiledQuery.xqueryContext.checkOptions(serializationProps)
+            val result = Result(resultSequence, compiledQuery.compilationTime, System.currentTimeMillis() - executionStartTime)
+            result.serializationProperties = serializationProps
+            Right(result)
           } catch {
             // NOTE(AR): bugs in eXist-db's XQuery implementation can produce a StackOverflowError - handle as any other server exception
             case e: StackOverflowError =>
@@ -533,6 +555,20 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
    * @return the result of serializing the sequence.
    */
   def sequenceToString(sequence: Sequence, outputProperties: Properties): String = {
+    sequenceToStringImpl(sequence, outputProperties, sanitize = true)
+  }
+
+  /**
+   * Serializes a Sequence to a raw String
+   * without any post-processing (no newline replacement).
+   * Used for serialization-matches assertions where
+   * the exact serialized output must be preserved.
+   */
+  def sequenceToStringRaw(sequence: Sequence, outputProperties: Properties): String = {
+    sequenceToStringImpl(sequence, outputProperties, sanitize = false)
+  }
+
+  private def sequenceToStringImpl(sequence: Sequence, outputProperties: Properties, sanitize: Boolean): String = {
 
     val res: IO[String] = SingleThreadedExecutorPool.newResource().use { singleThreadedExecutor =>
       val writerRes =
@@ -550,8 +586,8 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
           IO.delay {
             val serializer = new XQuerySerializer(broker, outputProperties, writer)
             serializer.serialize(sequence)
-            writer.getBuffer.toString
-              .replace("\r", "").replace("\n", ", ") // further improves the output for expected value messages
+            val result = writer.getBuffer.toString
+            if (sanitize) result.replace("\r", "").replace("\n", ", ") else result
           }.evalOn(singleThreadedExecutor.executionContext)
       }
     }

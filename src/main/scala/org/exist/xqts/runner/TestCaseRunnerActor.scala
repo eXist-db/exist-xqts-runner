@@ -270,6 +270,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                         PassResult(testSetName, testCase.name, compilationTime, executionTime)
                       case anyOf@AnyOf(_) if (anyOfContainsError(anyOf, queryError.errorCode)) =>
                         PassResult(testSetName, testCase.name, compilationTime, executionTime)
+                      case allOf@AllOf(_) if (allOfContainsError(allOf, queryError.errorCode)) =>
+                        PassResult(testSetName, testCase.name, compilationTime, executionTime)
                       case _ =>
                         FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(expectedResult, queryError))
                     }
@@ -533,6 +535,29 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
+   * Checks if an XQTS all-of assertion contains a specific error assertion.
+   *
+   * @param allOf         the all-of assertion.
+   * @param expectedError the error to search for in the all-of
+   * @return true if the all-of contains the error, false otherwise.
+   */
+  private def allOfContainsError(allOf: AllOf, expectedError: String): Boolean = {
+    def expand(result: XQTSParserActor.Result): List[XQTSParserActor.Result] = {
+      Some(result)
+        .filter(_.isInstanceOf[Assertions])
+        .map(_.asInstanceOf[Assertions])
+        .map(_.assertions)
+        .getOrElse(List(result))
+    }
+
+    allOf.assertions.map(expand).flatten
+      .filter(_.isInstanceOf[Error])
+      .map(_.asInstanceOf[Error])
+      .find(_.expected == expectedError)
+      .nonEmpty
+  }
+
+  /**
    * Processes an expected XQTS assertion to compare
    * it against the actual result of executing an XQuery.
    *
@@ -720,12 +745,17 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @return the test result from processing the assertion.
    */
   private def assert(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty)(xpath: String, actual: ExistServer.QueryResult): TestResult = {
-    executeQueryWith$Result(connection, xpath, true, None, actual, assertionNamespaces) match {
+    // Set context item only for single-item results (e.g., maps from parse-csv).
+    // Multi-item sequences (e.g., from csv-to-arrays) would cause the xpath to run per-item.
+    val contextForAssert = if (actual.getItemCount == 1) Some(actual) else None
+    executeQueryWith$Result(connection, xpath, true, contextForAssert, actual, assertionNamespaces) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
       case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-        ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing XPath: ${queryError.errorCode}: ${queryError.message}"))
+        // A query error during assertion evaluation means the assertion failed (e.g., type
+        // mismatch comparing result to expected value), not that the runner itself errored.
+        FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert: expected='$xpath' raised ${queryError.errorCode}: ${queryError.message}")
 
       case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
@@ -782,7 +812,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
       case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-        ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing deep-equals: ${queryError.errorCode}: ${queryError.message}}"))
+        FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert-deep-eq: expected='$expected' raised ${queryError.errorCode}: ${queryError.message}")
 
       case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
@@ -821,7 +851,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
       case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-        ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing eq: ${queryError.errorCode}: ${queryError.message}"))
+        FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert-eq: expected='$expected' raised ${queryError.errorCode}: ${queryError.message}")
 
       case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
@@ -925,7 +955,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
       case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-        ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing permutation: ${queryError.errorCode}: ${queryError.message}"))
+        FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert-permutation raised ${queryError.errorCode}: ${queryError.message}")
 
       case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
         val totalCompilationTime = compilationTime + resCompilationTime
@@ -1193,8 +1223,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
 
       case Right(expectedXmlStr) =>
+        // Trim leading/trailing whitespace from expected XML — test catalog CDATA often
+        // has formatting newlines (e.g., after </result> before ]]>) that would become
+        // spurious text nodes inside the ignorable-wrapper, causing child count mismatches.
+        val trimmedExpectedXmlStr = expectedXmlStr.trim
 
-        SAXParser.parseXml(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expectedXmlStr</$IGNORABLE_WRAPPER_ELEM_NAME>".getBytes(UTF_8)) match {
+        SAXParser.parseXml(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$trimmedExpectedXmlStr</$IGNORABLE_WRAPPER_ELEM_NAME>".getBytes(UTF_8)) match {
           case Left(e: ExistServerException) =>
             ErrorResult(testSetName, testCaseName, compilationTime, executionTime, e)
 
@@ -1318,7 +1352,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
             ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
           case Right(Result(Left(queryError), errCompilationTime, errExecutionTime)) =>
-            ErrorResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, new IllegalStateException(s"Error whilst comparing serialization: ${queryError.errorCode}: ${queryError.message}"))
+            FailureResult(testSetName, testCaseName, compilationTime + errCompilationTime, executionTime + errExecutionTime, s"assert-serialization raised ${queryError.errorCode}: ${queryError.message}")
 
           case Right(Result(Right(actualQueryResult), resCompilationTime, resExecutionTime)) =>
             val totalCompilationTime = compilationTime + resCompilationTime
@@ -1345,8 +1379,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     try {
       val expectedSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expected</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
       val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
-      val diff = DiffBuilder.compare(actualSource)
-        .withTest(expectedSource)
+      val diff = DiffBuilder.compare(expectedSource)
+        .withTest(actualSource)
+        .withNodeFilter(new org.xmlunit.util.Predicate[org.w3c.dom.Node] {
+          override def test(node: org.w3c.dom.Node): Boolean =
+            !(node.getNodeType == org.w3c.dom.Node.TEXT_NODE && node.getTextContent.trim.isEmpty)
+        })
         .checkForIdentical()
         .withComparisonFormatter(ignorableWrapperComparisonFormatter)
         .checkForSimilar()

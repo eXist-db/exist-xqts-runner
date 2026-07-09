@@ -21,6 +21,7 @@ import cats.effect.unsafe.IORuntime
 
 import java.io.{BufferedOutputStream, OutputStream}
 import java.nio.file.{Files, Path}
+import java.time.Instant
 import cats.effect.{IO, Resource}
 import junit.framework.{AssertionFailedError, Test => JUTest, TestResult => JUTestResult}
 import net.sf.saxon.TransformerFactoryImpl
@@ -43,10 +44,21 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
 
   private val logger = Logger(classOf[JUnitResultsSerializerActor])
 
+  // Captured at actor creation rather than at first message so the timestamp
+  // brackets the full XQTS run, not just the serialization phase.
+  private val runStarted: Instant = Instant.now()
+  private var observedXqtsVersion: Option[String] = None
+  private var observedTestCount: Long = 0L
+
   override def receive: Receive = {
 
     case testSetResults: TestSetResults =>
       logger.info(s"Serializing results for TestSet: ${testSetResults.testSetRef.name} (${testSetResults.testSetRef.file})...")
+      if (observedXqtsVersion.isEmpty) {
+        observedXqtsVersion = Some(XQTSVersion.label(testSetResults.testSetRef.xqtsVersion))
+      }
+      observedTestCount += testSetResults.results.size
+
       val serializeIo: IO[Option[Throwable]] = dataDir
         .flatMap(dataFile(_, testSetResults.testSetRef.name))
         .flatMap(dataFileOutput(_)
@@ -89,8 +101,33 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
           logger.error(s"Could not aggregate results report. ${t.getMessage}", t)
       }
 
+      writeRunnerInfo()
+
       // notify the sender that we have completed serialization
       sender() ! FinishedSerialization
+  }
+
+  /**
+   * Emit `runner-info.xml` at the output directory root, capturing the runner
+   * JAR's build SHA + sha256 and the embedded `exist-core` version. Consumed
+   * by `compare-results.xslt` to surface runner-drift warnings.
+   *
+   * Failures here are logged but never propagated -- emitting metadata must
+   * not affect the run's exit status.
+   */
+  private def writeRunnerInfo(): Unit = {
+    val runInfo = RunnerInfo.RunInfo(
+      started = runStarted,
+      completed = Instant.now(),
+      xqtsVersion = observedXqtsVersion,
+      testCount = observedTestCount
+    )
+    RunnerInfo.write(outputDir, runInfo) match {
+      case Right(path) =>
+        logger.info(s"Wrote runner metadata to: ${path.toAbsolutePath}")
+      case Left(t) =>
+        logger.warn(s"Could not write runner-info.xml. ${t.getMessage}", t)
+    }
   }
 
   private def dataDir: IO[Path] = IO {

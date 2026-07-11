@@ -93,6 +93,32 @@ The results of executing the XQTS will be formatted as JUnit test output.
 * An HTML aggregate report summary will be written to `target/junit/html/index.html`.
 
 
+## XQuery version hints
+
+Many XQTS test queries omit an `xquery version "..."` prolog declaration and rely on the harness to run them under the right language version. eXist applies version-specific parsing and semantics, so the runner prepends a version declaration derived from each test case's `spec` dependency in the XQTS catalog.
+
+Three similar-looking tokens are involved. They are **not** the same thing:
+
+| Token | Kind | Meaning |
+|-------|------|---------|
+| `XQ10`, `XQ30`, `XQ31`, `XQ40` | XQTS catalog `spec` dependency value | the XQuery language version(s) a test targets |
+| `XQ31+` (trailing `+`) | XQTS catalog `spec` dependency value | "this version **or any later**" |
+| `XQTS_3_1`, `XQTS_HEAD` | the runner's `--xqts-version` selector | which **test suite** is being run |
+| `"3.1"`, `"4.0"` | XQuery version string | what actually gets prepended to the query |
+
+The runner chooses the prepended version as follows:
+
+* If the query already declares a version (`xquery version` / `module namespace`), it is left unchanged.
+* If a `spec` dependency names `XQ40` explicitly, prepend `"4.0"`.
+* If a `spec` dependency uses the `+` ("or later") form, prepend the **floor of the suite being run**: `"3.1"` for `XQTS_3_1` and `XQTS_HEAD`, otherwise `"4.0"`.
+* Otherwise prepend the highest strict (non-`+`) spec: `XQ31` → `"3.1"`, `XQ30` → `"3.0"`, `XQ10` → `"1.0"`.
+* If there is no XQuery `spec` dependency, the query is left unchanged.
+
+### Why cap the `+` form at the suite floor?
+
+A dependency such as `XQ31+` marks a test as valid for XQuery 3.1 and every later version. When measuring XQTS 3.1 (`XQTS_3_1`) or the live community-maintained HEAD suite (`XQTS_HEAD`, which tracks the final XQuery 3.1 Recommendation plus corrections), we want those tests run as 3.1, not 4.0. Prepending `"4.0"` would ask the engine to parse them as XQuery 4.0, and an engine that does not accept `xquery version "4.0"` — as is the case for eXist-db's current `develop` HEAD — rejects them at parse time, turning would-be passes into spurious parse failures. Capping the `+` form at `"3.1"` for the 3.1-era suites keeps those tests running under the version they were authored for.
+
+
 ## Application Architecture
 The application is constructed using [Akka](https://akka.io), and as such makes use of Actors to perform many tasks in parallel; This hopefully speeds up the process of running the XQTS which includes many test cases.
 When the Application first executes, it will check for a local copy of the XQTS in a sub-directory named `work`, if it cannot find a local copy of the XQTS then it will download it from the W3C.

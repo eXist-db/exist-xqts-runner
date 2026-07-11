@@ -209,22 +209,20 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
-   * Prepend `xquery version "..."` to the test query, picking the right version
-   * from the test's spec dependencies and the XQTS suite being run.
+   * Prepend an `xquery version "..."` declaration to a test query so eXist
+   * applies the correct language semantics. The version is chosen from the
+   * test's `spec` dependency and the suite being run.
    *
-   * Tests need a version declaration so eXist applies version-specific semantics.
-   * Strict deps like `XQ10 XQ30 XQ31` (no plus form) mark tests authored before
-   * XQuery 4.0; running them as XQ4 trips changed rules. The `+` form means
-   * "this version or any later" — for XQ 3.1 / live HEAD measurements we cap
-   * it at "3.1" so engines that don't accept `xquery version "4.0"` (develop's
-   * exist-core) don't reject `+`-form tests at parse time.
+   * Selection by `spec`-dependency input (see the README "XQuery version hints"
+   * section for the full rationale and a glossary of the easily-confused
+   * `XQ31` / `XQTS_3_1` / `"3.1"` tokens):
    *
-   *   - If the query already declares a version, leave it alone.
-   *   - If a spec dep names `XQ40` explicitly, prepend "4.0".
-   *   - If a spec dep uses the `+` form, prepend the suite's own floor:
-   *     "3.1" for XQTS_3_1 / XQTS_HEAD, "4.0" otherwise.
-   *   - Otherwise, pick the highest strict spec (XQ31 > XQ30 > XQ10).
-   *   - If no XQ spec dep exists, leave unchanged.
+   *   - `XQ40`                        -> prepend `"4.0"`
+   *   - `XQ31+` (any `+`, "or later") -> the suite floor: `"3.1"` for
+   *                                      `XQTS_3_1` / `XQTS_HEAD`, else `"4.0"`
+   *   - `XQ31` / `XQ30` / `XQ10`      -> that exact version (highest wins)
+   *   - no `spec` dependency, or the query already declares a version
+   *                                   -> unchanged
    */
   private def applyVersionHint(query: String, deps: Seq[Dependency], xqtsVersion: XQTSVersion): String = {
     if (query.contains("xquery version") || query.contains("module namespace")) {

@@ -77,11 +77,13 @@ object XQTSParserActor {
   case class ExternalVariableRole(name: String) extends Role
 
 
-  case class Environment(name: String, schemas: List[Schema] = List.empty, sources: List[Source] = List.empty, resources: List[Resource] = List.empty, params: List[Param] = List.empty, contextItem: Option[String] = None, decimalFormats: List[DecimalFormat] = List.empty, namespaces: List[Namespace] = List.empty, collections: List[Collection] = List.empty, staticBaseUri: Option[String] = None, collation: Option[Collation] = None)
+  case class Sandpit(path: Path)
+
+  case class Environment(name: String, schemas: List[Schema] = List.empty, sources: List[Source] = List.empty, resources: List[Resource] = List.empty, params: List[Param] = List.empty, contextItem: Option[String] = None, decimalFormats: List[DecimalFormat] = List.empty, namespaces: List[Namespace] = List.empty, collections: List[Collection] = List.empty, staticBaseUri: Option[String] = None, collation: Option[Collation] = None, sandpit: Option[Sandpit] = None)
 
   case class Schema(uri: Option[AnyURIValue], file: Option[Path], xsdVersion: Float = 1.0f, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
 
-  case class Source(role: Option[Role], file: Path, uri: Option[String], validation: Option[Validation.Validation] = None, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
+  case class Source(role: Option[Role], file: Path, uri: Option[String], validation: Option[Validation.Validation] = None, mutable: Boolean = false, declared: Boolean = false, description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
 
   case class Resource(file: Path, uri: String, mediaType: Option[String] = None, encoding: Option[String], description: Option[String] = None, created: Option[Created] = None, modifications: List[Modified] = List.empty)
 
@@ -113,7 +115,7 @@ object XQTSParserActor {
 
   case class Dependency(`type`: DependencyType, value: String, satisfied: Boolean)
 
-  case class TestCase(file: Path, name: TestCaseName, covers: String, description: Option[String] = None, created: Option[Created] = None, modifications: Seq[Modified] = Seq.empty, environment: Option[Environment] = None, modules: Seq[Module] = Seq.empty, dependencies: Seq[Dependency] = Seq.empty, test: Option[Either[String, Path]] = None, result: Option[Result] = None)
+  case class TestCase(file: Path, name: TestCaseName, covers: String, description: Option[String] = None, created: Option[Created] = None, modifications: Seq[Modified] = Seq.empty, environment: Option[Environment] = None, modules: Seq[Module] = Seq.empty, dependencies: Seq[Dependency] = Seq.empty, test: Option[Either[String, Path]] = None, updateTests: Seq[Either[String, Path]] = Seq.empty, result: Option[Result] = None)
 
   sealed trait Result
 
@@ -208,6 +210,8 @@ object XQTSParserActor {
     val UnicodeNormalizationForm = DependencyTypeVal("unicode-normalization-form")
     val XmlVersion = DependencyTypeVal("xml-version")
     val XsdVersion = DependencyTypeVal("xsd-version")
+    val Revalidation = DependencyTypeVal("revalidation")
+    val Put = DependencyTypeVal("put")
   }
 
   /**
@@ -215,7 +219,7 @@ object XQTSParserActor {
    */
   object Spec extends Enumeration {
     type Spec = Value
-    val XP10, XP20, XP30, XP31, XQ10, XQ30, XQ31, XT30 = Value
+    val XP10, XP20, XP30, XP31, XP40, XQ10, XQ30, XQ31, XQ40, XT30 = Value
 
     /**
      * Returns all specs which implement at
@@ -227,20 +231,24 @@ object XQTSParserActor {
     def atLeast(spec: Spec): Set[Spec] = {
       spec match {
         case XP10 =>
-          Set(XP10, XP20, XP30, XP31)
+          Set(XP10, XP20, XP30, XP31, XP40)
         case XP20 =>
-          Set(XP20, XP30, XP31)
+          Set(XP20, XP30, XP31, XP40)
         case XP30 =>
-          Set(XP30, XP31)
+          Set(XP30, XP31, XP40)
         case XP31 =>
-          Set(XP31)
+          Set(XP31, XP40)
+        case XP40 =>
+          Set(XP40)
 
         case XQ10 =>
-          Set(XQ10, XQ30, XQ31)
+          Set(XQ10, XQ30, XQ31, XQ40)
         case XQ30 =>
-          Set(XQ30, XQ31)
+          Set(XQ30, XQ31, XQ40)
         case XQ31 =>
-          Set(XQ31)
+          Set(XQ31, XQ40)
+        case XQ40 =>
+          Set(XQ40)
 
         case XT30 =>
           Set(XT30)
@@ -285,6 +293,7 @@ object XQTSParserActor {
     val XPath_1_0_Compatibility = FeatureVal("xpath-1.0-compatibility")
     val TransformXSLT = FeatureVal("fn-transform-XSLT")
     val TransformXSLT_30 = FeatureVal("fn-transform-XSLT30")
+    val XQUpdate = FeatureVal("XQUpdate")
   }
 
   /**

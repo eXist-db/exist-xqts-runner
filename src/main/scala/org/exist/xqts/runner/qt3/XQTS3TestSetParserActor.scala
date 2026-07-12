@@ -82,6 +82,7 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
 
   private var currentNormalizeSpace: Option[Boolean] = None
   private var currentFile: Option[Path] = None
+  private var currentTestIsUpdate: Boolean = false
   private var currentFlags: Option[String] = None
   private var currentIgnorePrefixes: Option[Boolean] = None
 
@@ -289,7 +290,9 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           val file = asyncReader.getAttributeValue(ATTR_FILE)
           val validation = asyncReader.getAttributeValueOptNE(ATTR_VALIDATION)
           val uri = asyncReader.getAttributeValueOptNE(ATTR_URI)
-          currentSource = Some(Source(role, testSetDir.resolve(file), uri, validation.map(Validation.withName)))
+          val mutable = asyncReader.getAttributeValueOptNE("mutable").exists(_.equalsIgnoreCase("true"))
+          val declared = asyncReader.getAttributeValueOptNE("declared").exists(_.equalsIgnoreCase("true"))
+          currentSource = Some(Source(role, testSetDir.resolve(file), uri, validation.map(Validation.withName), mutable, declared))
 
         case END_ELEMENT if (asyncReader.getLocalName == ELEM_SOURCE && currentEnv.nonEmpty && currentCollection.nonEmpty) =>
           currentCollection = currentSource.map(source => currentCollection.map(collection => collection.copy(sources = source +: collection.sources)))
@@ -359,6 +362,11 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
           val uri = asyncReader.getAttributeValueOptNE(ATTR_URI)
           currentEnv = currentEnv.map(_.copy(staticBaseUri = uri))
 
+        case START_ELEMENT if (asyncReader.getLocalName == ELEM_SANDPIT && currentEnv.nonEmpty) =>
+          val path = asyncReader.getAttributeValue(ATTR_PATH)
+          val resolvedPath = testSetDir.resolve(path)
+          currentEnv = currentEnv.map(_.copy(sandpit = Some(Sandpit(resolvedPath))))
+
         case START_ELEMENT if (asyncReader.getLocalName == ELEM_COLLATION && currentEnv.nonEmpty) =>
           val uri = asyncReader.getAttributeValueOptNE(ATTR_URI).map(new URI(_))
           val default = asyncReader.getAttributeValueOptNE(ATTR_DEFAULT).map(_.toBoolean).getOrElse(false)
@@ -401,13 +409,20 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
         case START_ELEMENT if (currentTestCase.nonEmpty && asyncReader.getLocalName == ELEM_TEST) =>
           val attrFile = asyncReader.getAttributeValueOpt(ATTR_FILE)
           currentFile = attrFile.map(file => testSetRef.file.resolveSibling(file))
+          currentTestIsUpdate = asyncReader.getAttributeValueOptNE("update").exists(_.equalsIgnoreCase("true"))
           captureText = true
 
         case END_ELEMENT if (currentTestCase.nonEmpty && asyncReader.getLocalName == ELEM_TEST) =>
-          currentTestCase = currentTestCase.map(testCase => testCase.copy(test = currentText.flatMap(text => Some(Left(text))).orElse(currentFile.map(Right(_)))))
+          val testValue = currentText.flatMap(text => Some(Left(text))).orElse(currentFile.map(Right(_)))
+          if (currentTestIsUpdate) {
+            currentTestCase = currentTestCase.map(testCase => testCase.copy(updateTests = testCase.updateTests ++ testValue.toSeq))
+          } else {
+            currentTestCase = currentTestCase.map(testCase => testCase.copy(test = testValue))
+          }
           currentFile = None
           currentText = None
           captureText = false
+          currentTestIsUpdate = false
 
         case START_ELEMENT if (currentTestCase.nonEmpty && asyncReader.getLocalName == ELEM_RESULT) =>
           currentResult = Some(Stack.empty)

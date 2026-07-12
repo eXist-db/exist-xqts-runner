@@ -91,7 +91,8 @@ object XQTSRunner {
     TypedData,
     XPath_1_0_Compatibility,
     TransformXSLT,
-    TransformXSLT_30
+    TransformXSLT_30,
+    XQUpdate
   )
 
   /**
@@ -154,7 +155,7 @@ object XQTSRunner {
 
       opt[XQTSVersion]('x', "xqts-version")
         .text("The version of XQTS to run. These are configured in the application.conf file. We ship with 'W3C' (the final W3C XQTS 3.1) and 'HEAD' (the GitHub community maintained XQTS) pre-configured")
-        .validate(x => if (x == XQTS_3_1 || x == XQTS_HEAD || x == XQTS_FTTS_1_0) success else failure("only version 3.1, HEAD, or FTTS is currently supported"))
+        .validate(x => if (x == XQTS_3_1 || x == XQTS_HEAD || x == XQTS_QT4 || x == XQTS_FTTS_1_0) success else failure("only version 3.1, HEAD, QT4, or FTTS is currently supported"))
         .action((x, c) => c.copy(xqtsVersion = x))
 
       opt[Path]('l', "local-dir")
@@ -361,11 +362,11 @@ private class XQTSRunner {
   @throws[IllegalArgumentException]
   private def getParserActorClass(xqtsVersion: XQTSVersion): Class[_ <: XQTSParserActor] = {
     xqtsVersion match {
-      case XQTS_3_1 | XQTS_HEAD =>
+      case XQTS_3_1 | XQTS_HEAD | XQTS_QT4 =>
         classOf[XQTS3CatalogParserActor]
       case XQTS_FTTS_1_0 =>
         classOf[xqftts.XQFTTSCatalogParserActor]
-      case _ => throw new IllegalArgumentException(s"We only support XQTS version 3.1, HEAD, or FTTS, but version: ${XQTSVersion.label(xqtsVersion)} was requested")
+      case _ => throw new IllegalArgumentException(s"We only support XQTS version 3.1, HEAD, QT4, or FTTS, but version: ${XQTSVersion.label(xqtsVersion)} was requested")
     }
   }
 
@@ -401,14 +402,19 @@ private class XQTSRunner {
     def hasLocalCopy(xqtsLocalPath: Path, xqtsCheckFile: String) = Files.exists(xqtsLocalPath) && Files.exists(xqtsLocalPath.resolve(xqtsCheckFile))
 
     def verifySha256(path: Path, sha256: String): Either[Throwable, Path] = {
-      Checksum.checksum(path, SHA256).map(_.map(_.toChar).mkString) match {
-        case Right(pathSha256) =>
-          if (sha256.equals(sha256)) {
-            Right(path)
-          } else {
-            Left(new IOException(s"Downloaded file checksum is: $pathSha256 but expected $sha256"))
-          }
-        case Left(e) => Left(e)
+      if (sha256.isEmpty) {
+        logger.info(s"No expected sha256 configured for $path; skipping checksum verification")
+        Right(path)
+      } else {
+        Checksum.checksum(path, SHA256).map(_.map(_.toChar).mkString) match {
+          case Right(pathSha256) =>
+            if (sha256.equals(pathSha256)) {
+              Right(path)
+            } else {
+              Left(new IOException(s"Downloaded file checksum is: $pathSha256 but expected $sha256"))
+            }
+          case Left(e) => Left(e)
+        }
       }
     }
 

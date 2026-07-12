@@ -655,8 +655,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       case AssertType(expectedType) =>
         assertType(testSetName, testCaseName, compilationTime, executionTime)(expectedType, actualResult)
 
-      case AssertXml(expectedXml, ignorePrefixes) =>
-        assertXml(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(expectedXml, ignorePrefixes, actualResult)
+      case AssertXml(expectedXml, ignorePrefixes, normalizeWhitespace) =>
+        assertXml(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(expectedXml, ignorePrefixes, normalizeWhitespace, actualResult)
 
       case SerializationMatches(expected, flags) =>
         serializationMatches(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(expected, flags, actualResult)
@@ -669,6 +669,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
       case AssertTrue =>
         assertTrue(testSetName, testCaseName, compilationTime, executionTime)(actualResult)
+
+      case AssertInspect =>
+        // "Inspect" comparison: cannot automatically verify, always passes
+        PassResult(testSetName, testCaseName, compilationTime, executionTime)
 
       case Error(expected) =>
         FailureResult(testSetName, testCaseName, compilationTime, executionTime, s"error: expected='$expected', but no error was raised")
@@ -1267,7 +1271,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @param actual          the actual result from executing the XQuery.
    * @return the test result from processing the assertion.
    */
-  private def assertXml(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty)(expectedXml: Either[String, Path], @unused ignorePrefixes: Boolean, actual: ExistServer.QueryResult): TestResult = {
+  private def assertXml(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty)(expectedXml: Either[String, Path], @unused ignorePrefixes: Boolean, normalizeWhitespace: Boolean, actual: ExistServer.QueryResult): TestResult = {
     expectedXml.map(readTextFile(_)).fold(Right(_), r => r) match {
       case Left(t) =>
         ErrorResult(testSetName, testCaseName, compilationTime, executionTime, t)
@@ -1336,7 +1340,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
                           case current@Right(results) =>
                             val strExpectedResult = expectedQueryResult.itemAt(itemIdx).asInstanceOf[StringValue].getStringValue
-                            val differences = findDifferences(strExpectedResult, strActualResult)
+                            val differences = findDifferences(strExpectedResult, strActualResult, normalizeWhitespace)
                             differences match {
                               // if we have an error don't process anything else, just perpetuate the error
                               case Left(diffError) =>
@@ -1425,12 +1429,15 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @param actual   the actual XML document.
    * @return Some string describing the differences, or None of there are no differences.
    */
-  private def findDifferences(expected: String, actual: String): Either[XMLUnitException, Option[String]] = {
+  private def findDifferences(expected: String, actual: String, normalizeWs: Boolean = false): Either[XMLUnitException, Option[String]] = {
     try {
       val expectedSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$expected</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
       val actualSource = Input.fromString(s"<$IGNORABLE_WRAPPER_ELEM_NAME>$actual</$IGNORABLE_WRAPPER_ELEM_NAME>").build()
-      val diff = DiffBuilder.compare(expectedSource)
+      val builder = DiffBuilder.compare(expectedSource)
         .withTest(actualSource)
+      // XQFTTS Fragment comparisons additionally collapse insignificant whitespace.
+      val builderWithWs = if (normalizeWs) builder.normalizeWhitespace() else builder
+      val diff = builderWithWs
         .withNodeFilter(new org.xmlunit.util.Predicate[org.w3c.dom.Node] {
           override def test(node: org.w3c.dom.Node): Boolean =
             !(node.getNodeType == org.w3c.dom.Node.TEXT_NODE && node.getTextContent.trim.isEmpty)

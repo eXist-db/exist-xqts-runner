@@ -111,6 +111,12 @@ class ExistServer {
   private val logger = Logger(classOf[ExistServer])
 
   /**
+    * Global context attributes to set on every XQuery execution context.
+    * Used by the XQFTTS catalog parser to provide stop word and thesaurus URI mappings.
+    */
+  @volatile var globalContextAttributes: Map[String, AnyRef] = Map.empty
+
+  /**
    * Starts the eXist-db server.
    *
    * @return Success or Failure.
@@ -135,7 +141,7 @@ class ExistServer {
       //          .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Release"))  // enable for debugging
     }
 
-    ExistConnection(brokerRes)
+    ExistConnection(brokerRes, () => globalContextAttributes)
   }
 
   /**
@@ -157,7 +163,8 @@ class ExistServer {
 }
 
 private object ExistConnection {
-  def apply(brokerRes: Resource[IO, DBBroker]) = new ExistConnection(brokerRes)
+  def apply(brokerRes: Resource[IO, DBBroker], contextAttributesSupplier: () => Map[String, AnyRef] = () => Map.empty) =
+    new ExistConnection(brokerRes, contextAttributesSupplier)
 }
 
 /**
@@ -165,8 +172,9 @@ private object ExistConnection {
  * to an eXist-db server, i.e. a [[DBBroker]]
  *
  * @param brokerRes the eXist-db broker to wrap.
+ * @param contextAttributesSupplier supplies context attributes to set on each XQuery execution context.
  */
-class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
+class ExistConnection(brokerRes: Resource[IO, DBBroker], contextAttributesSupplier: () => Map[String, AnyRef] = () => Map.empty) {
 
   /**
    * Execute an XQuery with eXist-db.
@@ -495,7 +503,14 @@ class ExistConnection(brokerRes: Resource[IO, DBBroker]) {
     }
 
     val source = new StringSource(query)
-    val fnConfigureContext: XQueryContext => XQueryContext = setupContext(_)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
+    val fnConfigureContext: XQueryContext => XQueryContext = { ctx =>
+      val configured = setupContext(ctx)(staticBaseUri, availableDocuments, availableCollections, availableTextResources, namespaces, externalVariables, decimalFormats, modules, xpath1Compatibility)
+      // Set global context attributes (e.g., ft.stopWordURIMap, ft.thesaurusURIMap from XQFTTS catalog)
+      for ((key, value) <- contextAttributesSupplier()) {
+        configured.setAttribute(key, value.asInstanceOf[Object])
+      }
+      configured
+    }
 
     val res: IO[Either[ExistServerException, Result]] =
       SingleThreadedExecutorPool.newResource().use { singleThreadedExecutor =>

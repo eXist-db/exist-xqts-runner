@@ -140,8 +140,18 @@ class ExistServer {
 
   /**
    * Shutdown the eXist-db server.
+   *
+   * A timeout thread ensures the process exits even if BrokerPool.stopAll()
+   * hangs (a known issue with thread pools that accumulate during long runs).
    */
   def stopServer(): Unit = {
+    val shutdownTimeout = new Thread(() => {
+      Thread.sleep(30000)
+      logger.warn("BrokerPool shutdown did not complete within 30 seconds, forcing exit")
+      Runtime.getRuntime.halt(0)
+    }, "exist-shutdown-timeout")
+    shutdownTimeout.setDaemon(true)
+    shutdownTimeout.start()
     existServer.stopDb()
   }
 }

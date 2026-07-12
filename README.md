@@ -16,7 +16,7 @@ To build from source you will need the following pre-requisites:
 
 1. Git Command Line tools.
 2. Java 21
-3. SBT (Simple Build Tool) 1.10.11
+3. SBT (Simple Build Tool) 1.12.11 (the version pinned in [project/build.properties](project/build.properties))
 4. a Github personal access token (PAT) with public read access
 
 In the following steps, we assume that git, java and sbt are available on your system path.
@@ -46,7 +46,7 @@ Once the pre-requisites are met, to build from source you can execute the follow
 In your local checkout of eXistdb run:
 
 ```bash
-mvn clean install -DskiptTests=true
+mvn clean install -DskipTests=true
 ```
 
 This will add your local development version to the maven repository (usually `~/.m2`).
@@ -59,22 +59,23 @@ Create a standalone application (also known as an Uber Jar, Assembly, etc.) with
 sbt assembly
 ```
 
-You should now have it available at `target/scala-2.13/exist-xqts-runner-assembly-1.0.0.jar`. 
+You should now have it available at `target/scala-2.13/exist-xqts-runner-assembly-2.0.0-SNAPSHOT.jar`.
+The version in the file name is the one declared in [version.sbt](version.sbt), so adjust the paths below if it differs.
 
-**NOTE** If you require a standard Jar file for some purpose you can run `sbt package`, which will generate `target/scala-2.13/exist-xqts-runner_2.13-1.0.0.jar`.
+**NOTE** If you require a standard Jar file for some purpose you can run `sbt package`, which will generate `target/scala-2.13/exist-xqts-runner_2.13-2.0.0-SNAPSHOT.jar`.
 
 ### Running the Packaged Application
 
 Given the standalone application, you can execute it by running either (on Linux/Mac):
 
-- `target/scala-2.13/exist-xqts-runner-assembly-1.0.0.jar`
+- `target/scala-2.13/exist-xqts-runner-assembly-2.0.0-SNAPSHOT.jar`
   as the executable header is compiled into the Jar file.
-- `java -jar exist-xqts-runner-assembly-1.0.0.jar` also works
+- `java -jar exist-xqts-runner-assembly-2.0.0-SNAPSHOT.jar` also works
 
 **NOTE:** It is recommended to run against the latest version of the testsuite with 
 
 ```bash
-target/scala-2.13/exist-xqts-runner-assembly-1.0.0.jar -x HEAD
+target/scala-2.13/exist-xqts-runner-assembly-2.0.0-SNAPSHOT.jar -x HEAD
 ```
 
 ### Compiling
@@ -125,13 +126,19 @@ You can also publish to your local m2 repository. This is useful for testing new
 ## XQTS Results
 The results of executing the XQTS will be formatted as JUnit test output.
 
-* The JUnit report data will be written to the `target/junit/data` folder.
-* An HTML aggregate report summary will be written to `target/junit/html/index.html`.
+Everything is written below the output directory, which defaults to `target` and can be changed with `-o` (`--output-dir`):
+
+* The JUnit report data will be written to the `junit/data` sub-folder.
+* An HTML aggregate report summary will be written to `junit/html/index.html`.
+* A `runner-info.xml` file will be written to the root of the output directory. It records which runner produced the results, so that a report can be traced back to the code that generated it. It contains:
+  * `runner-jar` — the Git commit and build metadata compiled into the Jar's manifest, plus the SHA-256 checksum and path of the Jar itself.
+  * `embedded-exist-core` — the version of the `exist-core` artifact that the run was executed against.
+  * `run-info` — the start and completion timestamps, the XQTS version, and the number of test cases that were run.
 
 
 ## Application Architecture
-The application is constructed using [Akka](https://akka.io), and as such makes use of Actors to perform many tasks in parallel; This hopefully speeds up the process of running the XQTS which includes many test cases.
-When the Application first executes, it will check for a local copy of the XQTS in a sub-directory named `work`, if it cannot find a local copy of the XQTS then it will download it from the W3C.
+The application is constructed using [Apache Pekko](https://pekko.apache.org), and as such makes use of Actors to perform many tasks in parallel; This hopefully speeds up the process of running the XQTS which includes many test cases.
+When the Application first executes, it will check for a local copy of the XQTS in a sub-directory named `work` (configurable with `-l`, `--local-dir`), if it cannot find a local copy of the XQTS then it will download it. Version `3.1` is downloaded from the W3C at https://dev.w3.org/2011/QT3-test-suite/releases/QT3_1_0.zip, whereas `HEAD` — the recommended version — is downloaded from the W3C's [qt3tests](https://github.com/w3c/qt3tests) repository on Github. The download locations are configured in [application.conf](src/main/resources/application.conf).
 
 
 ### Actor Hierarchy
@@ -141,6 +148,6 @@ Actors naturally have a supervision hierarchy, where if an Actor fails it's supe
 
 
 ### Actor Message Flows
-Actors in the system communicate by sending messages between each other. The message flow of an Akka Actor system can sometimes be tricky to follow by reading the code. The diagram below attempts to inform the developer about the message flows in the system.
+Actors in the system communicate by sending messages between each other. The message flow of a Pekko Actor system can sometimes be tricky to follow by reading the code. The diagram below attempts to inform the developer about the message flows in the system.
 
 ![Actor Message Flow](https://github.com/exist-db/exist-xqts-runner/raw/main/doc/actor-message-flow.png "Actor Message Flow")

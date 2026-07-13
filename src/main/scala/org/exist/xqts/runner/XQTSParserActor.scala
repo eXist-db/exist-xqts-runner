@@ -158,7 +158,7 @@ object XQTSParserActor {
 
   case class AssertType(expected: String) extends ValueAssertion[String]
 
-  case class AssertXml(expected: Either[String, Path], ignorePrefixes: Boolean = false) extends ValueAssertion[Either[String, Path]]
+  case class AssertXml(expected: Either[String, Path], ignorePrefixes: Boolean = false, normalizeWhitespace: Boolean = false) extends ValueAssertion[Either[String, Path]]
 
   case class SerializationMatches(expected: Either[String, Path], flags: Option[String] = None) extends ValueAssertion[Either[String, Path]]
 
@@ -167,6 +167,9 @@ object XQTSParserActor {
   case object AssertTrue extends Assertion
 
   case object AssertFalse extends Assertion
+
+  /** Assertion for "Inspect" comparisons that always passes (requires manual review). */
+  case object AssertInspect extends Assertion
 
   case class Error(expected: String) extends ValueAssertion[String]
 

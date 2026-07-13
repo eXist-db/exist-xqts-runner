@@ -438,13 +438,20 @@ object XQTSParserActor {
       }
     }
 
+    /**
+     * A dependency is met when the availability of what it names matches its
+     * `satisfied` flag. `satisfied="false"` therefore inverts the test: the
+     * test-case applies only where the dependency is *not* available.
+     */
     def allMissing(test: String => Missed, required: Seq[Dependency]): Missing = {
       required.foldLeft(Seq.empty[String]) { case (accum, x) =>
-        test(x.value)
-          .filter(_ => x.satisfied)
-          .map(missed => s"${x.`type`.xqtsName}=${missed}")
-          .map(_ +: accum)
-          .getOrElse(accum)
+        val available = test(x.value).isEmpty
+        if (available == x.satisfied) {
+          accum
+        } else {
+          val describe = s"${x.`type`.xqtsName}=${x.value}"
+          (if (x.satisfied) describe else s"${describe},satisfied=false") +: accum
+        }
       }
     }
 

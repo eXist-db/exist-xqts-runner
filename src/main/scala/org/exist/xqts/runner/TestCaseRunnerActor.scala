@@ -441,7 +441,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   private def getDynamicContextAvailableDocuments(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): Either[ExistServerException, List[(String, DocumentImpl)]] = {
     val initAccum: Either[ExistServerException, List[(String, DocumentImpl)]] = Right(List.empty)
     testCase.environment
-      .map(env => env.sources.filter(source => (source.role.isEmpty || source.role.filter(Role.isContextItem(_)).nonEmpty) && source.uri.nonEmpty))
+      // a source with a uri is retrievable via fn:doc even when it also fills a role,
+      // e.g. fn-transform-20 binds $staticbaseuri and resolves it by stylesheet-location
+      .map(env => env.sources.filter(_.uri.nonEmpty))
       .getOrElse(List.empty)
       .foldLeft(initAccum) { case (accum, x) =>
         accum match {
@@ -546,7 +548,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                 .flatMap(role => resolvedEnvironment.resolvedSources.find(_.path == x.file)
                   .map(resolvedSource => (role, resolvedSource.data, resolvedSource.path))
                   .map { case (role, data, path) => SAXParser.parseXml(data).map(doc => {
-                    doc.setDocumentURI(path.toUri().toString())
+                    // prefer the URI the test declares for the source; fall back to the
+                    // location it was loaded from only when the test does not declare one
+                    doc.setDocumentURI(x.uri.getOrElse(path.toUri().toString()))
                     (role.asInstanceOf[ExternalVariableRole].name, doc)
                   }
                   )

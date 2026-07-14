@@ -44,6 +44,7 @@ package object qt3 {
   val ELEM_COLLECTION = "collection"
   val ELEM_STATIC_BASE_URI = "static-base-uri"
   val ELEM_COLLATION = "collation"
+  val ELEM_SANDPIT = "sandpit"
   val ELEM_TEST_SET = "test-set"
   val ELEM_LINK = "link"
   val ELEM_TEST_CASE = "test-case"
@@ -106,6 +107,7 @@ package object qt3 {
   val ATTR_INFINITY = "infinity"
   val ATTR_NAN = "NaN"
   val ATTR_DEFAULT = "default"
+  val ATTR_PATH = "path"
 
   private[qt3] val PARSER_FACTORY = new InputFactoryImpl
 

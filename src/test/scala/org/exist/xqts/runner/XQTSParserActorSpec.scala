@@ -120,4 +120,13 @@ class XQTSParserActorSpec extends AnyWordSpec with Matchers {
       }
     }
   }
+
+  "Feature.fromXqtsName" should {
+
+    "round-trip every feature's xqtsName back to itself" in {
+      for (f <- Feature.values) {
+        Feature.fromXqtsName(f.xqtsName) shouldBe f
+      }
+    }
+  }
 }

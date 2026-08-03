@@ -1,4 +1,5 @@
 import ReleaseTransformations._
+import xerial.sbt.Sonatype.sonatypeCentralHost
 
 name := "exist-xqts-runner"
 
@@ -48,7 +49,7 @@ developers := List(
 versionScheme := Some("semver-spec")
 
 libraryDependencies ++= {
-  val existV = "7.0.0-SNAPSHOT"
+  val existV = "7.0.0-beta3"
 
   Seq(
     "org.apache.pekko" %% "pekko-actor" % "1.3.0",
@@ -60,7 +61,7 @@ libraryDependencies ++= {
     "org.apache.ant" % "ant-junit" % "1.10.15", // used for formatting junit style report
 
     "net.sf.saxon" % "Saxon-HE" % "12.5",
-    "org.exist-db" % "exist-core" % existV changing(),
+    "org.exist-db" % "exist-core" % existV,
     "org.xmlunit" % "xmlunit-core" % "2.11.0",
 
     "org.slf4j" % "slf4j-api" % "2.0.17",
@@ -160,6 +161,8 @@ addArtifact(Compile / assembly / artifact, assembly)
 // Publish to Maven Repo
 publishMavenStyle := true
 
+ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
+
 // Use GitHub Packages if GITHUB_TOKEN is set, otherwise use local connection in credentials file
 credentials += {
   sys.env.get("GITHUB_TOKEN") match {
@@ -167,6 +170,14 @@ credentials += {
     case _ => Credentials(Path.userHome / ".ivy2" / ".credentials")
   }
 }
+
+// Sonatype Central Portal credentials, used when publishing releases there (see PUBLISH_TO_GITHUB below)
+credentials += Credentials(
+  "Sonatype Nexus Repository Manager",
+  sonatypeCredentialHost.value,
+  sys.env.getOrElse("CENTRAL_TOKEN_USERNAME", ""),
+  sys.env.getOrElse("CENTRAL_TOKEN_PASSWORD", "")
+)
 
 // Toggle publishing target via environment variable
 val useGitHub = sys.env.get("PUBLISH_TO_GITHUB").isDefined
@@ -177,10 +188,10 @@ publishTo := {
   } else if (useGitHub) {
     Some("releases" at "https://maven.pkg.github.com/exist-db/exist-xqts-runner")
   } else {
-    localStaging.value
+    sonatypePublishToBundle.value
   }
 }
-  
+
 Test / publishArtifact := false
 
 releaseCrossBuild := false
@@ -191,22 +202,18 @@ releaseTagName := s"${if (releaseUseGlobalVersion.value) (ThisBuild / version).v
 
 releaseIgnoreUntrackedFiles := true
 
-releaseProcess := {
-  val base = Seq[ReleaseStep](
-    inquireVersions,
-    runClean,
-    runTest,
-    setReleaseVersion,
-    commitReleaseVersion,
-    tagRelease,
-    releaseStepCommand("publishSigned"),
-    setNextVersion,
-    commitNextVersion,
-    pushChanges
-  )
-
-  if (useGitHub) base
-  else checkSnapshotDependencies +: base
-}
+// Publishing happens in CI on tag push (see .github/workflows/release.yml), not as part of this process.
+releaseProcess := Seq[ReleaseStep](
+  checkSnapshotDependencies,
+  inquireVersions,
+  runClean,
+  runTest,
+  setReleaseVersion,
+  commitReleaseVersion,
+  tagRelease,
+  setNextVersion,
+  commitNextVersion,
+  pushChanges
+)
 
 useCoursier := false

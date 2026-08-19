@@ -164,11 +164,17 @@ publishMavenStyle := true
 
 ThisBuild / sonatypeCredentialHost := sonatypeCentralHost
 
-// Use GitHub Packages if GITHUB_TOKEN is set, otherwise use local connection in credentials file
-credentials += {
+// Use GitHub Packages if GITHUB_TOKEN is set, otherwise use a local credentials
+// file if one exists. The file must stay optional: the "Publish to Maven
+// Central" CI step sets neither GITHUB_TOKEN nor a credentials file — it
+// authenticates solely via the Sonatype entry below — and a mandatory file
+// makes sbt fail before that entry is ever consulted.
+credentials ++= {
   sys.env.get("GITHUB_TOKEN") match {
-    case Some(token) => Credentials("GitHub Package Registry", "maven.pkg.github.com", "_", token)
-    case _ => Credentials(Path.userHome / ".ivy2" / ".credentials")
+    case Some(token) => Seq(Credentials("GitHub Package Registry", "maven.pkg.github.com", "_", token))
+    case _ =>
+      val credentialsFile = Path.userHome / ".ivy2" / ".credentials"
+      if (credentialsFile.exists) Seq(Credentials(credentialsFile)) else Seq.empty
   }
 }
 

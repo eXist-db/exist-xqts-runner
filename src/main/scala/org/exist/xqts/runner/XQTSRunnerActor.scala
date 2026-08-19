@@ -19,8 +19,9 @@ package org.exist.xqts.runner
 
 import java.nio.file.Path
 import java.util.regex.Pattern
-import org.apache.pekko.actor.{Actor, Props, Timers}
+import org.apache.pekko.actor.{Actor, OneForOneStrategy, Props, SupervisorStrategy, Timers}
 import XQTSRunnerActor._
+import scala.util.control.NonFatal
 import org.apache.pekko.routing.FromConfig
 import org.exist.xqts.runner.TestCaseRunnerActor.TestResult
 import org.exist.xqts.runner.XQTSParserActor.Feature.Feature
@@ -50,7 +51,18 @@ import scala.annotation.unused
 class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parserActorClass: Class[XQTSParserActor], serializerActorClass: Class[XQTSResultsSerializerActor], styleDir: Option[Path], outputDir: Path, serializerRouterProps: Option[Props]) extends Actor with Timers {
 
   private val logger = Logger(classOf[XQTSRunnerActor])
-  private val resultsSerializerRouter = context.actorOf(serializerRouterProps.getOrElse(FromConfig.props(Props(serializerActorClass, styleDir, outputDir))), name = "JUnitResultsSerializerRouter")
+
+  /* Pool routers escalate a routee failure by default, which restarts the
+   * router and recreates ALL of its routees — wiping, for example, every
+   * pending test case parked in the TestCaseRunnerActor pool, which would
+   * then silently never be reported (issue #74). Resume instead: the failing
+   * message is dropped (and logged by Pekko), routee state is preserved, and
+   * fatal errors such as OutOfMemoryError still escalate. */
+  private val resumeOnNonFatal = OneForOneStrategy() {
+    case NonFatal(_) => SupervisorStrategy.Resume
+  }
+
+  private val resultsSerializerRouter = context.actorOf(serializerRouterProps.getOrElse(FromConfig.withSupervisorStrategy(resumeOnNonFatal).props(Props(serializerActorClass, styleDir, outputDir))), name = "JUnitResultsSerializerRouter")
 
   private var started = System.currentTimeMillis()
 
@@ -129,14 +141,14 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       val readFileRouter = context.actorOf(FromConfig.props(Props(classOf[ReadFileActor])), name = "ReadFileRouter")
       val commonResourceCacheActor = context.actorOf(Props(classOf[CommonResourceCacheActor], readFileRouter, maxCacheBytes))
 
-      val testCaseRunnerRouter = context.actorOf(FromConfig.props(Props(classOf[TestCaseRunnerActor], existServer, commonResourceCacheActor)), name = "TestCaseRunnerRouter")
+      val testCaseRunnerRouter = context.actorOf(FromConfig.withSupervisorStrategy(resumeOnNonFatal).props(Props(classOf[TestCaseRunnerActor], existServer, commonResourceCacheActor)), name = "TestCaseRunnerRouter")
 
       // For XQFTTS, the catalog parser sends directly to the test case runner (no test-set parser needed).
       // For QT3, the catalog parser sends to a test-set parser pool which then sends to test case runners.
       val parserActor = if (xqtsVersion == XQTS_FTTS_1_0) {
         context.actorOf(Props(parserActorClass, xmlParserBufferSize, testCaseRunnerRouter, existServer), parserActorClass.getSimpleName)
       } else {
-        val testSetParserRouter = context.actorOf(FromConfig.props(Props(classOf[XQTS3TestSetParserActor], xmlParserBufferSize, testCaseRunnerRouter)), "XQTS3TestSetParserRouter")
+        val testSetParserRouter = context.actorOf(FromConfig.withSupervisorStrategy(resumeOnNonFatal).props(Props(classOf[XQTS3TestSetParserActor], xmlParserBufferSize, testCaseRunnerRouter)), "XQTS3TestSetParserRouter")
         context.actorOf(Props(parserActorClass, xmlParserBufferSize, testSetParserRouter), parserActorClass.getSimpleName)
       }
 

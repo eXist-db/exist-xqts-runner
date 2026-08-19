@@ -180,7 +180,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       val allUpdatedPendingTestCases = testCasesAwaitingSchema.toSet ++ testCasesAwaitingSources.toSet ++ testCasesAwaitingResources.toSet ++ testCasesAwaitingQueryStr.toSet
       val fulfilledPendingTestCaseIds = allUpdatedPendingTestCases
         .filter(updatedPendingTestCase => notIn(awaitingSchemas)(updatedPendingTestCase) && notIn(awaitingSources)(updatedPendingTestCase) && notIn(awaitingResources)(updatedPendingTestCase) && notIn(awaitingQueryStr)(updatedPendingTestCase))
-      val fulfilledPendingTestCases = fulfilledPendingTestCaseIds.map(pendingTestCases(_))
+      val fulfilledPendingTestCases = fulfilledPendingTestCaseIds.flatMap { fulfilledPendingTestCaseId =>
+        val pendingTestCase = pendingTestCases.get(fulfilledPendingTestCaseId)
+        if (pendingTestCase.isEmpty) {
+          logger.warn(s"Ignoring fulfilled resource for unknown pending Test Case: $fulfilledPendingTestCaseId")
+        }
+        pendingTestCase
+      }
 
       // fulfilledPendingTestCases now have everything they need to run
       fulfilledPendingTestCases.map(fulfilledPendingTestCase =>
@@ -200,8 +206,10 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       val pathPendingTestCaseIds = testCasesAwaitingSchema.toSet ++ testCasesAwaitingSources.toSet ++ testCasesAwaitingResources.toSet ++ testCasesAwaitingQueryStr
 
       // without the resource we cannot complete the test case, so we have to fail it
-      for (pathPendingTestCaseId <- pathPendingTestCaseIds) {
-        val pendingTestCase = pendingTestCases(pathPendingTestCaseId)
+      for {
+        pathPendingTestCaseId <- pathPendingTestCaseIds
+        pendingTestCase <- pendingTestCases.get(pathPendingTestCaseId)
+      } {
         val manager = pendingTestCase.runTestCase.manager
         val testSetRef = pendingTestCase.runTestCase.testSetRef
         val testCase = pendingTestCase.runTestCase.testCase
@@ -220,7 +228,18 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
     case RunTestCaseInternal(RunTestCase(testSetRef, testCase, manager), resolvedEnvironment) =>
       manager ! RunningTestCase(testSetRef, testCase.name)
       // actually run the test case!
-      val result = runTestCaseWithExist(testSetRef.xqtsVersion, testSetRef.name, testCase, resolvedEnvironment)
+      // NOTE: every RunningTestCase MUST be answered by a RanTestCase — an
+      // uncaught throw here would leave the manager waiting for this test
+      // case forever, and its result absent from the JUnit output (issue #74).
+      val result = try {
+        runTestCaseWithExist(testSetRef.xqtsVersion, testSetRef.name, testCase, resolvedEnvironment)
+      } catch {
+        // NonFatal deliberately excludes OutOfMemoryError, which
+        // runTestCaseWithExist intentionally rethrows
+        case scala.util.control.NonFatal(t) =>
+          logger.error(s"Uncaught error whilst executing Test Case: ${testSetRef.name}/${testCase.name}", t)
+          ErrorResult(testSetRef.name, testCase.name, -1, -1, t)
+      }
       manager ! RanTestCase(testSetRef, result)
   }
 
@@ -1848,6 +1867,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 }
 
 object TestCaseRunnerActor {
+  private val logger = Logger(TestCaseRunnerActor.getClass)
+
   case class RunTestCase(testSetRef: TestSetRef, testCase: TestCase, manager: ActorRef)
 
   private case class RunTestCaseInternal(runTestCase: RunTestCase, resolvedEnvironment: ResolvedEnvironment)
@@ -1948,31 +1969,56 @@ object TestCaseRunnerActor {
     }
   }
 
+  // NOTE for the add* functions below: a TestCaseId registered in an
+  // awaiting* map but absent from `pending` (e.g. a stray or duplicate
+  // resource notification) is skipped with a warning — throwing here would
+  // crash the routee and silently drop every test case pending in it.
+
   private def addSchemas(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]): Map[TestCaseId, PendingTestCase] = {
     testCases.foldLeft(pending) { (accum, x) =>
-      val pendingTestCase = accum(x)
-      accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedSchemas = pendingTestCase.resolvedEnvironment.resolvedSchemas :+ ResolvedSchema(path, value))))
+      accum.get(x) match {
+        case Some(pendingTestCase) =>
+          accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedSchemas = pendingTestCase.resolvedEnvironment.resolvedSchemas :+ ResolvedSchema(path, value))))
+        case None =>
+          logger.warn(s"Ignoring schema $path for unknown pending Test Case: $x")
+          accum
+      }
     }
   }
 
   private def addSources(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]): Map[TestCaseId, PendingTestCase] = {
     testCases.foldLeft(pending) { (accum, x) =>
-      val pendingTestCase = accum(x)
-      accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedSources = pendingTestCase.resolvedEnvironment.resolvedSources :+ ResolvedSource(path, value))))
+      accum.get(x) match {
+        case Some(pendingTestCase) =>
+          accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedSources = pendingTestCase.resolvedEnvironment.resolvedSources :+ ResolvedSource(path, value))))
+        case None =>
+          logger.warn(s"Ignoring source $path for unknown pending Test Case: $x")
+          accum
+      }
     }
   }
 
   private def addResources(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]): Map[TestCaseId, PendingTestCase] = {
     testCases.foldLeft(pending) { (accum, x) =>
-      val pendingTestCase = accum(x)
-      accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedResources = pendingTestCase.resolvedEnvironment.resolvedResources :+ ResolvedResource(path, value))))
+      accum.get(x) match {
+        case Some(pendingTestCase) =>
+          accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedResources = pendingTestCase.resolvedEnvironment.resolvedResources :+ ResolvedResource(path, value))))
+        case None =>
+          logger.warn(s"Ignoring resource $path for unknown pending Test Case: $x")
+          accum
+      }
     }
   }
 
-  private def addQueryStrs(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], @unused path: Path, value: Array[Byte]): Map[TestCaseId, PendingTestCase] = {
+  private def addQueryStrs(pending: Map[TestCaseId, PendingTestCase])(testCases: Seq[TestCaseId], path: Path, value: Array[Byte]): Map[TestCaseId, PendingTestCase] = {
     testCases.foldLeft(pending) { (accum, x) =>
-      val pendingTestCase = accum(x)
-      accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedQuery = Some(new String(value, UTF_8)))))
+      accum.get(x) match {
+        case Some(pendingTestCase) =>
+          accum + (x -> pendingTestCase.copy(resolvedEnvironment = pendingTestCase.resolvedEnvironment.copy(resolvedQuery = Some(new String(value, UTF_8)))))
+        case None =>
+          logger.warn(s"Ignoring query $path for unknown pending Test Case: $x")
+          accum
+      }
     }
   }
 

@@ -91,10 +91,47 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
   override def receive: Receive = {
     case ParseTestSet(testSetRef, testCases, features, specs, xmlVersions, xsdVersions, excludeTestCases, globalEnvironments, manager) =>
       logger.info(s"Parsing XQTS TestSet: ${testSetRef.file}...")
+      resetParseState()
       manager ! ParsingTestSet(testSetRef)
-      val parsedTestSet = parseTestSet(testSetRef, testCases, features, specs, xmlVersions, xsdVersions, excludeTestCases, globalEnvironments, manager)
-      logger.info(s"Parsed XQTS TestSet: ${testSetRef.file} OK.")
+      val parsedTestSet = try {
+        val result = parseTestSet(testSetRef, testCases, features, specs, xmlVersions, xsdVersions, excludeTestCases, globalEnvironments, manager)
+        logger.info(s"Parsed XQTS TestSet: ${testSetRef.file} OK.")
+        result
+      } catch {
+        // A partial parse must still send ParsedTestSet listing the test
+        // cases accumulated (and hence dispatched) so far, otherwise the
+        // manager would consider the test set forever incomplete and its
+        // already-run results would never be serialized.
+        case scala.util.control.NonFatal(t) =>
+          logger.error(s"Error whilst parsing XQTS TestSet: ${testSetRef.file}; reporting the ${currentTestSet.map(_.testCases.size).getOrElse(0)} test case(s) parsed before the error", t)
+          currentTestSet
+      }
       manager ! ParsedTestSet(testSetRef, parsedTestSet.map(_.testCases.map(_.name)).getOrElse(Seq.empty))
+  }
+
+  /**
+   * Resets all per-parse mutable state. Actor instances are pooled and parse
+   * many test sets over their lifetime; without a reset, state such as the
+   * `environments` of one test set would leak into the next parse (and a
+   * failed parse would poison subsequent ones).
+   */
+  private def resetParseState(): Unit = {
+    captureText = false
+    currentText = None
+    currentCreated = None
+    currentTestSet = None
+    parsingTestCases = false
+    currentModified = None
+    currentLink = None
+    currentDependency = None
+    currentTestCase = None
+    currentResult = None
+    currentNormalizeSpace = None
+    currentFile = None
+    currentTestIsUpdate = false
+    currentFlags = None
+    currentIgnorePrefixes = None
+    environments = Map.empty
   }
 
   /**
@@ -604,7 +641,13 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
                 val allDependencies: Seq[Dependency] = currentTestSet.map(testSet => (testSet.dependencies.toSet ++ testCase.dependencies.toSet).toSeq).getOrElse(testCase.dependencies)
                 val missingDeps: Missing = missingDependencies(allDependencies, features, specs, xmlVersions, xsdVersions)
                 if (missingDeps.isEmpty) {
-                  testCaseRunnerActor ! RunTestCase(testSetRef.copy(name = currentTestSet.map(_.name).getOrElse("<UNKNOWN>")), testCase, manager)
+                  // NOTE: always the catalog's testSetRef — the same value used
+                  // for the ParsingTestSet/ParsedTestSet and skip messages. The
+                  // manager keys its accounting by TestSetRef, so substituting
+                  // the test-set file's own name here (as was done previously)
+                  // would split one test set's results across two keys whenever
+                  // the two names differ.
+                  testCaseRunnerActor ! RunTestCase(testSetRef, testCase, manager)
                 } else {
                   // assumption failed
                   //TODO(AR) replace these two messages with AssumptionFailed() - and let the manager deal with it

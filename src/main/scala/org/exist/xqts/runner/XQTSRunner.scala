@@ -330,7 +330,7 @@ private class XQTSRunner {
             // 5) start the XQTSRunner actor
             val parserActorClass = getParserActorClass(cmdConfig.xqtsVersion)
             val serializerActorClass = getSerializerActorClass()
-            val xqtsRunner = system.actorOf(Props(classOf[XQTSRunnerActor], settings.xmlParserBufferSize, server, parserActorClass, serializerActorClass, styleDir, cmdConfig.outputDir.getOrElse(Paths.get(settings.outputDir))), name = "XQTSRunner")
+            val xqtsRunner = system.actorOf(Props(classOf[XQTSRunnerActor], settings.xmlParserBufferSize, server, parserActorClass, serializerActorClass, styleDir, cmdConfig.outputDir.getOrElse(Paths.get(settings.outputDir)), None), name = "XQTSRunner")
             xqtsRunner ! RunXQTS(cmdConfig.xqtsVersion, localXqtsDir, getEnabled(DEFAULT_FEATURES)(cmdConfig.enableFeatures, cmdConfig.disableFeatures).toSet, getEnabled(DEFAULT_SPECS)(cmdConfig.enableSpecs, cmdConfig.disableSpecs).toSet, getEnabled(DEFAULT_XML_VERSIONS)(cmdConfig.enableXmlVersions, cmdConfig.disableXmlVersions).toSet, getEnabled(DEFAULT_XSD_VERSIONS)(cmdConfig.enableXsdVersions, cmdConfig.disableXsdVersions).toSet, settings.commonResourceCacheMaxSize, cmdConfig.testSetPattern.map(Right(_)).getOrElse(Left(cmdConfig.testSets.toSet)), cmdConfig.testCasePattern.map(Right(_)).getOrElse(Left(cmdConfig.testCases.toSet)), cmdConfig.excludeTestSets.toSet, cmdConfig.excludeTestCases.toSet)
 
           case Left(throwable) =>

@@ -68,6 +68,7 @@ libraryDependencies ++= {
     "org.apache.logging.log4j" % "log4j-slf4j2-impl" % "2.25.2" % "runtime",
 
     "org.scalatest" %% "scalatest" % "3.2.19" % Test,
+    "org.apache.pekko" %% "pekko-testkit" % "1.3.0" % Test,
   )
 }
 

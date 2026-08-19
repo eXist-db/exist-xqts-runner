@@ -14,6 +14,9 @@ on:
 
 permissions:
   contents: read
+  # The GitHub Packages publish path pushes artifacts with the workflow's
+  # GITHUB_TOKEN; without packages:write it gets 403 from maven.pkg.github.com.
+  packages: write
 
 jobs:
   publish:

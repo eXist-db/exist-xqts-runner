@@ -48,7 +48,10 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
   // brackets the full XQTS run, not just the serialization phase.
   private val runStarted: Instant = Instant.now()
   private var observedXqtsVersion: Option[String] = None
-  private var observedTestCount: Long = 0L
+  // Keyed per test set so that re-serializing a set (a rewrite with more
+  // results) replaces its count instead of double-counting it.
+  private var observedTestCounts: Map[TestSetName, Int] = Map.empty
+  private var serializedTestSets: Set[TestSetName] = Set.empty
 
   override def receive: Receive = {
 
@@ -57,7 +60,11 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
       if (observedXqtsVersion.isEmpty) {
         observedXqtsVersion = Some(XQTSVersion.label(testSetResults.testSetRef.xqtsVersion))
       }
-      observedTestCount += testSetResults.results.size
+      observedTestCounts += (testSetResults.testSetRef.name -> testSetResults.results.size)
+      if (serializedTestSets.contains(testSetResults.testSetRef.name)) {
+        logger.info(s"Rewriting existing JUnit report for TestSet: ${testSetResults.testSetRef.name}.")
+      }
+      serializedTestSets += testSetResults.testSetRef.name
 
       val serializeIo: IO[Option[Throwable]] = dataDir
         .flatMap(dataFile(_, testSetResults.testSetRef.name))
@@ -120,7 +127,7 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
       started = runStarted,
       completed = Instant.now(),
       xqtsVersion = observedXqtsVersion,
-      testCount = observedTestCount
+      testCount = observedTestCounts.values.foldLeft(0L)(_ + _)
     )
     RunnerInfo.write(outputDir, runInfo) match {
       case Right(path) =>

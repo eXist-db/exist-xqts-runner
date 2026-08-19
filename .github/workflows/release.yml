@@ -1,9 +1,11 @@
 name: Release
 
 # Triggered by a tag push (bare semver, e.g. 2.0.0, 2.0.0-RC3 — no 'v' prefix).
-# Publish target depends on which branch the tagged commit lives on:
-#   - an ancestor of main  -> GA release  -> publish to Maven Central
-#   - otherwise (develop)  -> RC/interim  -> publish to GitHub Packages
+# Publish target:
+#   - a final-release tag (bare X.Y.Z) on main -> GA release -> Maven Central
+#   - anything else (RCs and other pre-release tags, or tags off main)
+#     -> RC/interim -> publish to GitHub Packages
+# Maven Central is immutable — only final releases may ever land there.
 
 on:
   push:
@@ -26,7 +28,10 @@ jobs:
       - name: Determine publish target
         run: |
           git fetch origin main
-          if git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
+          # Central only for a final-release tag (bare X.Y.Z, no pre-release
+          # suffix) whose commit is on main; RCs etc. go to GitHub Packages.
+          if [[ "$GITHUB_REF_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+              && git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
             echo "PUBLISH_TARGET=central" >> "$GITHUB_ENV"
           else
             echo "PUBLISH_TARGET=ghp" >> "$GITHUB_ENV"

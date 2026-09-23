@@ -49,7 +49,7 @@ developers := List(
 versionScheme := Some("semver-spec")
 
 libraryDependencies ++= {
-  val existV = "7.0.0-beta3"
+  val existV = "7.0.0-beta5"
 
   Seq(
     "org.apache.pekko" %% "pekko-actor" % "1.3.0",

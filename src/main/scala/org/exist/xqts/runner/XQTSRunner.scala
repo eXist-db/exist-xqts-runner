@@ -65,6 +65,7 @@ object XQTSRunner {
                                 testSetPattern: Option[Pattern] = None,
                                 testSets: Seq[String] = Seq.empty,
                                 testCasePattern: Option[Pattern] = None,
+                                storeUpdateSources: Boolean = false,
                                 testCases: Seq[String] = Seq.empty,
                                 excludeTestSets: Seq[String] = Seq.empty,
                                 excludeTestCases: Seq[String] = Seq.empty,
@@ -175,6 +176,10 @@ object XQTSRunner {
       opt[Pattern]("test-case-pattern").abbr("tcptn")
         .text("A regular expression that matches one or more test case names to run. The default is to run all of them")
         .action((x, c) => c.copy(testCasePattern = Some(x)))
+
+      opt[Unit]("store-update-sources")
+        .text("Store the source documents of XQuery Update tests in the database before running them, so the updates apply to stored documents rather than in-memory ones. The default is in memory")
+        .action((_, c) => c.copy(storeUpdateSources = true))
 
       opt[Seq[String]]("test-case").abbr("tc")
         .valueName("<test-case-1>,<test-case-2>...")
@@ -331,7 +336,7 @@ private class XQTSRunner {
             val parserActorClass = getParserActorClass(cmdConfig.xqtsVersion)
             val serializerActorClass = getSerializerActorClass()
             val xqtsRunner = system.actorOf(Props(classOf[XQTSRunnerActor], settings.xmlParserBufferSize, server, parserActorClass, serializerActorClass, styleDir, cmdConfig.outputDir.getOrElse(Paths.get(settings.outputDir))), name = "XQTSRunner")
-            xqtsRunner ! RunXQTS(cmdConfig.xqtsVersion, localXqtsDir, getEnabled(DEFAULT_FEATURES)(cmdConfig.enableFeatures, cmdConfig.disableFeatures).toSet, getEnabled(DEFAULT_SPECS)(cmdConfig.enableSpecs, cmdConfig.disableSpecs).toSet, getEnabled(DEFAULT_XML_VERSIONS)(cmdConfig.enableXmlVersions, cmdConfig.disableXmlVersions).toSet, getEnabled(DEFAULT_XSD_VERSIONS)(cmdConfig.enableXsdVersions, cmdConfig.disableXsdVersions).toSet, settings.commonResourceCacheMaxSize, cmdConfig.testSetPattern.map(Right(_)).getOrElse(Left(cmdConfig.testSets.toSet)), cmdConfig.testCasePattern.map(Right(_)).getOrElse(Left(cmdConfig.testCases.toSet)), cmdConfig.excludeTestSets.toSet, cmdConfig.excludeTestCases.toSet)
+            xqtsRunner ! RunXQTS(cmdConfig.xqtsVersion, localXqtsDir, getEnabled(DEFAULT_FEATURES)(cmdConfig.enableFeatures, cmdConfig.disableFeatures).toSet, getEnabled(DEFAULT_SPECS)(cmdConfig.enableSpecs, cmdConfig.disableSpecs).toSet, getEnabled(DEFAULT_XML_VERSIONS)(cmdConfig.enableXmlVersions, cmdConfig.disableXmlVersions).toSet, getEnabled(DEFAULT_XSD_VERSIONS)(cmdConfig.enableXsdVersions, cmdConfig.disableXsdVersions).toSet, settings.commonResourceCacheMaxSize, cmdConfig.testSetPattern.map(Right(_)).getOrElse(Left(cmdConfig.testSets.toSet)), cmdConfig.testCasePattern.map(Right(_)).getOrElse(Left(cmdConfig.testCases.toSet)), cmdConfig.excludeTestSets.toSet, cmdConfig.excludeTestCases.toSet, cmdConfig.storeUpdateSources)
 
           case Left(throwable) =>
             logger.error("Unable to start eXist-db Server", throwable)

@@ -54,7 +54,11 @@ import scala.util.{Failure, Success}
  * @param commonResourceCacheActor An actor for retrieving common resources.
  * @author Adam Retter <adam@evolvedbinary.com>
  */
-class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: ActorRef) extends Actor {
+/**
+ * @param storeUpdateSources whether XQuery Update tests run against their source documents stored
+ *                           in the database, rather than against in-memory copies.
+ */
+class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: ActorRef, storeUpdateSources: Boolean) extends Actor {
 
   private val logger = Logger(classOf[TestCaseRunnerActor])
 
@@ -489,21 +493,47 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
     }
 
+    try {
     parsedSources match {
       case Left(error) =>
         ErrorResult(testSetName, testCase.name, error.compilationTime, error.executionTime, error)
 
-      case Right(sourceDocs) =>
-        // Build variable declarations from parsed source docs (for external variables like $input-context)
-        val externalVarDocs: List[(String, Sequence)] = sourceDocs.filter { case (source, _) =>
+      case Right(parsedDocs) =>
+        // In memory by default; with --store-update-sources, stored copies, so the updates take
+        // eXist-db's persistent path, which is where applications use them.
+        val storedPaths: Option[List[(Source, String)]] = if (storeUpdateSources) {
+          storeSources(connection, testSetName, testCase.name, parsedDocs) match {
+            case Left(error) =>
+              return ErrorResult(testSetName, testCase.name, error.compilationTime, error.executionTime, error)
+            case Right(paths) => Some(paths)
+          }
+        } else {
+          None
+        }
+        // ...and the environment's <param> declarations, as a non-update test binds them
+        val params: List[(String, Sequence)] = getParams(connection)(testCase) match {
+          case Left(error) =>
+            return ErrorResult(testSetName, testCase.name, error.compilationTime, error.executionTime, error)
+          case Right(values) => values
+        }
+
+        // In memory, the same parsed documents are bound on every step, so the updates accumulate on
+        // them. Stored, each step reads the documents afresh by path, as a separate query would.
+        def sourceDocs: List[(Source, Sequence)] = storedPaths match {
+          case Some(paths) => paths.map { case (source, path) => (source, readStoredDocument(connection, path)) }
+          case None => parsedDocs.map { case (source, doc) => (source, doc: Sequence) }
+        }
+        // Build variable declarations from the source docs (for external variables like $input-context).
+        def sourceVarDocs: List[(String, Sequence)] = sourceDocs.filter { case (source, _) =>
           source.role.exists(_.isInstanceOf[ExternalVariableRole])
         }.map { case (source, doc) =>
           (source.role.get.asInstanceOf[ExternalVariableRole].name, doc.asInstanceOf[Sequence])
         }
+        def externalVarDocs: List[(String, Sequence)] = params ++ sourceVarDocs
 
         // Build context sequence from source with role="." (context item)
         // For update tests, also fall back to the first mutable source as context
-        val contextDoc: Option[Sequence] = sourceDocs.find { case (source, _) =>
+        def contextDoc: Option[Sequence] = sourceDocs.find { case (source, _) =>
           source.role.exists(Role.isContextItem)
         }.map { case (_, doc) => doc.asInstanceOf[Sequence] }
           .orElse(sourceDocs.find { case (source, _) => source.mutable }.map { case (_, doc) => doc.asInstanceOf[Sequence] })
@@ -641,15 +671,60 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                     // Copy-modify-return: use the update expression's return value for assertion
                     val envNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
                     processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, envNamespaces)(expectedResult, lastUpdateResult.get)
-                  case Some(_) =>
-                    // Expected a non-error result with no verification query and no update result
-                    FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, s"Expected a result but no verification query defined")
+                  case Some(expectedResult) =>
+                    // No verification query and no update result: the updating expression's result
+                    // is the empty sequence, and the assertion checks the effect on its own (e.g.
+                    // fn:put's, by reading the stored document back)
+                    val envNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
+                    processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, envNamespaces)(expectedResult, Sequence.EMPTY_SEQUENCE)
                   case None =>
                     PassResult(testSetName, testCase.name, updateCompTime, updateExecTime)
                 }
             }
         }
     }
+    } finally {
+      if (storeUpdateSources) {
+        removeStoredSources(connection, testSetName, testCase.name)
+      }
+    }
+  }
+
+
+  private val STORED_SOURCES_ROOT = "/db/xqts-update-sources"
+
+  /** The collection an update test's source documents are stored in, with --store-update-sources. */
+  private def storedSourcesCollection(testSetName: TestSetName, testCaseName: TestCaseName): String =
+    (testSetName + "-" + testCaseName).replaceAll("[^A-Za-z0-9._-]", "_")
+
+  /**
+   * Stores an update test's parsed source documents in the database.
+   *
+   * @return each source with the path it is stored under
+   */
+  private def storeSources(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName,
+                           parsedDocs: List[(Source, org.exist.dom.memtree.DocumentImpl)]): Either[ExistServerException, List[(Source, String)]] = {
+    val collection = STORED_SOURCES_ROOT + "/" + storedSourcesCollection(testSetName, testCaseName)
+    parsedDocs.zipWithIndex.foldLeft(Either.right[ExistServerException, List[(Source, String)]](List.empty)) {
+      case (accum, ((source, doc), i)) =>
+        accum.flatMap { stored =>
+          val name = s"$i-${source.file.getFileName}"
+          connection.storeDocument(collection, name, doc).map(_ => stored :+ (source -> (collection + "/" + name)))
+        }
+    }
+  }
+
+  /** Reads a stored update source afresh, by path. */
+  private def readStoredDocument(connection: ExistConnection, path: String): Sequence = {
+    connection.executeQuery("declare variable $path external; doc($path)", true, None, None,
+        externalVariables = Seq("path" -> new StringValue(path)))
+      .flatMap(_.result.leftMap(queryError => ExistServerException(new IllegalStateException(s"Could not read stored update source $path: ${queryError.errorCode}: ${queryError.message}"))))
+      .fold(error => throw error.getCause, identity)
+  }
+
+  private def removeStoredSources(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName): Unit = {
+    connection.removeCollection(STORED_SOURCES_ROOT + "/" + storedSourcesCollection(testSetName, testCaseName))
+    ()
   }
 
   /**
@@ -784,6 +859,47 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
+   * Evaluates the test environment's {@code <param>} declarations, which bind external variables.
+   *
+   * @param connection a connection to an eXist-db server.
+   * @param testCase   a test-case whose environment declares the params.
+   * @return each param's name and value, or an exception
+   */
+  private def getParams(connection: ExistConnection)(testCase: TestCase): Either[ExistServerException, List[(String, Sequence)]] = {
+    def variableSelectToSequence(`type`: Int, select: Option[String]): Either[ExistServerException, Sequence] = {
+      select match {
+        case None =>
+          Right(Sequence.EMPTY_SEQUENCE)
+
+        case Some(selectExpr) =>
+          `type` match {
+            case Type.EMPTY_SEQUENCE =>
+              Right(Sequence.EMPTY_SEQUENCE)
+
+            case _ =>
+              connection.executeQuery(selectExpr, false, None, None)
+                .flatMap(_.result.leftMap(queryError => ExistServerException(new IllegalStateException(s"Could not calculate param select: ${queryError.errorCode}: ${queryError.message}"))))
+          }
+      }
+    }
+
+    val initAccum: Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
+
+    testCase.environment
+      .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))
+      .getOrElse(List.empty)
+      .foldLeft(initAccum) { case (accum, (name, typ, select)) =>
+        accum match {
+          case error@Left(_) => error
+          case Right(results) =>
+            variableSelectToSequence(typ, select)
+              .map(seq => (name, seq))
+              .map(result => result +: results)
+        }
+      }
+  }
+
+  /**
    * Get the external variable declarations for the XQuery Context.
    *
    * @param connection          a connection to an eXist-db server.
@@ -792,40 +908,6 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @return the external variable declarations, or an exception
    */
   private def getVariableDeclarations(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): Either[ExistServerException, List[(String, Sequence)]] = {
-
-    def getParams(): Either[ExistServerException, List[(String, Sequence)]] = {
-      def variableSelectToSequence(`type`: Int, select: Option[String]): Either[ExistServerException, Sequence] = {
-        select match {
-          case None =>
-            Right(Sequence.EMPTY_SEQUENCE)
-
-          case Some(selectExpr) =>
-            `type` match {
-              case Type.EMPTY_SEQUENCE =>
-                Right(Sequence.EMPTY_SEQUENCE)
-
-              case _ =>
-                connection.executeQuery(selectExpr, false, None, None)
-                  .flatMap(_.result.leftMap(queryError => ExistServerException(new IllegalStateException(s"Could not calculate param select: ${queryError.errorCode}: ${queryError.message}"))))
-            }
-        }
-      }
-
-      val initAccum: Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
-
-      testCase.environment
-        .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))
-        .getOrElse(List.empty)
-        .foldLeft(initAccum) { case (accum, (name, typ, select)) =>
-          accum match {
-            case error@Left(_) => error
-            case Right(results) =>
-              variableSelectToSequence(typ, select)
-                .map(seq => (name, seq))
-                .map(result => result +: results)
-          }
-        }
-    }
 
     def getDocuments(): Either[ExistServerException, List[(String, Sequence)]] = {
       val initAccum: Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
@@ -854,7 +936,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
     }
 
-    getParams().flatMap(params => getDocuments().map(documents => params ++ documents))
+    getParams(connection)(testCase).flatMap(params => getDocuments().map(documents => params ++ documents))
   }
 
   /**

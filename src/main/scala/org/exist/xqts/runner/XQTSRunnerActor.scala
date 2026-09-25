@@ -90,7 +90,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
 
   override def receive: Receive = {
 
-    case RunXQTS(xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, maxCacheBytes, testSets, testCases, excludeTestSets, excludeTestCases) =>
+    case RunXQTS(xqtsVersion, xqtsPath, features, specs, xmlVersions, xsdVersions, maxCacheBytes, testSets, testCases, excludeTestSets, excludeTestCases, storeUpdateSources) =>
       started = System.currentTimeMillis()
       logger.info(s"Running XQTS: ${XQTSVersion.label(xqtsVersion)}")
 
@@ -107,7 +107,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       val readFileRouter = context.actorOf(FromConfig.props(Props(classOf[ReadFileActor])), name = "ReadFileRouter")
       val commonResourceCacheActor = context.actorOf(Props(classOf[CommonResourceCacheActor], readFileRouter, maxCacheBytes))
 
-      val testCaseRunnerRouter = context.actorOf(FromConfig.props(Props(classOf[TestCaseRunnerActor], existServer, commonResourceCacheActor)), name = "TestCaseRunnerRouter")
+      val testCaseRunnerRouter = context.actorOf(FromConfig.props(Props(classOf[TestCaseRunnerActor], existServer, commonResourceCacheActor, storeUpdateSources)), name = "TestCaseRunnerRouter")
 
       // For XQFTTS, the catalog parser sends directly to the test case runner (no test-set parser needed).
       // For QT3, the catalog parser sends to a test-set parser pool which then sends to test case runners.
@@ -408,7 +408,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
  * @author Adam Retter <adam@evolvedbinary.com>
  */
 object XQTSRunnerActor {
-  case class RunXQTS(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], maxCacheBytes: Long, testSets: Either[Set[String], Pattern], testCases: Either[Set[String], Pattern], excludeTestSets: Set[String], excludeTestCases: Set[String])
+  case class RunXQTS(xqtsVersion: XQTSVersion, xqtsPath: Path, features: Set[Feature], specs: Set[Spec], xmlVersions: Set[XmlVersion], xsdVersions: Set[XsdVersion], maxCacheBytes: Long, testSets: Either[Set[String], Pattern], testCases: Either[Set[String], Pattern], excludeTestSets: Set[String], excludeTestCases: Set[String], storeUpdateSources: Boolean = false)
 
   case class ParsingTestSet(testSetRef: TestSetRef)
 

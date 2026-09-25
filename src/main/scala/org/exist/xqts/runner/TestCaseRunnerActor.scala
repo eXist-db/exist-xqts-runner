@@ -54,7 +54,11 @@ import scala.util.{Failure, Success}
  * @param commonResourceCacheActor An actor for retrieving common resources.
  * @author Adam Retter <adam@evolvedbinary.com>
  */
-class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: ActorRef) extends Actor {
+/**
+ * @param storeUpdateSources whether XQuery Update tests run against their source documents stored
+ *                           in the database, rather than against in-memory copies.
+ */
+class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: ActorRef, storeUpdateSources: Boolean) extends Actor {
 
   private val logger = Logger(classOf[TestCaseRunnerActor])
 
@@ -468,9 +472,13 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    */
   @throws(classOf[OutOfMemoryError])
   private def runUpdateTestCase(connection: ExistConnection, testSetName: TestSetName, testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): TestResult = {
-    val baseUri = testCase.environment
+    // fn:put can only store to the database, and a test reads what it stored back with fn:doc,
+    // both relative to the static base URI: a test that calls fn:put gets a base URI in a
+    // collection of its own, for its queries and its assertions
+    val putBaseUri: Option[String] = if (callsFnPut(testCase)) Some(putSandpitBaseUri(testSetName, testCase.name)) else None
+    val baseUri = putBaseUri.orElse(testCase.environment
       .flatMap(_.staticBaseUri.orElse(Some(testCase.file.toUri.toString)))
-      .filterNot(_ == "#UNDEFINED")
+      .filterNot(_ == "#UNDEFINED"))
 
     // Parse source documents once, so the same in-memory document objects are shared between update and verification queries
     val parsedSources: Either[ExistServerException, List[(Source, org.exist.dom.memtree.DocumentImpl)]] = {
@@ -489,21 +497,47 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
     }
 
+    try {
     parsedSources match {
       case Left(error) =>
         ErrorResult(testSetName, testCase.name, error.compilationTime, error.executionTime, error)
 
-      case Right(sourceDocs) =>
-        // Build variable declarations from parsed source docs (for external variables like $input-context)
-        val externalVarDocs: List[(String, Sequence)] = sourceDocs.filter { case (source, _) =>
+      case Right(parsedDocs) =>
+        // In memory by default; with --store-update-sources, stored copies, so the updates take
+        // eXist-db's persistent path, which is where applications use them.
+        val storedPaths: Option[List[(Source, String)]] = if (storeUpdateSources) {
+          storeSources(connection, testSetName, testCase.name, parsedDocs) match {
+            case Left(error) =>
+              return ErrorResult(testSetName, testCase.name, error.compilationTime, error.executionTime, error)
+            case Right(paths) => Some(paths)
+          }
+        } else {
+          None
+        }
+        // ...and the environment's <param> declarations, as a non-update test binds them
+        val params: List[(String, Sequence)] = getParams(connection)(testCase) match {
+          case Left(error) =>
+            return ErrorResult(testSetName, testCase.name, error.compilationTime, error.executionTime, error)
+          case Right(values) => values
+        }
+
+        // In memory, the same parsed documents are bound on every step, so the updates accumulate on
+        // them. Stored, each step reads the documents afresh by path, as a separate query would.
+        def sourceDocs: List[(Source, Sequence)] = storedPaths match {
+          case Some(paths) => paths.map { case (source, path) => (source, readStoredDocument(connection, path)) }
+          case None => parsedDocs.map { case (source, doc) => (source, doc: Sequence) }
+        }
+        // Build variable declarations from the source docs (for external variables like $input-context).
+        def sourceVarDocs: List[(String, Sequence)] = sourceDocs.filter { case (source, _) =>
           source.role.exists(_.isInstanceOf[ExternalVariableRole])
         }.map { case (source, doc) =>
           (source.role.get.asInstanceOf[ExternalVariableRole].name, doc.asInstanceOf[Sequence])
         }
+        def externalVarDocs: List[(String, Sequence)] = params ++ sourceVarDocs
 
         // Build context sequence from source with role="." (context item)
         // For update tests, also fall back to the first mutable source as context
-        val contextDoc: Option[Sequence] = sourceDocs.find { case (source, _) =>
+        def contextDoc: Option[Sequence] = sourceDocs.find { case (source, _) =>
           source.role.exists(Role.isContextItem)
         }.map { case (_, doc) => doc.asInstanceOf[Sequence] }
           .orElse(sourceDocs.find { case (source, _) => source.mutable }.map { case (_, doc) => doc.asInstanceOf[Sequence] })
@@ -624,7 +658,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                             FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(connection)(expectedError, queryResult))
                           case Some(expectedResult) =>
                             val envNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
-                            processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, envNamespaces)(expectedResult, queryResult)
+                            processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, envNamespaces, putBaseUri)(expectedResult, queryResult)
                           case None =>
                             ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("No defined expected result"))
                         }
@@ -640,16 +674,84 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                   case Some(expectedResult) if lastUpdateResult.isDefined =>
                     // Copy-modify-return: use the update expression's return value for assertion
                     val envNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
-                    processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, envNamespaces)(expectedResult, lastUpdateResult.get)
-                  case Some(_) =>
-                    // Expected a non-error result with no verification query and no update result
-                    FailureResult(testSetName, testCase.name, updateCompTime, updateExecTime, s"Expected a result but no verification query defined")
+                    processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, envNamespaces, putBaseUri)(expectedResult, lastUpdateResult.get)
+                  case Some(expectedResult) =>
+                    // No verification query and no update result: the updating expression's result
+                    // is the empty sequence, and the assertion checks the effect on its own (e.g.
+                    // fn:put's, by reading the stored document back)
+                    val envNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
+                    processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, envNamespaces, putBaseUri)(expectedResult, Sequence.EMPTY_SEQUENCE)
                   case None =>
                     PassResult(testSetName, testCase.name, updateCompTime, updateExecTime)
                 }
             }
         }
     }
+    } finally {
+      if (storeUpdateSources) {
+        removeStoredSources(connection, testSetName, testCase.name)
+      }
+      if (putBaseUri.isDefined) {
+        connection.removeCollection(PUT_SANDPIT_ROOT + "/" + storedSourcesCollection(testSetName, testCase.name))
+      }
+    }
+  }
+
+
+  private val STORED_SOURCES_ROOT = "/db/xqts-update-sources"
+
+  /** The collection under which update tests that call fn:put store their documents. */
+  private val PUT_SANDPIT_ROOT = "/db/xqts-update-sandpit"
+
+  /** A call of fn:put, prefixed or not, in a query of the test. */
+  private val FN_PUT_CALL = java.util.regex.Pattern.compile("(?:^|[^\\w.:-])(?:fn:)?put\\s*\\(")
+
+  private def callsFnPut(testCase: TestCase): Boolean =
+    (testCase.test.toSeq ++ testCase.updateTests).exists {
+      case Left(query) => FN_PUT_CALL.matcher(query).find()
+      case Right(_) => false
+    }
+
+  /**
+   * The static base URI of an update test that calls fn:put: a collection of its own, one level
+   * down, as the test's file is, so that a URI such as ../results/sandpit/put-001.xml stays
+   * within the collection.
+   */
+  private def putSandpitBaseUri(testSetName: TestSetName, testCaseName: TestCaseName): String =
+    "xmldb:exist://" + PUT_SANDPIT_ROOT + "/" + storedSourcesCollection(testSetName, testCaseName) + "/upd/"
+
+  /** The collection an update test's source documents are stored in, with --store-update-sources. */
+  private def storedSourcesCollection(testSetName: TestSetName, testCaseName: TestCaseName): String =
+    (testSetName + "-" + testCaseName).replaceAll("[^A-Za-z0-9._-]", "_")
+
+  /**
+   * Stores an update test's parsed source documents in the database.
+   *
+   * @return each source with the path it is stored under
+   */
+  private def storeSources(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName,
+                           parsedDocs: List[(Source, org.exist.dom.memtree.DocumentImpl)]): Either[ExistServerException, List[(Source, String)]] = {
+    val collection = STORED_SOURCES_ROOT + "/" + storedSourcesCollection(testSetName, testCaseName)
+    parsedDocs.zipWithIndex.foldLeft(Either.right[ExistServerException, List[(Source, String)]](List.empty)) {
+      case (accum, ((source, doc), i)) =>
+        accum.flatMap { stored =>
+          val name = s"$i-${source.file.getFileName}"
+          connection.storeDocument(collection, name, doc).map(_ => stored :+ (source -> (collection + "/" + name)))
+        }
+    }
+  }
+
+  /** Reads a stored update source afresh, by path. */
+  private def readStoredDocument(connection: ExistConnection, path: String): Sequence = {
+    connection.executeQuery("declare variable $path external; doc($path)", true, None, None,
+        externalVariables = Seq("path" -> new StringValue(path)))
+      .flatMap(_.result.leftMap(queryError => ExistServerException(new IllegalStateException(s"Could not read stored update source $path: ${queryError.errorCode}: ${queryError.message}"))))
+      .fold(error => throw error.getCause, identity)
+  }
+
+  private def removeStoredSources(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName): Unit = {
+    connection.removeCollection(STORED_SOURCES_ROOT + "/" + storedSourcesCollection(testSetName, testCaseName))
+    ()
   }
 
   /**
@@ -784,6 +886,47 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   }
 
   /**
+   * Evaluates the test environment's {@code <param>} declarations, which bind external variables.
+   *
+   * @param connection a connection to an eXist-db server.
+   * @param testCase   a test-case whose environment declares the params.
+   * @return each param's name and value, or an exception
+   */
+  private def getParams(connection: ExistConnection)(testCase: TestCase): Either[ExistServerException, List[(String, Sequence)]] = {
+    def variableSelectToSequence(`type`: Int, select: Option[String]): Either[ExistServerException, Sequence] = {
+      select match {
+        case None =>
+          Right(Sequence.EMPTY_SEQUENCE)
+
+        case Some(selectExpr) =>
+          `type` match {
+            case Type.EMPTY_SEQUENCE =>
+              Right(Sequence.EMPTY_SEQUENCE)
+
+            case _ =>
+              connection.executeQuery(selectExpr, false, None, None)
+                .flatMap(_.result.leftMap(queryError => ExistServerException(new IllegalStateException(s"Could not calculate param select: ${queryError.errorCode}: ${queryError.message}"))))
+          }
+      }
+    }
+
+    val initAccum: Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
+
+    testCase.environment
+      .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))
+      .getOrElse(List.empty)
+      .foldLeft(initAccum) { case (accum, (name, typ, select)) =>
+        accum match {
+          case error@Left(_) => error
+          case Right(results) =>
+            variableSelectToSequence(typ, select)
+              .map(seq => (name, seq))
+              .map(result => result +: results)
+        }
+      }
+  }
+
+  /**
    * Get the external variable declarations for the XQuery Context.
    *
    * @param connection          a connection to an eXist-db server.
@@ -792,40 +935,6 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @return the external variable declarations, or an exception
    */
   private def getVariableDeclarations(connection: ExistConnection)(testCase: TestCase, resolvedEnvironment: ResolvedEnvironment): Either[ExistServerException, List[(String, Sequence)]] = {
-
-    def getParams(): Either[ExistServerException, List[(String, Sequence)]] = {
-      def variableSelectToSequence(`type`: Int, select: Option[String]): Either[ExistServerException, Sequence] = {
-        select match {
-          case None =>
-            Right(Sequence.EMPTY_SEQUENCE)
-
-          case Some(selectExpr) =>
-            `type` match {
-              case Type.EMPTY_SEQUENCE =>
-                Right(Sequence.EMPTY_SEQUENCE)
-
-              case _ =>
-                connection.executeQuery(selectExpr, false, None, None)
-                  .flatMap(_.result.leftMap(queryError => ExistServerException(new IllegalStateException(s"Could not calculate param select: ${queryError.errorCode}: ${queryError.message}"))))
-            }
-        }
-      }
-
-      val initAccum: Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
-
-      testCase.environment
-        .map(env => env.params.map(param => (param.name, param.as.map(Type.getType).getOrElse(Type.ANY_TYPE), param.select)))
-        .getOrElse(List.empty)
-        .foldLeft(initAccum) { case (accum, (name, typ, select)) =>
-          accum match {
-            case error@Left(_) => error
-            case Right(results) =>
-              variableSelectToSequence(typ, select)
-                .map(seq => (name, seq))
-                .map(result => result +: results)
-          }
-        }
-    }
 
     def getDocuments(): Either[ExistServerException, List[(String, Sequence)]] = {
       val initAccum: Either[ExistServerException, List[(String, Sequence)]] = Right(List.empty)
@@ -854,7 +963,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
         }
     }
 
-    getParams().flatMap(params => getDocuments().map(documents => params ++ documents))
+    getParams(connection)(testCase).flatMap(params => getDocuments().map(documents => params ++ documents))
   }
 
   /**
@@ -916,19 +1025,19 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @param actualResult    the actual result from executing the XQuery.
    * @return the test result from processing the assertion.
    */
-  private def processAssertion(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty)(expectedResult: XQTSParserActor.Result, actualResult: ExistServer.QueryResult): TestResult = {
+  private def processAssertion(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty, assertionBaseUri: Option[String] = None)(expectedResult: XQTSParserActor.Result, actualResult: ExistServer.QueryResult): TestResult = {
     expectedResult match {
       case AllOf(assertions) =>
-        allOf(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(assertions, actualResult)
+        allOf(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces, assertionBaseUri)(assertions, actualResult)
 
       case AnyOf(assertions) =>
-        anyOf(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(assertions, actualResult)
+        anyOf(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces, assertionBaseUri)(assertions, actualResult)
 
       case Not(Some(assertion)) =>
-        not(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(assertion, actualResult)
+        not(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces, assertionBaseUri)(assertion, actualResult)
 
       case Assert(xpath) =>
-        assert(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(xpath, actualResult)
+        assert(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces, assertionBaseUri)(xpath, actualResult)
 
       case AssertCount(expectedCount) =>
         assertCount(testSetName, testCaseName, compilationTime, executionTime)(expectedCount, actualResult)
@@ -990,12 +1099,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @param actual          the actual result from executing the XQuery.
    * @return the test result from processing the assertion.
    */
-  private def allOf(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty)(assertions: List[XQTSParserActor.Result], actual: ExistServer.QueryResult): TestResult = {
+  private def allOf(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty, assertionBaseUri: Option[String] = None)(assertions: List[XQTSParserActor.Result], actual: ExistServer.QueryResult): TestResult = {
     val problem: Option[Either[ErrorResult, FailureResult]] = assertions.foldLeft(Option.empty[Either[ErrorResult, FailureResult]]) { case (failed, assertion) =>
       if (failed.nonEmpty) {
         failed
       } else {
-        processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(assertion, actual) match {
+        processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces, assertionBaseUri)(assertion, actual) match {
           case error: ErrorResult =>
             Some(Left(error))
           case failure: FailureResult =>
@@ -1024,7 +1133,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @param actual          the actual result from executing the XQuery.
    * @return the test result from processing the assertion.
    */
-  private def anyOf(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty)(assertions: List[XQTSParserActor.Result], actual: ExistServer.QueryResult): TestResult = {
+  private def anyOf(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty, assertionBaseUri: Option[String] = None)(assertions: List[XQTSParserActor.Result], actual: ExistServer.QueryResult): TestResult = {
     def passOrFails(): Either[Seq[Either[ErrorResult, FailureResult]], PassResult] = {
       val accum = Either.left[Seq[Either[ErrorResult, FailureResult]], PassResult](Seq.empty[Either[ErrorResult, FailureResult]])
       assertions.foldLeft(accum) { case (results, assertion) =>
@@ -1034,7 +1143,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
 
           case errors@Left(_) =>
             // evaluate the next assertion
-            processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(assertion, actual) match {
+            processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces, assertionBaseUri)(assertion, actual) match {
               case pass: PassResult =>
                 Right(pass)
 
@@ -1070,8 +1179,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @param actual          the actual result from executing the XQuery.
    * @return the test result from processing the assertion.
    */
-  private def not(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty)(assertion: XQTSParserActor.Result, actual: ExistServer.QueryResult): TestResult = {
-    val result = processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces)(assertion, actual)
+  private def not(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty, assertionBaseUri: Option[String] = None)(assertion: XQTSParserActor.Result, actual: ExistServer.QueryResult): TestResult = {
+    val result = processAssertion(connection, testSetName, testCaseName, compilationTime, executionTime, assertionNamespaces, assertionBaseUri)(assertion, actual)
     result match {
       case PassResult(_, _, _, _) =>
         FailureResult(testSetName, testCaseName, compilationTime, executionTime, s"not assertion negated a pass result for: $assertion on result: $actual")
@@ -1094,11 +1203,11 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @param actual          the actual result from executing the XQuery.
    * @return the test result from processing the assertion.
    */
-  private def assert(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty)(xpath: String, actual: ExistServer.QueryResult): TestResult = {
+  private def assert(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: CompilationTime, executionTime: ExecutionTime, assertionNamespaces: Seq[Namespace] = Seq.empty, assertionBaseUri: Option[String] = None)(xpath: String, actual: ExistServer.QueryResult): TestResult = {
     // Set context item only for single-item results (e.g., maps from parse-csv).
     // Multi-item sequences (e.g., from csv-to-arrays) would cause the xpath to run per-item.
     val contextForAssert = if (actual.getItemCount == 1) Some(actual) else None
-    executeQueryWith$Result(connection, xpath, true, contextForAssert, actual, assertionNamespaces) match {
+    executeQueryWith$Result(connection, xpath, true, contextForAssert, actual, assertionNamespaces, assertionBaseUri) match {
       case Left(existServerException) =>
         ErrorResult(testSetName, testCaseName, compilationTime + existServerException.compilationTime, executionTime + existServerException.executionTime, existServerException)
 
@@ -1813,8 +1922,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
    * @param $result         the sequence to be bound to the  <pre>$result</pre>  variable.
    * @return the result or executing the query, or an exception.
    */
-  private def executeQueryWith$Result(connection: ExistConnection, query: String, cacheCompiled: Boolean, contextSequence: Option[Sequence], $result: Sequence, namespaces: Seq[Namespace] = Seq.empty) = {
-    connection.executeQuery(query, cacheCompiled, None, contextSequence, Seq.empty, Seq.empty, Seq.empty, namespaces, Seq(RESULT_VARIABLE_NAME -> $result))
+  private def executeQueryWith$Result(connection: ExistConnection, query: String, cacheCompiled: Boolean, contextSequence: Option[Sequence], $result: Sequence, namespaces: Seq[Namespace] = Seq.empty, baseUri: Option[String] = None) = {
+    connection.executeQuery(query, cacheCompiled, baseUri, contextSequence, Seq.empty, Seq.empty, Seq.empty, namespaces, Seq(RESULT_VARIABLE_NAME -> $result))
   }
 
   /**

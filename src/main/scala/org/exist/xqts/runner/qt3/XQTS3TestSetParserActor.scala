@@ -602,7 +602,8 @@ class XQTS3TestSetParserActor(xmlParserBufferSize: Int, testCaseRunnerActor: Act
               if (matchesTestCases(testCase.name)) {
                 currentTestSet = currentTestSet.map(testSet => testSet.copy(testCases = testCase +: testSet.testCases))
                 val allDependencies: Seq[Dependency] = currentTestSet.map(testSet => (testSet.dependencies.toSet ++ testCase.dependencies.toSet).toSeq).getOrElse(testCase.dependencies)
-                val missingDeps: Missing = missingDependencies(allDependencies, features, specs, xmlVersions, xsdVersions)
+                val missingDeps: Missing = missingDependencies(allDependencies, features, specs, xmlVersions, xsdVersions) ++
+                  missingSchemaImport(testCase, features)
                 if (missingDeps.isEmpty) {
                   testCaseRunnerActor ! RunTestCase(testSetRef.copy(name = currentTestSet.map(_.name).getOrElse("<UNKNOWN>")), testCase, manager)
                 } else {

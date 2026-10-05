@@ -44,6 +44,7 @@ import org.xmlunit.diff.{Comparison, ComparisonType, DefaultComparisonFormatter}
 
 import scala.annotation.unused
 import scala.util.{Failure, Success}
+import scala.util.control.NonFatal
 
 /**
  * Actor that executes an XQTS test-case
@@ -528,19 +529,19 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
           case None => parsedDocs.map { case (source, doc) => (source, doc: Sequence) }
         }
         // Build variable declarations from the source docs (for external variables like $input-context).
-        def sourceVarDocs: List[(String, Sequence)] = sourceDocs.filter { case (source, _) =>
+        // Each step reads the sources once (sourceDocs), and derives both of these from that read.
+        def externalVarDocs(docs: List[(Source, Sequence)]): List[(String, Sequence)] = params ++ docs.filter { case (source, _) =>
           source.role.exists(_.isInstanceOf[ExternalVariableRole])
         }.map { case (source, doc) =>
-          (source.role.get.asInstanceOf[ExternalVariableRole].name, doc.asInstanceOf[Sequence])
+          (source.role.get.asInstanceOf[ExternalVariableRole].name, doc)
         }
-        def externalVarDocs: List[(String, Sequence)] = params ++ sourceVarDocs
 
         // Build context sequence from source with role="." (context item)
         // For update tests, also fall back to the first mutable source as context
-        def contextDoc: Option[Sequence] = sourceDocs.find { case (source, _) =>
+        def contextDoc(docs: List[(Source, Sequence)]): Option[Sequence] = docs.find { case (source, _) =>
           source.role.exists(Role.isContextItem)
-        }.map { case (_, doc) => doc.asInstanceOf[Sequence] }
-          .orElse(sourceDocs.find { case (source, _) => source.mutable }.map { case (_, doc) => doc.asInstanceOf[Sequence] })
+        }.map { case (_, doc) => doc }
+          .orElse(docs.find { case (source, _) => source.mutable }.map { case (_, doc) => doc })
 
         // Phase 1: Execute all update queries sequentially.
         // Each step shares the same in-memory documents, so mutations accumulate.
@@ -560,11 +561,12 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
               case Right(_) => resolvedEnvironment.resolvedQuery.get
             }
 
+            val docs = sourceDocs
             connection.executeQuery(
-              queryString, false, baseUri, contextDoc,
+              queryString, false, baseUri, contextDoc(docs),
               Seq.empty, Seq.empty, Seq.empty,
               testCase.environment.map(_.namespaces).getOrElse(List.empty),
-              externalVarDocs,
+              externalVarDocs(docs),
               testCase.environment.map(_.decimalFormats).getOrElse(List.empty),
               testCase.modules, false
             ) match {
@@ -617,16 +619,17 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                 }
 
                 // For verification, use the first mutable source as context item (now modified by updates)
-                val verifyContextDoc: Option[Sequence] = sourceDocs.find { case (source, _) =>
+                val docs = sourceDocs
+                val verifyContextDoc: Option[Sequence] = docs.find { case (source, _) =>
                   source.mutable
-                }.map { case (_, doc) => doc.asInstanceOf[Sequence] }
-                  .orElse(contextDoc)
+                }.map { case (_, doc) => doc }
+                  .orElse(contextDoc(docs))
 
                 connection.executeQuery(
                   verifyQueryString, false, baseUri, verifyContextDoc,
                   Seq.empty, Seq.empty, Seq.empty,
                   testCase.environment.map(_.namespaces).getOrElse(List.empty),
-                  externalVarDocs,
+                  externalVarDocs(docs),
                   testCase.environment.map(_.decimalFormats).getOrElse(List.empty),
                   testCase.modules, false
                 ) match {
@@ -658,7 +661,7 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                             FailureResult(testSetName, testCase.name, compilationTime, executionTime, failureMessage(connection)(expectedError, queryResult))
                           case Some(expectedResult) =>
                             val envNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
-                            processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, envNamespaces, putBaseUri)(expectedResult, queryResult)
+                            assertSafely(testSetName, testCase.name, compilationTime, executionTime)(processAssertion(connection, testSetName, testCase.name, compilationTime, executionTime, envNamespaces, putBaseUri)(expectedResult, queryResult))
                           case None =>
                             ErrorResult(testSetName, testCase.name, compilationTime, executionTime, new IllegalStateException("No defined expected result"))
                         }
@@ -674,28 +677,48 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
                   case Some(expectedResult) if lastUpdateResult.isDefined =>
                     // Copy-modify-return: use the update expression's return value for assertion
                     val envNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
-                    processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, envNamespaces, putBaseUri)(expectedResult, lastUpdateResult.get)
+                    assertSafely(testSetName, testCase.name, updateCompTime, updateExecTime)(processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, envNamespaces, putBaseUri)(expectedResult, lastUpdateResult.get))
                   case Some(expectedResult) =>
                     // No verification query and no update result: the updating expression's result
                     // is the empty sequence, and the assertion checks the effect on its own (e.g.
                     // fn:put's, by reading the stored document back)
                     val envNamespaces = testCase.environment.map(_.namespaces).getOrElse(List.empty)
-                    processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, envNamespaces, putBaseUri)(expectedResult, Sequence.EMPTY_SEQUENCE)
+                    assertSafely(testSetName, testCase.name, updateCompTime, updateExecTime)(processAssertion(connection, testSetName, testCase.name, updateCompTime, updateExecTime, envNamespaces, putBaseUri)(expectedResult, Sequence.EMPTY_SEQUENCE))
                   case None =>
                     PassResult(testSetName, testCase.name, updateCompTime, updateExecTime)
                 }
             }
         }
     }
+    } catch {
+      // e.g. a stored source that could not be read back: fail this test case, not the actor
+      case NonFatal(e) =>
+        ErrorResult(testSetName, testCase.name, 0, 0, e)
     } finally {
       if (storeUpdateSources) {
         removeStoredSources(connection, testSetName, testCase.name)
       }
       if (putBaseUri.isDefined) {
-        connection.removeCollection(PUT_SANDPIT_ROOT + "/" + storedSourcesCollection(testSetName, testCase.name))
+        removeCollectionLogged(connection, PUT_SANDPIT_ROOT + "/" + storedSourcesCollection(testSetName, testCase.name))
       }
     }
   }
+
+  /**
+   * Don't let an exception from comparing an update test's result surface as a crashed actor;
+   * report it as a failure, as the non-update path does.
+   */
+  private def assertSafely(testSetName: TestSetName, testCaseName: TestCaseName, compilationTime: Long, executionTime: Long)(assertion: => TestResult): TestResult =
+    try {
+      assertion
+    } catch {
+      case NonFatal(t) =>
+        FailureResult(testSetName, testCaseName, compilationTime, executionTime, s"comparison threw: ${t.getClass.getName}: ${t.getMessage}")
+    }
+
+  /** Removes a collection, logging rather than ignoring a failure to. */
+  private def removeCollectionLogged(connection: ExistConnection, collectionPath: String): Unit =
+    connection.removeCollection(collectionPath).left.foreach(e => logger.warn(s"Could not remove $collectionPath: ${e.getMessage}", e))
 
 
   private val STORED_SOURCES_ROOT = "/db/xqts-update-sources"
@@ -720,9 +743,16 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   private def putSandpitBaseUri(testSetName: TestSetName, testCaseName: TestCaseName): String =
     "xmldb:exist://" + PUT_SANDPIT_ROOT + "/" + storedSourcesCollection(testSetName, testCaseName) + "/upd/"
 
-  /** The collection an update test's source documents are stored in, with --store-update-sources. */
-  private def storedSourcesCollection(testSetName: TestSetName, testCaseName: TestCaseName): String =
-    (testSetName + "-" + testCaseName).replaceAll("[^A-Za-z0-9._-]", "_")
+  /**
+   * The collection an update test's source documents are stored in, with --store-update-sources. A
+   * name that had characters replaced gets the hash of the original appended, so that two test
+   * cases whose names differ only in those characters do not share a collection.
+   */
+  private def storedSourcesCollection(testSetName: TestSetName, testCaseName: TestCaseName): String = {
+    val name = testSetName + "-" + testCaseName
+    val sanitized = name.replaceAll("[^A-Za-z0-9._-]", "_")
+    if (sanitized == name) name else sanitized + "-" + Integer.toHexString(name.hashCode)
+  }
 
   /**
    * Stores an update test's parsed source documents in the database.
@@ -732,7 +762,9 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
   private def storeSources(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName,
                            parsedDocs: List[(Source, org.exist.dom.memtree.DocumentImpl)]): Either[ExistServerException, List[(Source, String)]] = {
     val collection = STORED_SOURCES_ROOT + "/" + storedSourcesCollection(testSetName, testCaseName)
-    parsedDocs.zipWithIndex.foldLeft(Either.right[ExistServerException, List[(Source, String)]](List.empty)) {
+    // anything left there by an earlier run whose cleanup failed must not be read as a source
+    val cleared: Either[ExistServerException, List[(Source, String)]] = connection.removeCollection(collection).map(_ => List.empty)
+    parsedDocs.zipWithIndex.foldLeft(cleared) {
       case (accum, ((source, doc), i)) =>
         accum.flatMap { stored =>
           val name = s"$i-${source.file.getFileName}"
@@ -749,10 +781,8 @@ class TestCaseRunnerActor(existServer: ExistServer, commonResourceCacheActor: Ac
       .fold(error => throw error.getCause, identity)
   }
 
-  private def removeStoredSources(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName): Unit = {
-    connection.removeCollection(STORED_SOURCES_ROOT + "/" + storedSourcesCollection(testSetName, testCaseName))
-    ()
-  }
+  private def removeStoredSources(connection: ExistConnection, testSetName: TestSetName, testCaseName: TestCaseName): Unit =
+    removeCollectionLogged(connection, STORED_SOURCES_ROOT + "/" + storedSourcesCollection(testSetName, testCaseName))
 
   /**
    * Get the context sequence for the XQuery.

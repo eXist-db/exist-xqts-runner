@@ -129,4 +129,41 @@ class XQTSParserActorSpec extends AnyWordSpec with Matchers {
       }
     }
   }
+
+  private def importing(query: String, result: Result): TestCase =
+    TestCase(java.nio.file.Path.of("test.xml"), "test", "", test = Some(Left(query)), result = Some(result))
+
+  "missingSchemaImport" should {
+
+    "require schema import for a query that imports a schema" in {
+      missingSchemaImport(importing("import schema namespace s = 'urn:s'; 1", AssertTrue), enabledFeatures) should not be empty
+    }
+
+    "not require it when an all-of result accepts the import's error" in {
+      missingSchemaImport(importing("import schema namespace s = 'urn:s'; 1", AllOf(List(Error("XQST0009")))), enabledFeatures) shouldBe empty
+    }
+
+    "find an import after a comment" in {
+      missingSchemaImport(importing("declare namespace a = 'urn:a'; (: schema :) import schema namespace s = 'urn:s'; 1", AssertTrue), enabledFeatures) should not be empty
+    }
+
+    "not find an import in a string literal" in {
+      missingSchemaImport(importing("let $s := \"foo; import schema bar\" return $s", AssertTrue), enabledFeatures) shouldBe empty
+    }
+
+    "not find an import in a comment" in {
+      missingSchemaImport(importing("(: ; import schema namespace s = 'urn:s'; :) 1", AssertTrue), enabledFeatures) shouldBe empty
+    }
+  }
+
+  "missingDependencies" should {
+
+    "meet a put dependency when any of its values is supported" in {
+      missing(Dependency(DependencyType.Put, "attribute element", satisfied = true)) shouldBe empty
+    }
+
+    "not meet a put dependency when none of its values is supported" in {
+      missing(Dependency(DependencyType.Put, "attribute comment", satisfied = true)) should not be empty
+    }
+  }
 }

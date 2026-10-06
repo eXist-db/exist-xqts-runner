@@ -177,6 +177,67 @@ private object ExistConnection {
 class ExistConnection(brokerRes: Resource[IO, DBBroker], contextAttributesSupplier: () => Map[String, AnyRef] = () => Map.empty) {
 
   /**
+   * Stores a document in the database, creating its collection if need be.
+   *
+   * @param collectionPath the collection to store the document in.
+   * @param name           the name to store the document under.
+   * @param document       the document to store.
+   * @return nothing, or an exception.
+   */
+  def storeDocument(collectionPath: String, name: String, document: DocumentImpl): Either[ExistServerException, Unit] = {
+    // Stored from its serialization: the Node overload of storeDocument recurses without end in
+    // MutableCollection.storeDocument(Txn, DBBroker, XmldbURI, Node, MimeType) as of eXist-db 7.0.0-beta5.
+    val properties = new Properties()
+    properties.setProperty(OutputKeys.OMIT_XML_DECLARATION, "yes")
+    properties.setProperty(OutputKeys.INDENT, "no")
+    val xml = sequenceToStringRaw(document, properties)
+    inTransaction { (broker, transaction) =>
+      val collection = broker.getOrCreateCollection(transaction, XmldbURI.create(collectionPath))
+      try {
+        broker.saveCollection(transaction, collection)
+        broker.storeDocument(transaction, XmldbURI.create(name), new org.exist.util.StringInputSource(xml), org.exist.util.MimeType.XML_TYPE, collection)
+      } finally {
+        collection.close()
+      }
+    }
+  }
+
+  /**
+   * Removes a collection from the database, if it exists.
+   *
+   * @param collectionPath the collection to remove.
+   * @return nothing, or an exception.
+   */
+  def removeCollection(collectionPath: String): Either[ExistServerException, Unit] = {
+    inTransaction { (broker, transaction) =>
+      val collection = broker.openCollection(XmldbURI.create(collectionPath), org.exist.storage.lock.Lock.LockMode.WRITE_LOCK)
+      if (collection != null) {
+        try {
+          broker.removeCollection(transaction, collection)
+        } finally {
+          collection.close()
+        }
+      }
+    }
+  }
+
+  private def inTransaction(work: (DBBroker, Txn) => Unit): Either[ExistServerException, Unit] = {
+    val res: IO[Unit] = brokerRes.use { broker =>
+      IO.delay {
+        val transaction = broker.getBrokerPool.getTransactionManager.beginTransaction()
+        try {
+          work(broker, transaction)
+          transaction.commit()
+        } finally {
+          transaction.close()
+        }
+      }
+    }
+    implicit val runtime = IORuntime.global
+    Try(res.unsafeRunSync()).toEither.left.map(t => ExistServerException(t))
+  }
+
+  /**
    * Execute an XQuery with eXist-db.
    *
    * @param query                  The XQuery to execute.

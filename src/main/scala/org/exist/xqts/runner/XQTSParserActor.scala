@@ -377,6 +377,105 @@ object XQTSParserActor {
   type Missing = Seq[String]
 
   /**
+   * A test whose query imports a schema needs the Schema Import Feature, whether or not the
+   * catalog declares it: the update suite's revalidation tests, for one, declare only
+   * {@code XQ30+} and {@code XQUpdate}. Without {@code schemaImport} enabled such a test can only
+   * fail with XQST0009, so it is skipped like any other unsatisfied dependency, unless the result
+   * it expects is an error the import declaration itself raises. Only inline queries are
+   * examined, and only an import in the prolog counts, not the words inside a string literal.
+   *
+   * @param testCase        The test-case.
+   * @param enabledFeatures The features which are enabled.
+   * @return the missing dependency, or an empty list
+   */
+  def missingSchemaImport(testCase: TestCase, enabledFeatures: Set[Feature]): Missing = {
+    val queries = (testCase.test.toSeq ++ testCase.updateTests).collect { case Left(query) => query }
+    // a test that accepts an error raised by the import declaration itself applies to processors
+    // without schema import too: XQST0009 is that error, and the others are about its syntax or URIs
+    if (!enabledFeatures.contains(Feature.SchemaImport) && queries.exists(q => IMPORT_SCHEMA.matcher(withoutCommentsAndLiterals(q)).find())
+        && !testCase.result.exists(r => IMPORT_DECLARATION_ERRORS.exists(acceptsError(r, _)))) {
+      Seq("feature=schemaImport (the query imports a schema)")
+    } else {
+      Seq.empty
+    }
+  }
+
+  private def acceptsError(result: Result, code: String): Boolean = result match {
+    case Error(expected) => expected == code
+    case AnyOf(assertions) => assertions.exists(acceptsError(_, code))
+    case AllOf(assertions) => assertions.exists(acceptsError(_, code))
+    case _ => false
+  }
+
+  /**
+   * The query with its comments and string literals blanked out, so that neither can look like, or
+   * hide, a declaration. Comments nest; a quote inside a literal is written twice.
+   */
+  private[runner] def withoutCommentsAndLiterals(query: String): String = {
+    val out = new StringBuilder(query.length)
+    var i = 0
+    var commentDepth = 0
+    var quote: Option[Char] = None
+    while (i < query.length) {
+      val c = query.charAt(i)
+      val next = if (i + 1 < query.length) query.charAt(i + 1) else '\u0000'
+      quote match {
+        case Some(q) =>
+          if (c == q && next == q) {
+            i += 1
+          } else if (c == q) {
+            quote = None
+          }
+          out.append(' ')
+        case None if commentDepth > 0 =>
+          if (c == '(' && next == ':') {
+            commentDepth += 1
+            out.append("  ")
+            i += 1
+          } else if (c == ':' && next == ')') {
+            commentDepth -= 1
+            out.append("  ")
+            i += 1
+          } else {
+            out.append(' ')
+          }
+        case None =>
+          if (c == '(' && next == ':') {
+            commentDepth = 1
+            out.append("  ")
+            i += 1
+          } else if (c == '"' || c == '\'') {
+            quote = Some(c)
+            out.append(' ')
+          } else {
+            out.append(c)
+          }
+      }
+      i += 1
+    }
+    out.toString
+  }
+
+  /**
+   * A schema import in the prolog: at the start of the query or after a preceding declaration. It is
+   * matched against the query without its comments and string literals.
+   */
+  private val IMPORT_SCHEMA = java.util.regex.Pattern.compile("(?:^|;)\\s*import\\s+schema\\b")
+
+  /** Errors an import schema declaration raises on a processor without the Schema Import Feature. */
+  private val IMPORT_DECLARATION_ERRORS = Set("XQST0009", "XPST0003", "XQST0046", "XQST0059")
+
+  /** The node kinds eXist-db's fn:put can store. */
+  private val PUT_NODE_KINDS = Set("document", "element")
+
+  /**
+   * The XQuery Update revalidation modes eXist-db supports. Only skip: strict and lax need a
+   * schema-aware processor.
+   */
+  private val REVALIDATION_MODES = Set("skip")
+
+
+  /**
    * Checks for missing dependencies.
    *
    * @param required           The required dependencies.
@@ -472,8 +571,15 @@ object XQTSParserActor {
     val requiredSpecs = required.filter(_.`type` == DependencyType.Spec)
     val requiredXmlVersions = required.filter(_.`type` == DependencyType.XmlVersion)
     val requiredXsdVersions = required.filter(_.`type` == DependencyType.XsdVersion)
+    val requiredPutKinds = required.filter(_.`type` == DependencyType.Put)
+    val requiredRevalidationModes = required.filter(_.`type` == DependencyType.Revalidation)
 
-    allMissing(hasEnabledFeature, requiredFeatures) ++
+    // as for spec dependencies, a value lists alternatives: any of them is enough
+    def supports(supported: Set[String])(value: String): Missed = if (value.split(' ').exists(supported.contains)) None else Some(value)
+
+    allMissing(supports(PUT_NODE_KINDS), requiredPutKinds) ++
+      allMissing(supports(REVALIDATION_MODES), requiredRevalidationModes) ++
+      allMissing(hasEnabledFeature, requiredFeatures) ++
       allMissing(hasEnabledSpec, requiredSpecs) ++
       allMissing(hasEnabledXmlVersion, requiredXmlVersions) ++
       allMissing(hasEnabledXsdVersion, requiredXsdVersions)

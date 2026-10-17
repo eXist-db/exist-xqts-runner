@@ -17,7 +17,9 @@
 #   --output-dir DIR         output directory (default: target)
 #   --test-set-pattern PAT   regex filter for test set names
 #   --exclude-test-set SETS  comma-separated test sets to exclude
-#   --exclude-test-case CASES  comma-separated test cases to exclude
+#   --exclude-test-case CASES  comma-separated test cases to exclude (default: the
+#                              cases known to run out of memory, see below; pass ''
+#                              to run them)
 #   --enable-feature FEATS   comma-separated features to enable
 #   --parallel N             run N batch streams in parallel (default: 1)
 #   --resume                 skip test sets that already have result XML
@@ -27,6 +29,10 @@
 # Environment:
 #   JAVA_HOME  JDK to run the runner JAR with (falls back to `java` on PATH)
 #   PARSER     eXist XQuery parser to select via -Dexist.parser (default: antlr2)
+#
+# Batches are stopped after --timeout with GNU timeout(1), or gtimeout(1) as
+# Homebrew's coreutils installs it on macOS; without either, the script stops
+# them itself.
 #
 # Examples:
 #   ./run-batched.sh --xqts-version HEAD --batch-size 40 --heap 6g
@@ -43,7 +49,17 @@ BATCH_TIMEOUT=300
 OUTPUT_DIR="target"
 TEST_SET_PATTERN=""
 EXCLUDE_TEST_SETS=""
-EXCLUDE_TEST_CASES=""
+# Test cases that run out of memory however large the heap: op-to cases that
+# materialize a range of up to 100 billion integers (e.g. reverse(1 to
+# 100000000000)) or compare against one whose matching item is at its far end.
+# With -XX:+ExitOnOutOfMemoryError one of them ends its whole batch, and the
+# results of every other test set in the batch are lost, so they are excluded
+# by default. The HEAD cases are those that eXist's CI excludes; the QT4 test
+# suite has more of them. A name that isn't in the suite being run is ignored.
+OOM_PRONE_TEST_CASES="RangeExpr-408c,RangeExpr-408d,RangeExpr-409c,RangeExpr-409d,RangeExpr-411d,GenCompEq-21"
+OOM_PRONE_TEST_CASES+=",RangeExpr-408f,RangeExpr-408g,RangeExpr-408h,RangeExpr-408i,RangeExpr-408j,RangeExpr-408k"
+OOM_PRONE_TEST_CASES+=",RangeExpr-410f,RangeExpr-410g,RangeExpr-410h,RangeExpr-410i,RangeExpr-410j,RangeExpr-410k"
+EXCLUDE_TEST_CASES="$OOM_PRONE_TEST_CASES"
 ENABLE_FEATURES=""
 PARALLEL=1
 RESUME=false
@@ -55,6 +71,58 @@ JAR="$SCRIPT_DIR/exist-xqts-runner-assembly-2.0.0-SNAPSHOT.jar"
 # Use $JAVA_HOME's JDK if set, otherwise fall back to whatever is on PATH.
 JAVA_BIN="${JAVA_HOME:+$JAVA_HOME/bin/}java"
 JSTACK_BIN="${JAVA_HOME:+$JAVA_HOME/bin/}jstack"
+
+# exit status of a JVM started with -XX:+ExitOnOutOfMemoryError when it runs out of memory
+OOM_EXIT_CODE=3
+
+if command -v timeout > /dev/null 2>&1; then
+  TIMEOUT_BIN="timeout"
+elif command -v gtimeout > /dev/null 2>&1; then
+  TIMEOUT_BIN="gtimeout"
+else
+  TIMEOUT_BIN=""
+fi
+
+# run_with_timeout SECS COMMAND...
+#
+# Runs COMMAND, sends it SIGTERM after SECS seconds and SIGKILL 30 seconds
+# later, and returns 124 if it timed out, like `timeout --kill-after=30`.
+run_with_timeout() {
+  local secs="$1"
+  shift
+  if [[ -n "$TIMEOUT_BIN" ]]; then
+    "$TIMEOUT_BIN" --kill-after=30 "$secs" "$@"
+    return
+  fi
+
+  "$@" &
+  local pid=$!
+  local timed_out
+  timed_out=$(mktemp /tmp/xqts-timeout.XXXXXX)
+  rm -f "$timed_out"
+  (
+    sleep "$secs"
+    if kill -0 "$pid" 2>/dev/null; then
+      touch "$timed_out"
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 30
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+  ) &
+  local watcher=$!
+
+  local status=0
+  wait "$pid" || status=$?
+  pkill -P "$watcher" 2>/dev/null || true
+  kill "$watcher" 2>/dev/null || true
+  wait "$watcher" 2>/dev/null || true
+
+  if [[ -f "$timed_out" ]]; then
+    rm -f "$timed_out"
+    return 124
+  fi
+  return "$status"
+}
 
 # === Parse args ===
 while [[ $# -gt 0 ]]; do
@@ -220,7 +288,7 @@ run_batch() {
   local jstack_delay=$((BATCH_TIMEOUT - jstack_buffer))
   if (( jstack_delay < 10 )); then jstack_delay=$((BATCH_TIMEOUT / 2)); fi
 
-  timeout --kill-after=30 "$BATCH_TIMEOUT" "${cmd[@]}" > "$batch_log" 2>&1 &
+  run_with_timeout "$BATCH_TIMEOUT" "${cmd[@]}" > "$batch_log" 2>&1 &
   local batch_pid=$!
 
   # Monitor: if still running near timeout, capture jstack
@@ -262,6 +330,10 @@ run_batch() {
     if [[ -f "$jstack_file" ]]; then
       echo "  Thread dump: $jstack_file"
     fi
+    return 1
+  elif [[ $exit_code -eq $OOM_EXIT_CODE ]]; then
+    echo "  WARNING: Batch $batch_num ran out of memory (${batch_elapsed}s) [stream $stream_id]; its unfinished test sets have no results"
+    echo "  Re-run them one at a time with --resume and a smaller --batch-size to find the test case, and add it to --exclude-test-case"
     return 1
   elif [[ $exit_code -gt 1 && $exit_code -ne 255 ]]; then
     echo "  WARNING: Batch $batch_num crashed with code $exit_code (${batch_elapsed}s) [stream $stream_id]"

@@ -19,10 +19,10 @@ package org.exist.xqts.runner
 
 import java.io._
 import java.nio.charset.Charset
+import java.nio.file.{Files, Path, Paths}
 import java.util.Properties
 import org.exist.source.{Source, StringSource}
 import org.exist.storage.{DBBroker, XQueryPool}
-import org.exist.test.ExistEmbeddedServer
 import org.exist.util.serializer.XQuerySerializer
 import org.exist.xquery.{CompiledXQuery, Function, XPathException, XQuery, XQueryContext}
 import org.exist.xquery.value.AnyURIValue
@@ -81,12 +81,48 @@ object ExistServer {
   case class QueryError(errorCode: String, message: String)
 
   /**
+   * The system property naming the home directory of an eXist-db installation.
+   */
+  val EXIST_HOME_PROPERTY = "exist.home"
+
+  /**
+   * Determines the configuration file (conf.xml) to start eXist-db with.
+   *
+   * The settings of the eXist-db under test, e.g. whether `fn:doc` raises
+   * an error for a missing document, determine the test results, so eXist-db
+   * must run with the configuration of the eXist-db version under test. The
+   * runner therefore does not ship a configuration of its own.
+   *
+   * @param configFile the configuration file given on the command line, if any.
+   * @return the configuration file, or why there is none. Without an explicit
+   *         configuration file, `conf.xml` or `etc/conf.xml` in the directory
+   *         named by the `exist.home` system property is used.
+   */
+  def configFile(configFile: Option[Path]): Either[String, Path] = configFile match {
+    case Some(file) =>
+      Right(file)
+
+    case None =>
+      sys.props.get(EXIST_HOME_PROPERTY).map(Paths.get(_)) match {
+        case Some(home) =>
+          Seq(home.resolve("conf.xml"), home.resolve("etc").resolve("conf.xml"))
+            .find(Files.isRegularFile(_))
+            .toRight(s"Neither conf.xml nor etc/conf.xml exists in the directory named by the $EXIST_HOME_PROPERTY system property: ${home.toAbsolutePath}")
+
+        case None =>
+          Left(s"No eXist-db configuration given. Pass the conf.xml of the eXist-db under test with --exist-config, or set the $EXIST_HOME_PROPERTY system property to its home directory.")
+      }
+  }
+
+  /**
    * Starts up an eXist-db server.
+   *
+   * @param configFile the eXist-db configuration file (conf.xml) to start the server with.
    *
    * @return A reference to the server, or an exception.
    */
-  def start(): Either[Throwable, ExistServer] = {
-    val server = new ExistServer
+  def start(configFile: Path): Either[Throwable, ExistServer] = {
+    val server = new ExistServer(configFile)
     server.startServer() match {
       case Success(_) =>
         Right(server)
@@ -105,9 +141,11 @@ object ExistServer {
 
 /**
  * Encapsulation of operations for an exist-db server.
+ *
+ * @param configFile the eXist-db configuration file (conf.xml) to start the server with.
  */
-class ExistServer {
-  private val existServer = new ExistEmbeddedServer(true, true)
+class ExistServer(configFile: Path) {
+  private val database = new EmbeddedDatabase(configFile)
   private val logger = Logger(classOf[ExistServer])
 
   /**
@@ -121,7 +159,7 @@ class ExistServer {
    *
    * @return Success or Failure.
    */
-  private def startServer(): Try[Unit] = Try(existServer.startDb())
+  private def startServer(): Try[Unit] = Try(database.start())
 
   /**
    * Get a connection to the eXist-db server.
@@ -129,7 +167,7 @@ class ExistServer {
   def getConnection(): ExistConnection = {
     val brokerRes = Resource.make {
       // build
-      IO.delay(existServer.getBrokerPool.authenticate("admin", ""))
+      IO.delay(database.getBrokerPool.authenticate("admin", ""))
       //        .flatTap(_ => IOUtil.printlnExecutionContext("Broker/Acquire"))  // enable for debugging
     } {
       // release
@@ -158,7 +196,7 @@ class ExistServer {
     }, "exist-shutdown-timeout")
     shutdownTimeout.setDaemon(true)
     shutdownTimeout.start()
-    existServer.stopDb()
+    database.stop()
   }
 }
 

@@ -69,7 +69,8 @@ object XQTSRunner {
                                 testCases: Seq[String] = Seq.empty,
                                 excludeTestSets: Seq[String] = Seq.empty,
                                 excludeTestCases: Seq[String] = Seq.empty,
-                                outputDir: Option[Path] = None
+                                outputDir: Option[Path] = None,
+                                existConfig: Option[Path] = None
                               )
 
   /*
@@ -241,6 +242,12 @@ object XQTSRunner {
         .validate(isDirOrNotExists)
         .action((x, c) => c.copy(outputDir = Some(x)))
 
+      opt[Path]('c', "exist-config")
+        .valueName("<conf.xml>")
+        .text(s"The configuration file (conf.xml) of the eXist-db version under test, to start the embedded eXist-db with. If not provided then conf.xml or etc/conf.xml in the directory named by the ${ExistServer.EXIST_HOME_PROPERTY} system property is used")
+        .validate(fileExists)
+        .action((x, c) => c.copy(existConfig = Some(x)))
+
       note("The test-set-pattern argument takes preference over the test-set argument")
       note(s"By default the following features are enabled: ${DEFAULT_FEATURES.mkString(", ")}")
       note(s"By default the following specifications are enabled: ${DEFAULT_SPECS.mkString(", ")}")
@@ -253,7 +260,14 @@ object XQTSRunner {
 
     parser.parse(args, CmdConfig()) match {
       case Some(cmdConfig) =>
-        new XQTSRunner().run(cmdConfig)
+        ExistServer.configFile(cmdConfig.existConfig) match {
+          case Right(existConfig) =>
+            new XQTSRunner().run(cmdConfig, existConfig)
+
+          case Left(message) =>
+            System.err.println(s"Error: $message")
+            sys.exit(EXIT_CODE_INVALID_ARGS)
+        }
 
       case None =>
         // arguments are bad, error message will have been displayed
@@ -276,8 +290,9 @@ private class XQTSRunner {
    * Run's an XQTS against eXist-db.
    *
    * @param cmdConfig the command line arguments
+   * @param existConfig the eXist-db configuration file (conf.xml) to start eXist-db with
    */
-  private def run(cmdConfig: CmdConfig): Unit = {
+  private def run(cmdConfig: CmdConfig, existConfig: Path): Unit = {
     logger.info(s"eXist-db XQTS Runner starting for: ${XQTSVersion.label(cmdConfig.xqtsVersion)}")
 
     // 1) prepare the actor system
@@ -319,8 +334,8 @@ private class XQTSRunner {
 
       case Right(localXqtsDir) =>
         // 3) start eXist-db
-        logger.info("Starting an embedded instance of eXist-db...")
-        ExistServer.start() match {
+        logger.info(s"Starting an embedded instance of eXist-db with configuration: ${existConfig.toAbsolutePath}...")
+        ExistServer.start(existConfig) match {
           case Right(server) =>
             this.existServer = Some(server)
             logger.info(s"eXist-db ${ExistServer.getVersion()} (${ExistServer.getCommitAbbrev()}) OK.")

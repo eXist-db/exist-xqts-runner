@@ -24,6 +24,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Properties
 import java.util.jar.{JarFile, Manifest}
 
+import scala.jdk.OptionConverters._
 import scala.util.Try
 
 /**
@@ -64,6 +65,11 @@ object RunnerInfo {
     groupId: Option[String],
     artifactId: Option[String],
     pomPropertiesPath: Option[String]
+  )
+
+  case class ExistConfigInfo(
+    path: Option[Path],
+    sha256: Option[String]
   )
 
   case class RunInfo(
@@ -156,8 +162,23 @@ object RunnerInfo {
     }
   }
 
+  /**
+   * Read the path of the configuration file that the running embedded
+   * eXist-db was configured from, and compute its sha256.
+   */
+  def collectExistConfigInfo(): ExistConfigInfo = {
+    val path = EmbeddedDatabase.runningConfigFile().toScala
+
+    val sha256 = path.flatMap(p => Checksum.checksum(p, Checksum.SHA256) match {
+      case Right(bytes) => Some(bytes.map(b => f"${b & 0xff}%02x").mkString)
+      case Left(_)      => None
+    })
+
+    ExistConfigInfo(path, sha256)
+  }
+
   /** Build the runner-info.xml document as a string. */
-  def render(jar: JarInfo, ec: EmbeddedExistCoreInfo, run: RunInfo): String = {
+  def render(jar: JarInfo, ec: EmbeddedExistCoreInfo, config: ExistConfigInfo, run: RunInfo): String = {
     val sb = new StringBuilder
     sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
     sb.append(s"""<runner-info xmlns="$NS">""").append('\n')
@@ -180,6 +201,11 @@ object RunnerInfo {
     sb.append(elem("artifact-id", ec.artifactId))
     sb.append(elem("pom-properties-source", ec.pomPropertiesPath))
     sb.append("    </embedded-exist-core>\n")
+
+    sb.append("    <exist-config>\n")
+    sb.append(elem("path", config.path.map(_.toAbsolutePath.toString)))
+    sb.append(elem("sha256", config.sha256))
+    sb.append("    </exist-config>\n")
 
     sb.append("    <run-info>\n")
     sb.append(elem("started", Some(DateTimeFormatter.ISO_INSTANT.format(run.started))))
@@ -207,7 +233,7 @@ object RunnerInfo {
   def write(outputDir: Path, run: RunInfo): Either[Throwable, Path] = Try {
     val target = outputDir.resolve("runner-info.xml")
     Files.createDirectories(outputDir)
-    val xml = render(collectJarInfo(), collectEmbeddedExistCoreInfo(), run)
+    val xml = render(collectJarInfo(), collectEmbeddedExistCoreInfo(), collectExistConfigInfo(), run)
     Files.writeString(target, xml)
     target
   }.toEither

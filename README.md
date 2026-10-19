@@ -75,8 +75,19 @@ Given the standalone application, you can execute it by running either (on Linux
 **NOTE:** It is recommended to run against the latest version of the testsuite with 
 
 ```bash
-target/scala-2.13/exist-xqts-runner-assembly-2.0.0-SNAPSHOT.jar -x HEAD
+target/scala-2.13/exist-xqts-runner-assembly-2.0.0-SNAPSHOT.jar -x HEAD --exist-config /path/to/exist/etc/conf.xml
 ```
+
+### eXist-db Configuration
+
+The runner starts an embedded eXist-db, which it configures with the configuration file (`conf.xml`) of the eXist-db version under test. Its settings, for example whether `fn:doc` raises an error for a missing document, determine the test results, so the runner does not ship a configuration of its own.
+
+Pass the configuration file with `-c` (`--exist-config`), or set the `exist.home` system property to an eXist-db home directory that contains `conf.xml` or `etc/conf.xml`. Without either, the runner stops with an error.
+
+* A build that runs the XQTS, like eXist-db's `exist-xqts` module, should pass a configuration that it derives from its own `conf.xml` at build time, so that a changed default reaches the test run.
+* When running the packaged application, use the `etc/conf.xml` of an eXist-db distribution of the version that the runner embeds.
+
+The runner keeps the database and its journal in a temporary directory, which it deletes on shutdown, and it never deploys packages from an `autodeploy` directory. Startup triggers, indexes and XQuery modules that the configuration names, but whose classes are not on the runner's classpath, are reported by eXist-db as errors during startup and are then left out.
 
 ### Compiling
 
@@ -133,6 +144,7 @@ Everything is written below the output directory, which defaults to `target` and
 * A `runner-info.xml` file will be written to the root of the output directory. It records which runner produced the results, so that a report can be traced back to the code that generated it. It contains:
   * `runner-jar` — the Git commit and build metadata compiled into the Jar's manifest, plus the SHA-256 checksum and path of the Jar itself.
   * `embedded-exist-core` — the version of the `exist-core` artifact that the run was executed against.
+  * `exist-config` — the path and SHA-256 checksum of the configuration file that eXist-db was started with.
   * `run-info` — the start and completion timestamps, the XQTS version, and the number of test cases that were run.
 
 

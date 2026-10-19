@@ -52,6 +52,9 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
   private var started = System.currentTimeMillis()
 
   private var unparsedTestSets: Set[TestSetRef] = Set.empty
+  private var parsedTestSets: Set[TestSetRef] = Set.empty
+  private var serializedTestSets: Set[TestSetRef] = Set.empty
+  private var matchedTestSetCount: Option[Int] = None
   private var unserializedTestSets: Set[TestSetRef] = Set.empty
   private var testCases: Map[TestSetRef, Set[String]] = Map.empty
   private var completedTestCases: Map[TestSetRef, Map[String, TestResult]] = Map.empty
@@ -168,9 +171,13 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
 
     case ParseComplete(xqtsVersion, _, matchedTestSets) =>
       logger.info(s"Matched $matchedTestSets Test Sets in XQTS ${XQTSVersion.toVersionName(xqtsVersion)}...")
+      matchedTestSetCount = Some(matchedTestSets)
       if (matchedTestSets == 0) {
         logger.warn("Nothing to do! Did you specify your Test Set names/patterns correctly?")
         shutdown()
+      } else {
+        // the matched Test Sets may all have completed before this message arrived
+        finalizeIfAllCompleted()
       }
 
     case ParsingTestSet(testSetRef) =>
@@ -179,13 +186,12 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     case ParsedTestSet(testSetRef, parsedTestCases) =>
       testCases = addTestCases(testCases, testSetRef, parsedTestCases)
       unparsedTestSets -= testSetRef
+      parsedTestSets += testSetRef
 
       // have we completed testing an entire TestSet? NOTE: tests could have finished executing before parse complete message arrives!
-      if (!unserializedTestSets.contains(testSetRef) && isTestSetCompleted(testSetRef)) {
-        // serialize the TestSet results
-        resultsSerializerRouter ! TestSetResults(testSetRef, completedTestCases(testSetRef).values.toSeq)
-        unserializedTestSets += testSetRef
-      }
+      serializeIfCompleted(testSetRef)
+      // a Test Set with no matching Test Cases may have been the last one outstanding
+      finalizeIfAllCompleted()
 
     case RunningTestCase(testSetRef, testCase) =>
       logger.info(s"Starting execution of Test Case: ${testSetRef.name}/${testCase}...")
@@ -197,31 +203,21 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
       completedTestCases = mergeTestCases(completedTestCases, testSetRef, testResult)
 
       // have we completed testing an entire TestSet?
-      if (!unserializedTestSets.contains(testSetRef) && isTestSetCompleted(testSetRef)) {
-        // serialize the TestSet results
-        resultsSerializerRouter ! TestSetResults(testSetRef, completedTestCases(testSetRef).values.toSeq)
-        unserializedTestSets += testSetRef
-      } else if (!unserializedTestSets.contains(testSetRef) && isTestSetCompletedByStarted(testSetRef)) {
-        // All started test cases completed, but ParsedTestSet hasn't been processed
-        // yet (still in unparsedTestSets). This happens when BrokerPool threads block
-        // the Pekko dispatcher, preventing the ParsedTestSet message from being delivered.
-        logger.info(s"Test set ${testSetRef.name} completed (all started cases finished, ParsedTestSet pending). Serializing results.")
-        resultsSerializerRouter ! TestSetResults(testSetRef, completedTestCases(testSetRef).values.toSeq)
-        unserializedTestSets += testSetRef
-      }
+      // NOTE: a Test Set is only complete once its ParsedTestSet has arrived and every Test Case it lists has
+      // completed. Test Cases run concurrently, so all of the cases that have *started* can have completed while
+      // others are still to start; serializing then would write a partial Test Set, and could finalize the run early.
+      // A stalled dispatcher is handled by the watchdog's forced drain instead.
+      serializeIfCompleted(testSetRef)
 
     case SerializedTestSetResults(testSetRef) =>
       unserializedTestSets -= testSetRef
       // Under a forced shutdown, hung-but-never-completed test cases mean
       // `allTestSetsCompleted()` will never be true; relax to "all serialization
-      // acks received" so the drain can finalize. Also guard against sending
-      // FinalizeSerialization more than once.
-      val readyToFinalize =
-        !finalizeSent &&
-          (allTestSetsCompleted() || (forcedShutdown && unserializedTestSets.isEmpty))
-      if (readyToFinalize) {
-        finalizeSent = true
-        resultsSerializerRouter ! FinalizeSerialization
+      // acks received" so the drain can finalize.
+      if (forcedShutdown && unserializedTestSets.isEmpty) {
+        sendFinalizeSerialization()
+      } else {
+        finalizeIfAllCompleted()
       }
 
     case FinishedSerialization =>
@@ -246,7 +242,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     // Serialize any completed but unsent test sets.
     for {
       (testSetRef, _) <- this.testCases
-      if !unserializedTestSets.contains(testSetRef)
+      if !serializedTestSets.contains(testSetRef) && !unserializedTestSets.contains(testSetRef)
       results <- completedTestCases.get(testSetRef)
     } {
       resultsSerializerRouter ! TestSetResults(testSetRef, results.values.toSeq)
@@ -256,10 +252,7 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     if (unserializedTestSets.isEmpty) {
       // Nothing in flight — fall straight through the normal finalize/finish
       // handshake so the serializer router gets a chance to flush its own state.
-      if (!finalizeSent) {
-        finalizeSent = true
-        resultsSerializerRouter ! FinalizeSerialization
-      }
+      sendFinalizeSerialization()
     } else {
       logger.info(s"Draining ${unserializedTestSets.size} in-flight TestSetResults before shutdown (deadline ${FORCED_DRAIN_DEADLINE_MS / 1000}s)")
     }
@@ -313,22 +306,52 @@ class XQTSRunnerActor(xmlParserBufferSize: Int, existServer: ExistServer, parser
     context.system.terminate()
   }
 
+  /**
+   * A Test Set is completed when it has been parsed, and every Test Case
+   * that it contains has completed.
+   */
   private def isTestSetCompleted(testSetRef: TestSetRef): Boolean = {
-    unparsedTestSets.contains(testSetRef) == false &&
-      isTestSetCompletedByStarted(testSetRef)
+    parsedTestSets.contains(testSetRef) && !unparsedTestSets.contains(testSetRef) && {
+      val expected = testCases.getOrElse(testSetRef, Set.empty)
+      val completed = completedTestCases.get(testSetRef).map(_.keySet).getOrElse(Set.empty)
+      expected == completed
+    }
   }
 
-  /** Check if all STARTED test cases have completed, ignoring ParsedTestSet status. */
-  private def isTestSetCompletedByStarted(testSetRef: TestSetRef): Boolean = {
-    completedTestCases.get(testSetRef).map(_.keySet)
-      .flatMap(completed => startedTestCases.get(testSetRef).map(started => started.nonEmpty && started == completed))
-      .getOrElse(false)
+  private def serializeIfCompleted(testSetRef: TestSetRef): Unit = {
+    if (!serializedTestSets.contains(testSetRef) && isTestSetCompleted(testSetRef)) {
+      serializedTestSets += testSetRef
+      // a Test Set with no matching Test Cases has no results to serialize
+      completedTestCases.get(testSetRef).foreach { results =>
+        resultsSerializerRouter ! TestSetResults(testSetRef, results.values.toSeq)
+        unserializedTestSets += testSetRef
+      }
+    }
   }
 
+  /**
+   * All Test Sets are completed when every matched Test Set has been parsed,
+   * all of their Test Cases have completed, and all of their results have
+   * been serialized.
+   */
   private def allTestSetsCompleted(): Boolean = {
-    unserializedTestSets.isEmpty && {
-      val testSetRefs = if (startedTestCases.nonEmpty) startedTestCases.keySet else testCases.keySet
-      testSetRefs.forall(ref => isTestSetCompleted(ref) || isTestSetCompletedByStarted(ref))
+    matchedTestSetCount.exists(_ <= parsedTestSets.size) &&
+      unparsedTestSets.isEmpty &&
+      unserializedTestSets.isEmpty &&
+      parsedTestSets.forall(isTestSetCompleted)
+  }
+
+  private def finalizeIfAllCompleted(): Unit = {
+    if (allTestSetsCompleted()) {
+      sendFinalizeSerialization()
+    }
+  }
+
+  /** Sends FinalizeSerialization at most once. */
+  private def sendFinalizeSerialization(): Unit = {
+    if (!finalizeSent) {
+      finalizeSent = true
+      resultsSerializerRouter ! FinalizeSerialization
     }
   }
 

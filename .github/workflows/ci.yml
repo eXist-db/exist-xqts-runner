@@ -33,6 +33,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: sbt -v assembly
+      - name: Get the configuration of the embedded eXist-db
+        shell: bash
+        run: |
+          EXIST_VERSION=$(grep -o 'val existV = .*' build.sbt | grep -o '"[0-9][^"]*"' | tr -d '"')
+          curl --fail --silent --show-error --location --output exist-conf.xml \
+            "https://raw.githubusercontent.com/eXist-db/exist/eXist-${EXIST_VERSION}/exist-distribution/src/main/config/conf.xml"
       - name: Test
         shell: bash
-        run: target/scala-2.13/exist-xqts-runner-assembly-*-SNAPSHOT.jar --xqts-version HEAD --test-set fn-current-date
+        run: target/scala-2.13/exist-xqts-runner-assembly-*-SNAPSHOT.jar --xqts-version HEAD --test-set fn-current-date --exist-config exist-conf.xml

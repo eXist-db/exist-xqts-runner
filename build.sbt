@@ -49,7 +49,10 @@ developers := List(
 versionScheme := Some("semver-spec")
 
 libraryDependencies ++= {
-  val existV = "7.0.0-beta5"
+  // the eXist-db version to build against: a release by default, or e.g. -Dexist.version=7.0.0-SNAPSHOT
+  // to test eXist's develop branch from the local Maven repository
+  val existV = sys.props.getOrElse("exist.version", "7.0.0-beta5")
+  val existCore = "org.exist-db" % "exist-core" % existV
 
   Seq(
     "org.apache.pekko" %% "pekko-actor" % "1.3.0",
@@ -58,10 +61,10 @@ libraryDependencies ++= {
     // "com.fasterxml" %	"aalto-xml" % "1.3.4",
     "org.exist-db.thirdparty.com.fasterxml" % "aalto-xml" % "1.1.0-20180330",
     "org.parboiled" %% "parboiled" % "2.5.1",
-    "org.apache.ant" % "ant-junit" % "1.10.15", // used for formatting junit style report
+    "org.apache.ant" % "ant-junit" % "1.10.15", // used for aggregating the JUnit style reports into a HTML report
 
     "net.sf.saxon" % "Saxon-HE" % "12.5",
-    "org.exist-db" % "exist-core" % existV,
+    if (existV.endsWith("-SNAPSHOT")) existCore.changing() else existCore,
     "org.xmlunit" % "xmlunit-core" % "2.11.0",
 
     "org.slf4j" % "slf4j-api" % "2.0.17",
@@ -85,6 +88,9 @@ excludeDependencies ++= Seq(
   ExclusionRule("org.eclipse.jetty.ee10"),
   ExclusionRule("org.eclipse.jetty.ee10.websocket"),
 
+  // The runner uses no JUnit API: it writes the JUnit report format itself and embeds eXist-db
+  // without its JUnit test support (both ant-junit and older exist-core versions bring JUnit 4).
+  ExclusionRule("junit", "junit"),
   ExclusionRule("org.hamcrest", "hamcrest-core"),
   ExclusionRule("org.hamcrest", "hamcrest-library")
 )

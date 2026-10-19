@@ -19,18 +19,16 @@ package org.exist.xqts.runner
 
 import cats.effect.unsafe.IORuntime
 
-import java.io.{BufferedOutputStream, OutputStream}
+import java.io.Writer
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import java.time.Instant
 import cats.effect.{IO, Resource}
-import junit.framework.{AssertionFailedError, Test => JUTest, TestResult => JUTestResult}
 import net.sf.saxon.TransformerFactoryImpl
 import org.apache.tools.ant.Project
 import org.exist.xqts.runner.TestCaseRunnerActor._
 import org.exist.xqts.runner.XQTSResultsSerializerActor.{FinalizeSerialization, FinishedSerialization, SerializedTestSetResults, TestSetResults}
-import org.apache.tools.ant.taskdefs.optional.junit.{JUnitTest, XMLJUnitResultFormatter, XMLResultAggregator}
-import org.w3c.dom.Element
-import org.apache.tools.ant.taskdefs.optional.junit.XMLConstants.ATTR_TIME
+import org.apache.tools.ant.taskdefs.optional.junit.XMLResultAggregator
 import org.apache.tools.ant.types.FileSet
 import org.exist.xqts.runner.XQTSParserActor.TestSetName
 
@@ -146,62 +144,36 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
     dir.resolve("TEST-" + testSetName + ".xml")
   }
 
-  private def dataFileOutput(dataFile: Path): Resource[IO, _ <: OutputStream] = {
+  private def dataFileOutput(dataFile: Path): Resource[IO, _ <: Writer] = {
     Resource.make(IO {
-      new BufferedOutputStream(Files.newOutputStream(dataFile))
-    })(os => IO {
-      os.close()
+      Files.newBufferedWriter(dataFile, StandardCharsets.UTF_8)
+    })(writer => IO {
+      writer.close()
     })
   }
 
-  private def formatJunitTestSet(testSetResults: TestSetResults, os: OutputStream) = IO {
-    val junitResultFormatter = new XQTSXMLJUnitResultFormatter()
-    junitResultFormatter.setOutput(os)
-
+  private def formatJunitTestSet(testSetResults: TestSetResults, writer: Writer) = IO {
     val testSetRef = testSetResults.testSetRef
-    val results = testSetResults.results
+    val xqtsVersion = XQTSVersion.label(testSetRef.xqtsVersion)
 
-    val junitTestSet = new JUnitTest(s"${XQTSVersion.label(testSetRef.xqtsVersion)}.${testSetRef.name}")
-    junitTestSet.setCounts(
-      results.size,
-      results.filter(_.isInstanceOf[FailureResult]).size,
-      results.filter(_.isInstanceOf[ErrorResult]).size,
-      results.filter(_.isInstanceOf[AssumptionFailedResult]).size
-    )
-    junitTestSet.setRunTime(results.foldLeft(0L)((accum, x) => accum + x.compilationTime + x.executionTime))
-    junitTestSet.setProperties(asJavaHashtable(Map(
-      "file" -> testSetRef.file.toString,
-      "name" -> testSetRef.name,
-      "version" -> XQTSVersion.label(testSetRef.xqtsVersion))))
-
-    junitResultFormatter.startTestSuite(junitTestSet)
-    for (result <- results) {
-
-      val test = XQTSJUnitTest(result)
-      junitResultFormatter.startTest(test)
-
-      result match {
-        case PassResult(_, _, _, _) =>
-          junitResultFormatter.endTest(test)
-
-        case AssumptionFailedResult(_, _, _, _, reason) =>
-          junitResultFormatter.formatSkip(test, reason)
-
-        case FailureResult(_, _, _, _, reason) =>
-          junitResultFormatter.addFailure(test, new AssertionFailedError(reason))
-          junitResultFormatter.endTest(test)
-
-        case ErrorResult(_, _, _, _, throwable) =>
-          junitResultFormatter.addError(test, throwable)
-          junitResultFormatter.endTest(test)
+    val testCases = testSetResults.results.map { result =>
+      val outcome = result match {
+        case PassResult(_, _, _, _) => JUnitXmlReport.Passed
+        case AssumptionFailedResult(_, _, _, _, reason) => JUnitXmlReport.Skipped(reason)
+        case FailureResult(_, _, _, _, reason) => JUnitXmlReport.Failed(reason)
+        case ErrorResult(_, _, _, _, throwable) => JUnitXmlReport.Errored(throwable)
       }
+      JUnitXmlReport.TestCase(result.testCase, result.compilationTime + result.executionTime, outcome)
     }
-    junitResultFormatter.endTestSuite(junitTestSet)
-  }
 
-  private def asJavaHashtable[K, V](map: Map[K, V]): java.util.Hashtable[K, V] = {
-    import scala.jdk.CollectionConverters._
-    new java.util.Hashtable(map.asJava)
+    JUnitXmlReport.write(
+      writer,
+      s"$xqtsVersion.${testSetRef.name}",
+      Seq(
+        "file" -> testSetRef.file.toString,
+        "name" -> testSetRef.name,
+        "version" -> xqtsVersion),
+      testCases)
   }
 
   private def aggregateJUnitReports(dataDir: Path, htmlDir: Path): IO[Unit] = IO {
@@ -225,37 +197,5 @@ class JUnitResultsSerializerActor(styleDir: Option[Path], outputDir: Path) exten
     styleDir.map(dir => aggregateTransformer.setStyledir(dir.toAbsolutePath.toFile))
 
     aggregator.execute()
-  }
-
-  private object XQTSJUnitTest {
-    def apply(testResult: TestResult) = new XQTSJUnitTest(testResult)
-  }
-
-  private class XQTSJUnitTest(testResult: TestResult) extends JUTest {
-    override def countTestCases(): Int = 1
-
-    def getName(): String = testResult.testCase
-
-    def getCompilationTime: Long = testResult.compilationTime
-
-    def getExecutionTime: Long = testResult.executionTime
-
-    override def run(juTestResult: JUTestResult): Unit = {}
-  }
-
-  class XQTSXMLJUnitResultFormatter extends XMLJUnitResultFormatter {
-    private val rootElementField = classOf[XMLJUnitResultFormatter].getDeclaredField("rootElement")
-    rootElementField.setAccessible(true)
-
-    override def endTest(test: JUTest): Unit = {
-      super.endTest(test)
-      if (test.isInstanceOf[XQTSJUnitTest]) {
-        val xqtsJunitTest = test.asInstanceOf[XQTSJUnitTest]
-        val rootElement = rootElementField.get(this).asInstanceOf[Element]
-        val currentTest = rootElement.getLastChild().asInstanceOf[Element]
-        val timeInSeconds = ((xqtsJunitTest.getCompilationTime + xqtsJunitTest.getExecutionTime) / 1000D).toString
-        currentTest.setAttribute(ATTR_TIME, timeInSeconds)
-      }
-    }
   }
 }
